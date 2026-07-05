@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker-orchestrator
+  namespace: aiops
+  labels:
+    app: worker-orchestrator
+spec:
+  type: ClusterIP
+  selector:
+    app: worker-orchestrator
+  ports:
+    - name: http
+      port: 8050
+      targetPort: 8050
+      protocol: TCP

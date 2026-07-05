@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluent-bit
+  namespace: aiops
+  labels:
+    app: fluent-bit
+spec:
+  selector:
+    matchLabels:
+      app: fluent-bit
+  template:
+    metadata:
+      labels:
+        app: fluent-bit
+    spec:
+      serviceAccountName: fluent-bit
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: fluent-bit
+          image: fluent/fluent-bit:3.0
+          env:
+            - name: INTERNAL_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: aiops-internal-secret
+                  key: INTERNAL_SECRET
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: fluent-bit-config
+              mountPath: /fluent-bit/etc
+            - name: nginx-logs
+              mountPath: /var/log/nginx
+              readOnly: true
+            - name: fluent-bit-db
+              mountPath: /fluent-bit/db
+      volumes:
+        - name: fluent-bit-config
+          configMap:
+            name: fluent-bit-config
+        - name: nginx-logs
+          emptyDir: {}
+        - name: fluent-bit-db
+          emptyDir: {}

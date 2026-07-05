@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-orchestrator
+  namespace: aiops
+  labels:
+    app: worker-orchestrator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker-orchestrator
+  template:
+    metadata:
+      labels:
+        app: worker-orchestrator
+    spec:
+      serviceAccountName: worker-orchestrator
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: worker-orchestrator
+          image: ${WORKER_IMAGE}
+          ports:
+            - containerPort: 8050
+          env:
+            - name: INTERNAL_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: aiops-internal-secret
+                  key: INTERNAL_SECRET
+            - name: REDIS_HOST
+              value: redis
+            - name: REDIS_PORT
+              value: "6379"
+            - name: NAMESPACE
+              value: aiops
+            - name: BLOCKLIST_CONFIGMAP
+              value: nginx-blocklist
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8050
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8050
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3

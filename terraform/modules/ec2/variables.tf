@@ -1,0 +1,12 @@
+variable "project_name"         { type = string }
+variable "environment"          { type = string }
+variable "region"               { type = string }
+variable "master_instance_type" { type = string }
+variable "worker_instance_type" { type = string }
+variable "worker_count"         { type = number }
+variable "key_name"             { type = string }
+variable "subnet_id"            { type = string }
+variable "master_sg_id"         { type = string }
+variable "worker_sg_id"         { type = string }
+variable "k8s_version"          { type = string }
+variable "pod_network_cidr"     { type = string }

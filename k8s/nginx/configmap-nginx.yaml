@@ -1,0 +1,84 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: aiops
+data:
+  nginx.conf: |
+    user nginx;
+    worker_processes auto;
+    error_log /var/log/nginx/error.log warn;
+    pid /var/run/nginx.pid;
+
+    events {
+        worker_connections 1024;
+    }
+
+    http {
+        include       /etc/nginx/mime.types;
+        default_type  application/octet-stream;
+
+        log_format json_combined escape=json
+            '{'
+                '"time_iso8601":"$time_iso8601",'
+                '"remote_addr":"$remote_addr",'
+                '"request_method":"$request_method",'
+                '"request_uri":"$request_uri",'
+                '"status":"$status",'
+                '"body_bytes_sent":"$body_bytes_sent",'
+                '"request_time":"$request_time",'
+                '"http_user_agent":"$http_user_agent"'
+            '}';
+
+        access_log /var/log/nginx/access.log json_combined;
+
+        sendfile        on;
+        keepalive_timeout 65;
+
+        limit_req_zone $binary_remote_addr
+            zone=global_limit:10m
+            rate=50r/s;
+
+        limit_req_zone $binary_remote_addr
+            zone=strict_limit:10m
+            rate=5r/s;
+
+        limit_req_status 429;
+        limit_conn_status 429;
+
+        include /etc/nginx/conf.d/*.conf;
+    }
+
+  default.conf: |
+    server {
+        listen 80;
+        server_name _;
+
+        include /etc/nginx/blocklist.conf;
+
+        limit_req zone=global_limit burst=100 nodelay;
+
+        location / {
+            return 200 'OK';
+            add_header Content-Type text/plain;
+        }
+
+        location /health {
+            access_log off;
+            limit_req off;
+            return 200 'healthy';
+            add_header Content-Type text/plain;
+        }
+
+        location ~* ^/(login|api/auth|admin) {
+            limit_req zone=strict_limit burst=10 nodelay;
+            return 200 'OK';
+            add_header Content-Type text/plain;
+        }
+
+        error_page 429 = @rate_limited;
+        location @rate_limited {
+            default_type application/json;
+            return 429 '{"error":"rate_limit_exceeded","message":"Too many requests"}';
+        }
+    }

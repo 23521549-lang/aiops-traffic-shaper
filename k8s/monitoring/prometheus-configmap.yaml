@@ -1,0 +1,93 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: aiops
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval:     15s
+      evaluation_interval: 15s
+
+    rule_files:
+      - /etc/prometheus/alerts.yml
+
+    scrape_configs:
+      - job_name: ai-engine
+        static_configs:
+          - targets: ["ai-engine:8000"]
+        metrics_path: /metrics
+
+      - job_name: worker-orchestrator
+        static_configs:
+          - targets: ["worker-orchestrator:8050"]
+        metrics_path: /metrics
+
+  alerts.yml: |
+    groups:
+      - name: aiops-alerts
+        rules:
+
+          - alert: HighAnomalyRate
+            expr: rate(ai_anomalies_detected_total[5m]) > 10
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High anomaly detection rate"
+              description: "Anomaly rate is {{ $value }} per second over last 5m"
+
+          - alert: MassiveAttack
+            expr: rate(ai_anomalies_detected_total[1m]) > 50
+            for: 30s
+            labels:
+              severity: critical
+            annotations:
+              summary: "Massive attack detected"
+              description: "Anomaly rate is {{ $value }} per second — possible DDoS"
+
+          - alert: FeatureDriftDetected
+            expr: feature_drift_score > 2
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Feature drift detected"
+              description: "Feature {{ $labels.feature }} drift score is {{ $value }}"
+
+          - alert: AIEngineDown
+            expr: up{job="ai-engine"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "AI Engine is down"
+              description: "AI Engine has been unreachable for more than 1 minute"
+
+          - alert: WorkerOrchestratorDown
+            expr: up{job="worker-orchestrator"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Worker Orchestrator is down"
+              description: "Worker has been unreachable for more than 1 minute"
+
+          - alert: HighBlockedIPCount
+            expr: nginx_blocked_ips_total > 1000
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High number of blocked IPs"
+              description: "{{ $value }} IPs currently blocked — review blocklist"
+
+          - alert: CircuitBreakerOpen
+            expr: increase(ai_anomalies_detected_total[5m]) > 0
+                  unless increase(nginx_blocked_ips_total[5m]) > 0
+            for: 3m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Possible circuit breaker open"
+              description: "Anomalies detected but no new blocks — Worker may be unreachable"

@@ -1,0 +1,86 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: reputation-script
+  namespace: aiops
+data:
+  update-ip-reputation.sh: |
+    #!/bin/sh
+    set -e
+
+    LOG_PREFIX="[$(date '+%Y-%m-%d %H:%M:%S')]"
+    log_info()  { echo "$LOG_PREFIX [INFO]  $*"; }
+    log_error() { echo "$LOG_PREFIX [ERROR] $*" >&2; }
+
+    REPUTATION_KEY="reputation:blacklist"
+    TMP_FILE="/tmp/merged-blacklist.txt"
+
+    log_info "Downloading Firehol Level 1"
+    wget -qO /tmp/firehol.txt \
+        https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level1.netset || true
+
+    log_info "Downloading Emerging Threats"
+    wget -qO /tmp/emerging.txt \
+        https://rules.emergingthreats.net/blockrules/compromised-ips.txt || true
+
+    log_info "Merging and cleaning"
+    cat /tmp/firehol.txt /tmp/emerging.txt 2>/dev/null \
+        | grep -v "^#" | grep -v "^$" \
+        | grep -E "^[0-9]" | awk '{print $1}' | sort -u \
+        > "$TMP_FILE"
+
+    TOTAL=$(wc -l < "$TMP_FILE")
+    log_info "Total IPs: $TOTAL"
+
+    while IFS= read -r ip; do
+        [ -z "$ip" ] && continue
+        redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" \
+            SADD "$REPUTATION_KEY" "$ip" > /dev/null
+    done < "$TMP_FILE"
+
+    redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" \
+        EXPIRE "$REPUTATION_KEY" 172800 > /dev/null
+
+    log_info "Done: $TOTAL entries loaded"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ip-reputation-updater
+  namespace: aiops
+spec:
+  schedule: "0 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: reputation-updater
+              image: redis:7-alpine
+              command:
+                - sh
+                - /scripts/update-ip-reputation.sh
+              env:
+                - name: REDIS_HOST
+                  value: redis
+                - name: REDIS_PORT
+                  value: "6379"
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 200m
+                  memory: 128Mi
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+          volumes:
+            - name: script
+              configMap:
+                name: reputation-script
+                defaultMode: 0755

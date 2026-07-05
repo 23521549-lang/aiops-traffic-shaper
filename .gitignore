@@ -1,0 +1,51 @@
+# Environment variables
+.env
+*.env
+.env.*
+!.env.example
+
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/*.tfstate.backup
+terraform/.terraform.lock.hcl
+terraform/crash.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Docker
+*.tar
+
+# SSH keys
+*.pem
+*.key
+id_rsa
+id_rsa.pub
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# K8s secrets
+k8s/secrets/*.yaml
+!k8s/secrets/.gitkeep
+
+# Model files
+services/ai-engine/models/production/*.joblib
+services/ai-engine/models/staging/*.joblib
+services/ai-engine/models/archive/*.joblib
