@@ -41,11 +41,11 @@ log_step "4/5 Build Docker images"
 cd "$PROJECT_ROOT"
 
 log_info "Building ai-engine:$IMAGE_TAG"
-docker build     --tag "$AI_ENGINE_URL:$IMAGE_TAG"     --tag "$AI_ENGINE_URL:latest"     --file services/ai-engine/Dockerfile     .
+docker build     --tag "$AI_ENGINE_URL:$IMAGE_TAG"     --tag "$AI_ENGINE_URL:latest"     --file services/ai_engine/Dockerfile     .
 log_info "ai-engine image built"
 
 log_info "Building worker-orchestrator:$IMAGE_TAG"
-docker build     --tag "$WORKER_URL:$IMAGE_TAG"     --tag "$WORKER_URL:latest"     --file services/worker-orchestrator/Dockerfile     .
+docker build     --tag "$WORKER_URL:$IMAGE_TAG"     --tag "$WORKER_URL:latest"     --file services/worker_orchestrator/Dockerfile     .
 log_info "worker-orchestrator image built"
 
 log_step "5/5 Push images to ECR"

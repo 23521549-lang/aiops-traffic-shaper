@@ -23,6 +23,16 @@ jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -34,22 +44,24 @@ jobs:
           cache: pip
 
       - name: Install AI Engine dependencies
-        run: pip install -r services/ai-engine/requirements.txt
+        run: pip install -r services/ai_engine/requirements.txt
 
       - name: Install Worker Orchestrator dependencies
-        run: pip install -r services/worker-orchestrator/requirements.txt
+        run: pip install -r services/worker_orchestrator/requirements.txt
 
       - name: Run AI Engine tests
         run: python -m pytest tests/ai-engine/ -v --tb=short
         env:
           PYTHONPATH: .
           INTERNAL_SECRET: test-secret-for-ci
+          REDIS_HOST: localhost
 
       - name: Run Worker Orchestrator tests
         run: python -m pytest tests/worker-orchestrator/ -v --tb=short
         env:
           PYTHONPATH: .
           INTERNAL_SECRET: test-secret-for-ci
+          REDIS_HOST: localhost
 
   build-and-push:
     name: Build and Push Images
@@ -91,13 +103,13 @@ jobs:
 
       - name: Build and push AI Engine image
         run: |
-          docker build             --tag "$AI_ENGINE_IMAGE"             --tag "${AI_ENGINE_IMAGE%:*}:latest"             --file services/ai-engine/Dockerfile             --cache-from "${AI_ENGINE_IMAGE%:*}:latest"             .
+          docker build             --tag "$AI_ENGINE_IMAGE"             --tag "${AI_ENGINE_IMAGE%:*}:latest"             --file services/ai_engine/Dockerfile             --cache-from "${AI_ENGINE_IMAGE%:*}:latest"             .
           docker push "$AI_ENGINE_IMAGE"
           docker push "${AI_ENGINE_IMAGE%:*}:latest"
 
       - name: Build and push Worker Orchestrator image
         run: |
-          docker build             --tag "$WORKER_IMAGE"             --tag "${WORKER_IMAGE%:*}:latest"             --file services/worker-orchestrator/Dockerfile             --cache-from "${WORKER_IMAGE%:*}:latest"             .
+          docker build             --tag "$WORKER_IMAGE"             --tag "${WORKER_IMAGE%:*}:latest"             --file services/worker_orchestrator/Dockerfile             --cache-from "${WORKER_IMAGE%:*}:latest"             .
           docker push "$WORKER_IMAGE"
           docker push "${WORKER_IMAGE%:*}:latest"
 

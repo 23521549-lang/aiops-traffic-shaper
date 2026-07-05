@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from services.worker_orchestrator.main import app
 from services.worker_orchestrator.core.config import settings
+from services.worker_orchestrator.core.redis_client import get_redis
 
 
 @pytest.fixture
@@ -57,15 +58,15 @@ class TestMitigateEndpoint:
         mock_redis = AsyncMock()
         mock_redis.sismember = AsyncMock(return_value=True)
 
-        with patch(
-            "services.worker_orchestrator.api.routes.mitigate.get_redis",
-            return_value=mock_redis,
-        ):
+        app.dependency_overrides[get_redis] = lambda: mock_redis
+        try:
             response = client.post(
                 "/api/v1/mitigate",
                 json=sample_mitigate_payload,
                 headers=auth_headers,
             )
+        finally:
+            app.dependency_overrides.pop(get_redis, None)
 
         assert response.status_code == 200
         data = response.json()
@@ -78,16 +79,17 @@ class TestMitigateEndpoint:
         mock_redis = AsyncMock()
         mock_redis.sismember = AsyncMock(return_value=False)
         mock_redis.set       = AsyncMock()
+        mock_redis.scan      = AsyncMock(return_value=(0, []))
 
-        with patch(
-            "services.worker_orchestrator.api.routes.mitigate.get_redis",
-            return_value=mock_redis,
-        ):
+        app.dependency_overrides[get_redis] = lambda: mock_redis
+        try:
             response = client.post(
                 "/api/v1/mitigate",
                 json={**sample_mitigate_payload, "tier": 1},
                 headers=auth_headers,
             )
+        finally:
+            app.dependency_overrides.pop(get_redis, None)
 
         assert response.status_code == 200
         data = response.json()
@@ -102,22 +104,24 @@ class TestMitigateEndpoint:
         mock_redis.sismember = AsyncMock(return_value=False)
         mock_redis.get       = AsyncMock(return_value=None)
         mock_redis.set       = AsyncMock()
+        mock_redis.scan      = AsyncMock(return_value=(0, []))
 
         mock_patcher = MagicMock()
         mock_patcher.add_deny_rule.return_value = True
 
-        with patch(
-            "services.worker_orchestrator.api.routes.mitigate.get_redis",
-            return_value=mock_redis,
-        ), patch(
-            "services.worker_orchestrator.api.routes.mitigate._patcher",
-            mock_patcher,
-        ):
-            response = client.post(
-                "/api/v1/mitigate",
-                json={**sample_mitigate_payload, "tier": 2},
-                headers=auth_headers,
-            )
+        app.dependency_overrides[get_redis] = lambda: mock_redis
+        try:
+            with patch(
+                "services.worker_orchestrator.api.routes.mitigate._patcher",
+                mock_patcher,
+            ):
+                response = client.post(
+                    "/api/v1/mitigate",
+                    json={**sample_mitigate_payload, "tier": 2},
+                    headers=auth_headers,
+                )
+        finally:
+            app.dependency_overrides.pop(get_redis, None)
 
         assert response.status_code == 200
         data = response.json()
@@ -139,14 +143,14 @@ class TestBlocklistEndpoint:
         mock_redis = AsyncMock()
         mock_redis.scan    = AsyncMock(return_value=(0, []))
 
-        with patch(
-            "services.worker_orchestrator.api.routes.blocklist.get_redis",
-            return_value=mock_redis,
-        ):
+        app.dependency_overrides[get_redis] = lambda: mock_redis
+        try:
             response = client.get(
                 "/api/v1/blocklist",
                 headers=auth_headers,
             )
+        finally:
+            app.dependency_overrides.pop(get_redis, None)
 
         assert response.status_code == 200
         assert isinstance(response.json(), list)
@@ -155,14 +159,14 @@ class TestBlocklistEndpoint:
         mock_redis = AsyncMock()
         mock_redis.exists = AsyncMock(return_value=False)
 
-        with patch(
-            "services.worker_orchestrator.api.routes.blocklist.get_redis",
-            return_value=mock_redis,
-        ):
+        app.dependency_overrides[get_redis] = lambda: mock_redis
+        try:
             response = client.delete(
                 "/api/v1/blocklist/1.2.3.4",
                 headers=auth_headers,
             )
+        finally:
+            app.dependency_overrides.pop(get_redis, None)
 
         assert response.status_code == 404
 
@@ -172,15 +176,15 @@ class TestWhitelistEndpoint:
         mock_redis = AsyncMock()
         mock_redis.sadd = AsyncMock(return_value=1)
 
-        with patch(
-            "services.worker_orchestrator.api.routes.blocklist.get_redis",
-            return_value=mock_redis,
-        ):
+        app.dependency_overrides[get_redis] = lambda: mock_redis
+        try:
             response = client.post(
                 "/api/v1/whitelist",
                 json={"ip": "1.2.3.4", "reason": "trusted partner"},
                 headers=auth_headers,
             )
+        finally:
+            app.dependency_overrides.pop(get_redis, None)
 
         assert response.status_code == 200
         assert "1.2.3.4" in response.json()["message"]
@@ -189,14 +193,14 @@ class TestWhitelistEndpoint:
         mock_redis = AsyncMock()
         mock_redis.srem = AsyncMock(return_value=1)
 
-        with patch(
-            "services.worker_orchestrator.api.routes.blocklist.get_redis",
-            return_value=mock_redis,
-        ):
+        app.dependency_overrides[get_redis] = lambda: mock_redis
+        try:
             response = client.delete(
                 "/api/v1/whitelist/1.2.3.4",
                 headers=auth_headers,
             )
+        finally:
+            app.dependency_overrides.pop(get_redis, None)
 
         assert response.status_code == 200
 
@@ -206,14 +210,14 @@ class TestWhitelistEndpoint:
         mock_redis = AsyncMock()
         mock_redis.srem = AsyncMock(return_value=0)
 
-        with patch(
-            "services.worker_orchestrator.api.routes.blocklist.get_redis",
-            return_value=mock_redis,
-        ):
+        app.dependency_overrides[get_redis] = lambda: mock_redis
+        try:
             response = client.delete(
                 "/api/v1/whitelist/9.9.9.9",
                 headers=auth_headers,
             )
+        finally:
+            app.dependency_overrides.pop(get_redis, None)
 
         assert response.status_code == 404
 
@@ -221,14 +225,14 @@ class TestWhitelistEndpoint:
         mock_redis = AsyncMock()
         mock_redis.smembers = AsyncMock(return_value={"1.2.3.4", "5.6.7.8"})
 
-        with patch(
-            "services.worker_orchestrator.api.routes.blocklist.get_redis",
-            return_value=mock_redis,
-        ):
+        app.dependency_overrides[get_redis] = lambda: mock_redis
+        try:
             response = client.get(
                 "/api/v1/whitelist",
                 headers=auth_headers,
             )
+        finally:
+            app.dependency_overrides.pop(get_redis, None)
 
         assert response.status_code == 200
         data = response.json()
