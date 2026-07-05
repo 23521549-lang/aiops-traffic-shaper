@@ -7,9 +7,9 @@ availability_zones   = ["ap-southeast-1a", "ap-southeast-1b"]
 master_instance_type = "t3.medium"
 worker_instance_type = "t3.medium"
 worker_count         = 2
-key_name             = "aiops-keypair"
+key_name         = "your-keypair-name"
 k8s_version          = "1.29"
 pod_network_cidr     = "10.244.0.0/16"
-allowed_ssh_cidr     = "0.0.0.0/0"
+allowed_ssh_cidr = "YOUR_IP/32"      
 
-github_repo = "your-username/aiops-traffic-shaper"
+github_repo      = "your-username/aiops-traffic-shaper"

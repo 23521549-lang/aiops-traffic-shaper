@@ -11,6 +11,8 @@ terraform/*.tfstate.*
 terraform/*.tfstate.backup
 terraform/.terraform.lock.hcl
 terraform/crash.log
+terraform/terraform.tfvars
+!terraform/terraform.tfvars.example
 
 # Python
 __pycache__/
