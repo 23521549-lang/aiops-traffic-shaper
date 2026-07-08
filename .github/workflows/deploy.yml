@@ -52,6 +52,28 @@ jobs:
       - name: Install test dependencies
         run: pip install pytest pytest-asyncio anyio trio
 
+      - name: Create dummy kubeconfig for tests
+        run: |
+          mkdir -p ~/.kube
+          cat > ~/.kube/config << 'KUBECONFIG_EOF'
+          apiVersion: v1
+          kind: Config
+          clusters:
+          - cluster:
+              server: https://fake-cluster.local:6443
+            name: fake-cluster
+          contexts:
+          - context:
+              cluster: fake-cluster
+              user: fake-user
+            name: fake-context
+          current-context: fake-context
+          users:
+          - name: fake-user
+            user:
+              token: fake-token
+          KUBECONFIG_EOF
+
       - name: Run AI Engine tests
         run: python -m pytest tests/ai-engine/ -v --tb=short
         env:
