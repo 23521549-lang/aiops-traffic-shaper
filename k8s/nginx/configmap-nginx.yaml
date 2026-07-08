@@ -54,7 +54,7 @@ data:
         listen 80;
         server_name _;
 
-        include /etc/nginx/blocklist.conf;
+        include /etc/nginx/blocklist.d/*;
 
         limit_req zone=global_limit burst=100 nodelay;
 
