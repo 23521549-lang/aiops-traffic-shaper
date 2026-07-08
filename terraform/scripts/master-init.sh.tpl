@@ -81,6 +81,10 @@ export KUBECONFIG=/etc/kubernetes/admin.conf
 kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
 log_info "Flannel CNI applied"
 
+kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.36/deploy/local-path-storage.yaml
+kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+log_info "local-path-provisioner installed and set as default StorageClass"
+
 JOIN_COMMAND=$(kubeadm token create --print-join-command)
 
 aws ssm put-parameter \
