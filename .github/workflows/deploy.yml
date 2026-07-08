@@ -175,11 +175,17 @@ jobs:
       - name: Deploy to cluster
         env:
           IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
-          AI_ENGINE_IMAGE: ${{ needs.build-and-push.outputs.ai_engine_image }}
-          WORKER_IMAGE: ${{ needs.build-and-push.outputs.worker_image }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
           INTERNAL_SECRET: ${{ secrets.INTERNAL_SECRET }}
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-        run: bash scripts/deploy.sh "$IMAGE_TAG"
+        run: |
+          # Tinh lai AI_ENGINE_IMAGE/WORKER_IMAGE ngay trong job nay, khong
+          # truyen qua needs.outputs vi GitHub tu xoa rong output chua secret
+          # (AWS_ACCOUNT_ID) khi truyen giua 2 job khac nhau.
+          REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          export AI_ENGINE_IMAGE="$REGISTRY/aiops-traffic-shaper/ai-engine:$IMAGE_TAG"
+          export WORKER_IMAGE="$REGISTRY/aiops-traffic-shaper/worker-orchestrator:$IMAGE_TAG"
+          bash scripts/deploy.sh "$IMAGE_TAG"
 
       - name: Run health check
         run: bash scripts/health-check.sh
