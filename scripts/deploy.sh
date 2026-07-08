@@ -30,6 +30,11 @@ if [ -z "${AI_ENGINE_IMAGE:-}" ] || [ -z "${WORKER_IMAGE:-}" ]; then
     log_error "Required environment variables not set: AI_ENGINE_IMAGE, WORKER_IMAGE"
     exit 1
 fi
+if [ -z "${INTERNAL_SECRET:-}" ] || [ -z "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
+    log_error "Required environment variables not set: INTERNAL_SECRET, GRAFANA_ADMIN_PASSWORD"
+    log_error "(Can luon o moi lan deploy, khong chi lan dau - dung de thay the \${INTERNAL_SECRET} trong fluent-bit configmap)"
+    exit 1
+fi
 log_info "Image tag      : $IMAGE_TAG"
 log_info "AI Engine image: $AI_ENGINE_IMAGE"
 log_info "Worker image   : $WORKER_IMAGE"
@@ -40,11 +45,10 @@ log_info "Namespace applied"
 
 log_step "3/10 Apply secrets"
 if ! kubectl get secret aiops-internal-secret -n "$NAMESPACE" > /dev/null 2>&1; then
-    if [ -z "${INTERNAL_SECRET:-}" ] || [ -z "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
-        log_error "INTERNAL_SECRET and GRAFANA_ADMIN_PASSWORD must be set"
-        exit 1
-    fi
-    kubectl create secret generic aiops-internal-secret         --namespace "$NAMESPACE"         --from-literal=INTERNAL_SECRET="$INTERNAL_SECRET"         --from-literal=GRAFANA_ADMIN_PASSWORD="$GRAFANA_ADMIN_PASSWORD"
+    kubectl create secret generic aiops-internal-secret \
+        --namespace "$NAMESPACE" \
+        --from-literal=INTERNAL_SECRET="$INTERNAL_SECRET" \
+        --from-literal=GRAFANA_ADMIN_PASSWORD="$GRAFANA_ADMIN_PASSWORD"
     log_info "Secret aiops-internal-secret created"
 else
     log_info "Secret already exists, skipping"
@@ -72,29 +76,50 @@ kubectl rollout status deployment/nginx-proxy -n "$NAMESPACE" --timeout=120s
 log_info "Nginx ready"
 
 log_step "8/10 Apply AI Engine and Worker Orchestrator"
-kubectl set image deployment/ai-engine     ai-engine="$AI_ENGINE_IMAGE"     -n "$NAMESPACE" 2>/dev/null || kubectl apply -f "$K8S_DIR/ai-engine/"
+if ! kubectl set image deployment/ai-engine ai-engine="$AI_ENGINE_IMAGE" -n "$NAMESPACE" 2>/dev/null; then
+    log_info "Deployment ai-engine chua ton tai, apply lan dau (thay the \${AI_ENGINE_IMAGE})"
+    sed "s|\${AI_ENGINE_IMAGE}|$AI_ENGINE_IMAGE|g" "$K8S_DIR/ai-engine/deployment.yaml" | kubectl apply -f -
+    kubectl apply -f "$K8S_DIR/ai-engine/service.yaml"
+fi
 
-kubectl set image deployment/worker-orchestrator     worker-orchestrator="$WORKER_IMAGE"     -n "$NAMESPACE" 2>/dev/null || kubectl apply -f "$K8S_DIR/worker-orchestrator/"
+if ! kubectl set image deployment/worker-orchestrator worker-orchestrator="$WORKER_IMAGE" -n "$NAMESPACE" 2>/dev/null; then
+    log_info "Deployment worker-orchestrator chua ton tai, apply lan dau (thay the \${WORKER_IMAGE})"
+    sed "s|\${WORKER_IMAGE}|$WORKER_IMAGE|g" "$K8S_DIR/worker-orchestrator/deployment.yaml" | kubectl apply -f -
+    kubectl apply -f "$K8S_DIR/worker-orchestrator/service.yaml"
+fi
 
 kubectl apply -f "$K8S_DIR/worker-orchestrator/rbac.yaml"
 kubectl apply -f "$K8S_DIR/ai-engine/hpa.yaml"
 
-kubectl rollout status deployment/ai-engine     -n "$NAMESPACE" --timeout=120s
-kubectl rollout status deployment/worker-orchestrator     -n "$NAMESPACE" --timeout=120s
+kubectl rollout status deployment/ai-engine -n "$NAMESPACE" --timeout=120s
+kubectl rollout status deployment/worker-orchestrator -n "$NAMESPACE" --timeout=120s
 log_info "AI Engine and Worker Orchestrator ready"
 
 log_step "9/10 Apply FluentBit, Monitoring and IP Reputation CronJob"
-kubectl apply -f "$K8S_DIR/fluent-bit/"
+sed "s|\${INTERNAL_SECRET}|$INTERNAL_SECRET|g" "$K8S_DIR/fluent-bit/configmap.yaml" | kubectl apply -f -
+kubectl apply -f "$K8S_DIR/fluent-bit/daemonset.yaml"
+kubectl apply -f "$K8S_DIR/fluent-bit/rbac.yaml"
 kubectl apply -f "$K8S_DIR/monitoring/"
 kubectl apply -f "$K8S_DIR/reputation/"
 log_info "FluentBit, Monitoring and Reputation CronJob applied"
 
 log_step "10/10 Load initial IP reputation into Redis"
-REDIS_POD=$(kubectl get pod -n "$NAMESPACE"     -l app=redis     -o jsonpath="{.items[0].metadata.name}" 2>/dev/null || true)
+REDIS_POD=$(kubectl get pod -n "$NAMESPACE" \
+    -l app=redis \
+    -o jsonpath="{.items[0].metadata.name}" 2>/dev/null || true)
 
 if [ -n "$REDIS_POD" ]; then
     log_info "Loading IP reputation blocklist into Redis"
-    kubectl exec -n "$NAMESPACE" "$REDIS_POD" -- sh -c         "apk add --no-cache curl wget 2>/dev/null;          wget -qO /tmp/firehol.txt            https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level1.netset || true;          grep -v '^#' /tmp/firehol.txt | grep -v '^$' |            grep -E '^[0-9]' | awk '{print \$1}' |            while read ip; do redis-cli SADD reputation:blacklist "\$ip" > /dev/null; done;          redis-cli EXPIRE reputation:blacklist 172800 > /dev/null;          COUNT=\$(redis-cli SCARD reputation:blacklist);          echo "Loaded \$COUNT IPs into reputation:blacklist""
+    kubectl exec -n "$NAMESPACE" "$REDIS_POD" -- sh -c \
+        "apk add --no-cache curl wget 2>/dev/null; \
+         wget -qO /tmp/firehol.txt \
+           https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level1.netset || true; \
+         grep -v '^#' /tmp/firehol.txt | grep -v '^\$' | \
+           grep -E '^[0-9]' | awk '{print \$1}' | \
+           while read ip; do redis-cli SADD reputation:blacklist \"\$ip\" > /dev/null; done; \
+         redis-cli EXPIRE reputation:blacklist 172800 > /dev/null; \
+         COUNT=\$(redis-cli SCARD reputation:blacklist); \
+         echo \"Loaded \$COUNT IPs into reputation:blacklist\""
     log_info "IP reputation loaded"
 else
     log_error "Redis pod not found — skipping reputation load"

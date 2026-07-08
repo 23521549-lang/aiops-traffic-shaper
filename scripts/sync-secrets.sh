@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 ENV_FILE="$PROJECT_ROOT/.env"
 
-# ── Biến KHÔNG sync lên GitHub (local only) ──────────────────────
+# ── NHOM 3: Bien local-only, KHONG sync len GitHub Secrets ────────
 EXCLUDED_VARS=(
     "AWS_PROFILE"
     "AWS_REGION"
@@ -69,6 +69,33 @@ while IFS= read -r line || [ -n "$line" ]; do
         KEY="${BASH_REMATCH[1]}"
         VALUE="${BASH_REMATCH[2]}"
 
+        # ── Bien dang "_FILE": doc noi dung TU FILE, day len secret voi
+        # ten da bo hau to "_FILE". Dung cho secret nhieu dong (vd SSH key)
+        # ma khong the nhet an toan vao 1 dong trong .env.
+        if [[ "$KEY" == *_FILE ]]; then
+            REAL_KEY="${KEY%_FILE}"
+
+            if [ -z "$VALUE" ]; then
+                log_warn "Skipping empty file path: $KEY"
+                skipped=$((skipped + 1))
+                continue
+            fi
+
+            EXPANDED_PATH="${VALUE/#\~/$HOME}"
+
+            if [ ! -f "$EXPANDED_PATH" ]; then
+                log_error "File khong ton tai cho $KEY: $EXPANDED_PATH"
+                log_error "Bo qua $REAL_KEY - kiem tra lai duong dan trong .env"
+                skipped=$((skipped + 1))
+                continue
+            fi
+
+            gh secret set "$REAL_KEY" --repo "$REPO" < "$EXPANDED_PATH"
+            log_info "Synced (tu file): $REAL_KEY  <-  $EXPANDED_PATH"
+            synced=$((synced + 1))
+            continue
+        fi
+
         # Bỏ qua giá trị rỗng
         if [ -z "$VALUE" ]; then
             log_warn "Skipping empty value: $KEY"
@@ -100,7 +127,7 @@ done < "$ENV_FILE"
 
 log_step "4/4 Summary"
 log_info "Synced   : $synced secrets"
-log_info "Skipped  : $skipped (empty values)"
+log_info "Skipped  : $skipped (empty values / file not found)"
 log_info "Excluded : $excluded (local-only vars)"
 
 cat << SUMMARY

@@ -1,15 +1,44 @@
-region               = "ap-southeast-1"
-project_name         = "aiops-traffic-shaper"
-environment          = "prod"
+# ============================================================
+# NHOM 1: Chi dung cho Terraform - khong lien quan .env/GitHub
+# Copy file nay thanh terraform.tfvars roi dien gia tri that.
+# terraform.tfvars KHONG duoc commit len git (da trong .gitignore).
+# ============================================================
+
+# ── Vung & du an ─────────────────────────────────────────────
+region       = "ap-southeast-1"
+project_name = "aiops-traffic-shaper"
+environment  = "prod"
+
+# ── Mang (VPC) ───────────────────────────────────────────────
 vpc_cidr             = "10.0.0.0/16"
 public_subnet_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
 availability_zones   = ["ap-southeast-1a", "ap-southeast-1b"]
-master_instance_type = "t3.medium"
-worker_instance_type = "t3.medium"
-worker_count         = 2
-key_name         = "your-keypair-name"
-k8s_version          = "1.29"
-pod_network_cidr     = "10.244.0.0/16"
-allowed_ssh_cidr = "YOUR_IP/32"      
 
-github_repo      = "your-username/aiops-traffic-shaper"
+# ── EC2 ──────────────────────────────────────────────────────
+# Luu y: t3.medium co the bi chan tren account AWS moi (Free Tier).
+# Neu gap loi "InvalidParameterCombination", doi sang t3.small,
+# t3.micro, t4g.micro, t4g.small, c7i-flex.large hoac m7i-flex.large.
+master_instance_type = "m7i-flex.large"
+worker_instance_type = "t3.small"
+worker_count          = 3
+
+# EC2 Key Pair de SSH vao node. KHONG can tu tao truoc -
+# scripts/setup-cluster.sh se tu kiem tra va tao neu chua co.
+key_name = "aiops-keypair"
+
+# ── Kubernetes ───────────────────────────────────────────────
+k8s_version      = "1.29"
+pod_network_cidr = "10.244.0.0/16"
+
+# ── Bao mat ──────────────────────────────────────────────────
+# CIDR duoc phep SSH vao node. Doi thanh IP that cua ban, vi du
+# "1.2.3.4/32" - KHONG de "0.0.0.0/0" (mo cho ca Internet).
+allowed_ssh_cidr = "YOUR_IP/32"
+
+# ── GitHub (dung cho OIDC + CI/CD) ────────────────────────────
+# Format: owner/repo-name
+github_repo = "your-username/aiops-traffic-shaper"
+
+# ── ECR (co gia tri mac dinh trong variables.tf, khong bat buoc dien) ──
+# ecr_services              = ["ai-engine", "worker-orchestrator"]
+# ecr_image_retention_count = 10
