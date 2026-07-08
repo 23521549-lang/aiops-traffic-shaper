@@ -49,6 +49,9 @@ jobs:
       - name: Install Worker Orchestrator dependencies
         run: pip install -r services/worker_orchestrator/requirements.txt
 
+      - name: Install test dependencies
+        run: pip install pytest pytest-asyncio anyio trio
+
       - name: Run AI Engine tests
         run: python -m pytest tests/ai-engine/ -v --tb=short
         env:
