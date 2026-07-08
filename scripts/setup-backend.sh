@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+export AWS_PAGER=""
 
 LOG_PREFIX="[$(date '+%Y-%m-%d %H:%M:%S')]"
 log_info()  { echo "$LOG_PREFIX [INFO]  $*"; }
@@ -25,24 +26,43 @@ log_step "2/4 Create S3 bucket for Terraform state"
 if aws s3api head-bucket --bucket "$BUCKET_NAME" 2>/dev/null; then
     log_info "S3 bucket already exists: $BUCKET_NAME"
 else
-    aws s3api create-bucket         --bucket "$BUCKET_NAME"         --region "$REGION"         --create-bucket-configuration LocationConstraint="$REGION"
+    aws s3api create-bucket \
+        --bucket "$BUCKET_NAME" \
+        --region "$REGION" \
+        --create-bucket-configuration LocationConstraint="$REGION"
 
-    aws s3api put-bucket-versioning         --bucket "$BUCKET_NAME"         --versioning-configuration Status=Enabled
+    aws s3api put-bucket-versioning \
+        --bucket "$BUCKET_NAME" \
+        --versioning-configuration Status=Enabled
 
-    aws s3api put-bucket-encryption         --bucket "$BUCKET_NAME"         --server-side-encryption-configuration         '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+    aws s3api put-bucket-encryption \
+        --bucket "$BUCKET_NAME" \
+        --server-side-encryption-configuration \
+        '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
 
-    aws s3api put-public-access-block         --bucket "$BUCKET_NAME"         --public-access-block-configuration         "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+    aws s3api put-public-access-block \
+        --bucket "$BUCKET_NAME" \
+        --public-access-block-configuration \
+        "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
 
     log_info "S3 bucket created: $BUCKET_NAME"
 fi
 
 log_step "3/4 Create DynamoDB table for state locking"
-if aws dynamodb describe-table --table-name "$TABLE_NAME"     --region "$REGION" > /dev/null 2>&1; then
+if aws dynamodb describe-table --table-name "$TABLE_NAME" \
+    --region "$REGION" > /dev/null 2>&1; then
     log_info "DynamoDB table already exists: $TABLE_NAME"
 else
-    aws dynamodb create-table         --table-name "$TABLE_NAME"         --attribute-definitions AttributeName=LockID,AttributeType=S         --key-schema AttributeName=LockID,KeyType=HASH         --billing-mode PAY_PER_REQUEST         --region "$REGION"
+    aws dynamodb create-table \
+        --table-name "$TABLE_NAME" \
+        --attribute-definitions AttributeName=LockID,AttributeType=S \
+        --key-schema AttributeName=LockID,KeyType=HASH \
+        --billing-mode PAY_PER_REQUEST \
+        --region "$REGION"
 
-    aws dynamodb wait table-exists         --table-name "$TABLE_NAME"         --region "$REGION"
+    aws dynamodb wait table-exists \
+        --table-name "$TABLE_NAME" \
+        --region "$REGION"
 
     log_info "DynamoDB table created: $TABLE_NAME"
 fi

@@ -4,6 +4,24 @@ set -uo pipefail
 SRC_DIR="/mnt/d/code/aiops-traffic-shaper"
 DEST_DIR="$HOME/aiops-traffic-shaper"
 
+cleanup() {
+    local exit_code=$?
+    echo ""
+    echo "===================================================="
+    echo "DỌN DẸP: xoá thư mục tạm dùng để test"
+    echo "===================================================="
+    cd "$SRC_DIR" 2>/dev/null || cd "$HOME" 2>/dev/null || true
+    if [ -d "$DEST_DIR" ]; then
+        SIZE=$(du -sh "$DEST_DIR" 2>/dev/null | cut -f1)
+        rm -rf "$DEST_DIR"
+        echo "Đã xoá $DEST_DIR (giải phóng khoảng ${SIZE:-?})"
+    else
+        echo "Không có gì để xoá ($DEST_DIR không tồn tại)."
+    fi
+    exit "$exit_code"
+}
+trap cleanup EXIT
+
 echo "===================================================="
 echo "BƯỚC 1: Kiểm tra Redis local"
 echo "===================================================="
@@ -79,8 +97,7 @@ else
 fi
 
 echo ""
-echo "Project đã được copy sang: $DEST_DIR"
-echo "Từ giờ làm việc (git commit/push) ở thư mục này, không phải $SRC_DIR"
+echo "(Thư mục tạm sẽ được tự dọn dẹp ngay sau dòng này. Code chính vẫn nằm ở: $SRC_DIR)"
 
 if [ $AI_ENGINE_RESULT -eq 0 ] && [ $WORKER_RESULT -eq 0 ]; then
     exit 0

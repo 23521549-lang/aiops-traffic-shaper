@@ -57,20 +57,23 @@ systemctl enable kubelet
 log_info "Kubernetes v${k8s_version} tools installed"
 
 log_step "4/6 Initialize cluster with kubeadm"
-MASTER_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
-log_info "Detected master public IP: $MASTER_IP"
+MASTER_PRIVATE_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)
+MASTER_PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+log_info "Detected master private IP: $MASTER_PRIVATE_IP, public IP: $MASTER_PUBLIC_IP"
 
 kubeadm init \
   --pod-network-cidr="${pod_network_cidr}" \
-  --apiserver-advertise-address="$MASTER_IP" \
+  --apiserver-advertise-address="$MASTER_PRIVATE_IP" \
+  --apiserver-cert-extra-sans="$MASTER_PUBLIC_IP" \
   --kubernetes-version="v${k8s_version}.0"
 log_info "kubeadm init completed"
 
 log_step "5/6 Configure kubeconfig"
+sed -i "s#server: https://$MASTER_PRIVATE_IP:6443#server: https://$MASTER_PUBLIC_IP:6443#" /etc/kubernetes/admin.conf
 mkdir -p /home/ubuntu/.kube
 cp /etc/kubernetes/admin.conf /home/ubuntu/.kube/config
 chown ubuntu:ubuntu /home/ubuntu/.kube/config
-log_info "kubeconfig configured for user ubuntu"
+log_info "kubeconfig configured for user ubuntu, pointing to public IP $MASTER_PUBLIC_IP"
 
 log_step "6/6 Install Flannel CNI and push join token to SSM"
 export KUBECONFIG=/etc/kubernetes/admin.conf
