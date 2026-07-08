@@ -92,6 +92,6 @@ spec:
             items:
               - key: blocklist.conf
                 path: blocklist.conf
-              defaultMode: 0644
+            defaultMode: 0644
         - name: nginx-logs
           emptyDir: {}
