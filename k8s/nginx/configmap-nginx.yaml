@@ -56,16 +56,14 @@ data:
 
         include /etc/nginx/blocklist.d/*;
 
-        limit_req zone=global_limit burst=100 nodelay;
-
         location / {
+            limit_req zone=global_limit burst=100 nodelay;
             return 200 'OK';
             add_header Content-Type text/plain;
         }
 
         location /health {
             access_log off;
-            limit_req off;
             return 200 'healthy';
             add_header Content-Type text/plain;
         }
