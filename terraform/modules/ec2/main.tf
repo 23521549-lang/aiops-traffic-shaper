@@ -72,6 +72,16 @@ resource "aws_iam_role_policy" "worker_ssm" {
   })
 }
 
+resource "aws_iam_role_policy_attachment" "worker_ecr" {
+  role       = aws_iam_role.worker.id
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
+resource "aws_iam_role_policy_attachment" "master_ecr" {
+  role       = aws_iam_role.master.id
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
 resource "aws_iam_instance_profile" "worker" {
   name = "${var.project_name}-${var.environment}-worker-profile"
   role = aws_iam_role.worker.name

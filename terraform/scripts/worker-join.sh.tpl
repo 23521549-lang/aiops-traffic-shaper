@@ -57,7 +57,33 @@ apt-mark hold kubelet kubeadm kubectl
 systemctl enable kubelet
 log_info "Kubernetes v${k8s_version} tools installed"
 
-log_step "4/5 Retrieve join command from SSM"
+log_step "4/6 Install ECR credential provider"
+mkdir -p /usr/local/bin/credential-provider
+curl -fsSL -o /usr/local/bin/credential-provider/ecr-credential-provider \
+  "https://artifacts.k8s.io/binaries/cloud-provider-aws/v${k8s_version}.0/linux/amd64/ecr-credential-provider-linux-amd64"
+chmod +x /usr/local/bin/credential-provider/ecr-credential-provider
+
+mkdir -p /etc/kubernetes
+cat > /etc/kubernetes/credential-provider-config.yaml << 'CREDEOF'
+apiVersion: kubelet.config.k8s.io/v1
+kind: CredentialProviderConfig
+providers:
+  - name: ecr-credential-provider
+    matchImages:
+      - "*.dkr.ecr.*.amazonaws.com"
+      - "*.dkr.ecr.*.amazonaws.com.cn"
+      - "*.dkr.ecr-fips.*.amazonaws.com"
+    defaultCacheDuration: "12h"
+    apiVersion: credentialprovider.kubelet.k8s.io/v1
+CREDEOF
+
+cat > /etc/default/kubelet << 'KUBELETEOF'
+KUBELET_EXTRA_ARGS="--image-credential-provider-config=/etc/kubernetes/credential-provider-config.yaml --image-credential-provider-bin-dir=/usr/local/bin/credential-provider"
+KUBELETEOF
+
+log_info "ECR credential provider installed"
+
+log_step "5/6 Retrieve join command from SSM"
 JOIN_COMMAND=""
 RETRY=0
 MAX_RETRY=60
@@ -86,6 +112,6 @@ if [ -z "$JOIN_COMMAND" ]; then
 fi
 log_info "Join command retrieved successfully"
 
-log_step "5/5 Join Kubernetes cluster"
+log_step "6/6 Join Kubernetes cluster"
 eval "$JOIN_COMMAND"
 log_info "Worker node joined cluster successfully"
