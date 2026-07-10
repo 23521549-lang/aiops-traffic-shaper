@@ -50,4 +50,8 @@ k8s/secrets/*.yaml
 # Model files
 services/ai-engine/models/production/*.joblib
 services/ai-engine/models/staging/*.joblib
-services/ai-engine/models/archive/*.joblib
+services/ai-engine/models/archive/*.
+
+# other
+dump-code.sh
+repo_dump.md

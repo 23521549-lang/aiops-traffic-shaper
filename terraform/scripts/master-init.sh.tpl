@@ -7,6 +7,12 @@ log_info()  { echo "$LOG_PREFIX [INFO]  $*"; }
 log_error() { echo "$LOG_PREFIX [ERROR] $*" >&2; }
 log_step()  { echo "$LOG_PREFIX [STEP]  -------- $* --------"; }
 
+log_step "0/6 Clear stale SSM join-command (prevent worker race condition)"
+aws ssm delete-parameter \
+  --name "/${project_name}/k8s/join-command" \
+  --region "${region}" 2>/dev/null || true
+log_info "Cleared stale SSM parameter (if any existed from previous deployment)"
+
 log_step "1/6 System preparation"
 apt-get update -y
 apt-get install -y apt-transport-https ca-certificates curl gpg awscli

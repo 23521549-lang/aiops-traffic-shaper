@@ -86,7 +86,7 @@ log_info "ECR credential provider installed"
 log_step "5/6 Retrieve join command from SSM"
 JOIN_COMMAND=""
 RETRY=0
-MAX_RETRY=60
+MAX_RETRY=120
 RETRY_INTERVAL=10
 
 until [ -n "$JOIN_COMMAND" ] || [ "$RETRY" -ge "$MAX_RETRY" ]; do
@@ -101,7 +101,7 @@ until [ -n "$JOIN_COMMAND" ] || [ "$RETRY" -ge "$MAX_RETRY" ]; do
     --region "${region}" 2>/dev/null || true)
 
   if [ -z "$JOIN_COMMAND" ]; then
-    log_warn "Join command not available yet, retrying in $${RETRY_INTERVAL}s"
+    log_warn "Join command not available yet, retrying in ${RETRY_INTERVAL}s"
     sleep "$RETRY_INTERVAL"
   fi
 done
