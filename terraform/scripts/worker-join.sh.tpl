@@ -101,7 +101,7 @@ until [ -n "$JOIN_COMMAND" ] || [ "$RETRY" -ge "$MAX_RETRY" ]; do
     --region "${region}" 2>/dev/null || true)
 
   if [ -z "$JOIN_COMMAND" ]; then
-    log_warn "Join command not available yet, retrying in ${RETRY_INTERVAL}s"
+    log_warn "Join command not available yet, retrying in $${RETRY_INTERVAL}s"
     sleep "$RETRY_INTERVAL"
   fi
 done

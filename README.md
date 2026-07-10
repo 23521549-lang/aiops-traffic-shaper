@@ -5,24 +5,25 @@ cost-inflating network anomalies (DDoS, scrapers, botnets) in real time
 using a 3-layer protection architecture with unsupervised ML at its core.
 Deployed on a self-managed Kubernetes cluster with full CI/CD automation.
 
+## System Status
+
+Deployed and verified stable on AWS ap-southeast-1 (1 master + 3 workers).
+All services running: Redis, nginx-proxy (with reloader and fluent-bit
+sidecars), ai-engine, worker-orchestrator, Prometheus, Grafana, and the
+ip-reputation-updater CronJob.
+
+Resolved operational issues are documented in docs/runbook.md under
+"Known Issues and Fixes".
+
 ## 3-Layer Protection Architecture
-Internet Traffic
 
-|
-
-Layer 1: Nginx Rate Limiting      <-- immediate, no ML, 0ms latency
-
-|
-
-Layer 2: IsolationForest ML       <-- behavioral detection, ~3s latency
-
-|
-
-Layer 3: IP Reputation Blocklist  <-- known bad actors, O(1) lookup
-
-|
-
-Mitigation: Tier 1 rate-limit or Tier 2 hard block (auto-expiry TTL)
+```mermaid
+flowchart TD
+    A[Internet Traffic] --> B["Layer 1: Nginx Rate Limiting<br/>immediate, no ML, 0ms latency"]
+    B --> C["Layer 2: IsolationForest ML<br/>behavioral detection, ~3s latency"]
+    C --> D["Layer 3: IP Reputation Blocklist<br/>known bad actors, O(1) lookup"]
+    D --> E["Mitigation: Tier 1 rate-limit<br/>or Tier 2 hard block (auto-expiry TTL)"]
+```
 
 End-to-end detection latency: under 3 seconds.
 
@@ -42,19 +43,22 @@ End-to-end detection latency: under 3 seconds.
 ### Infrastructure
 
 - Self-managed Kubernetes cluster via Terraform on AWS EC2
-  (1 master + 2 workers, ap-southeast-1)
+  (1 master + 3 workers, ap-southeast-1)
 - Terraform remote state on S3 + DynamoDB locking
 - GitHub Actions OIDC — no static AWS credentials stored
 - Kubernetes RBAC scoped to minimum required permissions
 - Nginx hot-reload via inotify sidecar — no Docker socket exposure
+- FluentBit runs as a sidecar container in the nginx-proxy pod, sharing
+  the log volume directly instead of a cluster-wide DaemonSet
 - Network Policies restrict inter-pod communication
 - PersistentVolumeClaims for model, Prometheus, and Grafana storage
-- AWS SSM Parameter Store for automated K8s cluster join
+- AWS SSM Parameter Store for automated K8s cluster join, cleared at the
+  start of each master init to avoid stale join commands on re-deploy
 
 ### Backend & Reliability
 
 - FastAPI with full async architecture (anyio thread pool for ML inference)
-- Circuit breaker on AI Engine → Worker Orchestrator HTTP calls
+- Circuit breaker on AI Engine to Worker Orchestrator HTTP calls
   (5 failure threshold, 30s recovery timeout)
 - Pydantic v2 models for all request/response validation
 - Redis Sorted Sets for O(log N) sliding window (TTL-based auto-cleanup)
@@ -70,23 +74,20 @@ End-to-end detection latency: under 3 seconds.
 - Grafana admin password separate from internal service token
 - FluentBit RBAC scoped to namespace level only
 - Terraform state encrypted at rest in S3
+- CI/CD health-check output withholds internal pod IPs, ClusterIPs, and
+  NodePort mappings from public Actions logs
 
 ## Feature Registry
-Feature               Signal Detected           Enabled
 
-request_rate          Volumetric DDoS, flood       true
-
-error_ratio           Scanner, brute force         true
-
-avg_bytes_sent        Scraping, exfiltration       true
-
-avg_request_time      Slowloris, exhaustion        true
-
-unique_uri_ratio      Path scanner, crawler        true
-
-user_agent_entropy    Botnet rotating UA           true
-
-post_ratio            Credential stuffing          true
+| Feature | Signal Detected | Enabled |
+|---|---|---|
+| request_rate | Volumetric DDoS, flood | true |
+| error_ratio | Scanner, brute force | true |
+| avg_bytes_sent | Scraping, exfiltration | true |
+| avg_request_time | Slowloris, exhaustion | true |
+| unique_uri_ratio | Path scanner, crawler | true |
+| user_agent_entropy | Botnet rotating UA | true |
+| post_ratio | Credential stuffing | true |
 
 Add new features by adding to FEATURE_REGISTRY in feature_config.py.
 No other code changes required.
@@ -106,26 +107,16 @@ No other code changes required.
 
 ## Project Structure
 aiops-traffic-shaper/
-
-terraform/              IaC: VPC, EC2, ECR, S3 backend, OIDC
-
-k8s/                    Kubernetes manifests (25+ files)
-
-services/
-
-ai-engine/          FastAPI + Isolation Forest + Feature Registry
-
-worker-orchestrator/ Mitigation + ConfigMap patcher
-
-config/                 Nginx (rate limiting) + FluentBit
-
-scripts/                9 automation scripts
-
-tests/                  57 unit test cases
-
-docs/                   Architecture + MLOps design + Runbook
-
-.github/workflows/      CI/CD with OIDC auth
+├── terraform/              IaC: VPC, EC2, ECR, S3 backend, OIDC
+├── k8s/                    Kubernetes manifests
+├── services/
+│   ├── ai-engine/          FastAPI + Isolation Forest + Feature Registry
+│   └── worker-orchestrator/ Mitigation + ConfigMap patcher
+├── config/                 Nginx (rate limiting) + FluentBit
+├── scripts/                Automation scripts
+├── tests/                  Unit test cases
+├── docs/                   Architecture + MLOps design + Runbook
+└── .github/workflows/      CI/CD with OIDC auth
 
 ## Quick Start
 
@@ -166,7 +157,7 @@ bash scripts/simulate-attack.sh http://<worker-ip>:30080 all
 | Layer | Technology |
 |---|---|
 | Proxy | Nginx 1.25 (rate limiting built-in) |
-| Log Forwarding | FluentBit 3.0 |
+| Log Forwarding | FluentBit 3.0 (sidecar in nginx-proxy pod) |
 | ML Framework | scikit-learn (Isolation Forest) |
 | API Framework | FastAPI + Pydantic v2 |
 | State Store | Redis 7 |

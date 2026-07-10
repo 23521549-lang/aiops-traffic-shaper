@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'services/**'
+      - 'k8s/**'
+      - 'scripts/**'
+      - 'config/**'
+      - 'tests/**'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
     inputs:
       image_tag:
