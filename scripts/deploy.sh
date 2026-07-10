@@ -70,6 +70,10 @@ kubectl apply -f "$K8S_DIR/redis/"
 kubectl rollout status statefulset/redis -n "$NAMESPACE" --timeout=120s
 log_info "Redis ready"
 
+log_step "6.5/10 Apply FluentBit ConfigMap (required by nginx sidecar)"
+sed "s|\${INTERNAL_SECRET}|$INTERNAL_SECRET|g" "$K8S_DIR/fluent-bit/configmap.yaml" | kubectl apply -f -
+log_info "FluentBit ConfigMap applied"
+
 log_step "7/10 Apply Nginx"
 kubectl apply -f "$K8S_DIR/nginx/"
 kubectl rollout status deployment/nginx-proxy -n "$NAMESPACE" --timeout=120s
@@ -96,7 +100,6 @@ kubectl rollout status deployment/worker-orchestrator -n "$NAMESPACE" --timeout=
 log_info "AI Engine and Worker Orchestrator ready"
 
 log_step "9/10 Apply FluentBit, Monitoring and IP Reputation CronJob"
-sed "s|\${INTERNAL_SECRET}|$INTERNAL_SECRET|g" "$K8S_DIR/fluent-bit/configmap.yaml" | kubectl apply -f -
 kubectl apply -f "$K8S_DIR/fluent-bit/rbac.yaml"
 kubectl apply -f "$K8S_DIR/monitoring/"
 kubectl apply -f "$K8S_DIR/reputation/"
