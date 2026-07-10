@@ -38,7 +38,6 @@ data:
         Header            Content-Type application/json
         Retry_Limit       5
         Workers           2
-        Batch_Size        500
 
   parsers.conf: |
     [PARSER]
