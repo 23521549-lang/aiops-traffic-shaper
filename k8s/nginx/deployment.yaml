@@ -86,6 +86,30 @@ spec:
             - name: nginx-blocklist
               mountPath: /etc/nginx/blocklist.d
 
+        - name: fluent-bit
+          image: fluent/fluent-bit:3.0
+          env:
+            - name: INTERNAL_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: aiops-internal-secret
+                  key: INTERNAL_SECRET
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: fluent-bit-config
+              mountPath: /fluent-bit/etc
+            - name: nginx-logs
+              mountPath: /var/log/nginx
+              readOnly: true
+            - name: fluent-bit-db
+              mountPath: /fluent-bit/db
+
       volumes:
         - name: nginx-config
           configMap:
@@ -95,4 +119,9 @@ spec:
             name: nginx-blocklist
             optional: true
         - name: nginx-logs
+          emptyDir: {}
+        - name: fluent-bit-config
+          configMap:
+            name: fluent-bit-config
+        - name: fluent-bit-db
           emptyDir: {}

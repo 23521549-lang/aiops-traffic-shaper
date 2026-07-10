@@ -97,7 +97,6 @@ log_info "AI Engine and Worker Orchestrator ready"
 
 log_step "9/10 Apply FluentBit, Monitoring and IP Reputation CronJob"
 sed "s|\${INTERNAL_SECRET}|$INTERNAL_SECRET|g" "$K8S_DIR/fluent-bit/configmap.yaml" | kubectl apply -f -
-kubectl apply -f "$K8S_DIR/fluent-bit/daemonset.yaml"
 kubectl apply -f "$K8S_DIR/fluent-bit/rbac.yaml"
 kubectl apply -f "$K8S_DIR/monitoring/"
 kubectl apply -f "$K8S_DIR/reputation/"
