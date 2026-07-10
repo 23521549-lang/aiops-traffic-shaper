@@ -117,19 +117,24 @@ This ensures AI Engine continues operating even when Worker Orchestrator
 is unavailable. Layer 1 (Nginx rate limiting) provides baseline protection.
 
 ## Model Storage
-/app/models/ (PersistentVolumeClaim: 5Gi)
-├── production/
-│   ├── isolation_forest.joblib
-│   └── metadata.json
-├── staging/
-│   ├── isolation_forest.joblib
-│   └── metadata.json
-└── archive/
-└── v20260101120000_20260108/
-├── isolation_forest.joblib
-└── metadata.json
 
-PVC ensures model survives pod restarts. No retraining needed after restart.
+PersistentVolumeClaim: 5Gi, mounted at /app/models/
+
+```text
+/app/models/
+  production/
+    isolation_forest.joblib
+    metadata.json
+  staging/
+    isolation_forest.joblib
+    metadata.json
+  archive/
+    v20260101120000_20260108/
+      isolation_forest.joblib
+      metadata.json
+```
+
+PVC ensures the model survives pod restarts. No retraining needed after restart.
 
 ## Prometheus Metrics (ML-specific)
 
