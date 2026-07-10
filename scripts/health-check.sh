@@ -69,12 +69,11 @@ for svc in redis ai-engine worker-orchestrator nginx-proxy prometheus grafana; d
     if [ "$ENDPOINTS" = "<none>" ] || [ -z "$ENDPOINTS" ]; then
         log_warn "Service $svc has no endpoints"
     else
-        log_info "Service $svc endpoints: $ENDPOINTS"
+        log_info "Service $svc has endpoints (details hidden from public log)"
     fi
 done
 
 log_step "4/4 Summary"
-kubectl get pods -n "$NAMESPACE" -o wide
-kubectl get services -n "$NAMESPACE"
+kubectl get pods -n "$NAMESPACE"
 
 log_info "Health check completed"

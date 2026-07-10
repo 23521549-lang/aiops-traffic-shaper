@@ -157,7 +157,7 @@ Cluster setup completed successfully
 
 Next steps:
   1. Build and push Docker images:
-     bash scripts/build-and-push.sh v1.0.0
+     bash ./scripts/generate-env.sh hoặc bash ./scripts/build-and-push.sh v1.0.0
 
   2. Deploy all services:
      export INTERNAL_SECRET=<your-secret>
