@@ -55,3 +55,9 @@ services/ai-engine/models/archive/*.
 # other
 dump-code.sh
 repo_dump.md
+.sdlc/
+.ruff_cache/
+.mypy_cache/
+.venv/
+.venv*/
+venv/
