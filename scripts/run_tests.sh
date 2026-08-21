@@ -82,6 +82,14 @@ WORKER_RESULT=$?
 
 echo ""
 echo "===================================================="
+echo "BƯỚC 4c: Chạy pytest cho Integration (local E2E, cả 2 service)"
+echo "===================================================="
+PYTHONPATH=. INTERNAL_SECRET=test-secret-for-ci REDIS_HOST=localhost \
+    ./.venv/bin/python -m pytest tests/integration/ -v
+INTEGRATION_RESULT=$?
+
+echo ""
+echo "===================================================="
 echo "TỔNG KẾT"
 echo "===================================================="
 if [ $AI_ENGINE_RESULT -eq 0 ]; then
@@ -96,10 +104,16 @@ else
     echo "Worker Orchestrator: FAIL (exit code $WORKER_RESULT)"
 fi
 
+if [ $INTEGRATION_RESULT -eq 0 ]; then
+    echo "Integration (E2E):   PASS"
+else
+    echo "Integration (E2E):   FAIL (exit code $INTEGRATION_RESULT)"
+fi
+
 echo ""
 echo "(Thư mục tạm sẽ được tự dọn dẹp ngay sau dòng này. Code chính vẫn nằm ở: $SRC_DIR)"
 
-if [ $AI_ENGINE_RESULT -eq 0 ] && [ $WORKER_RESULT -eq 0 ]; then
+if [ $AI_ENGINE_RESULT -eq 0 ] && [ $WORKER_RESULT -eq 0 ] && [ $INTEGRATION_RESULT -eq 0 ]; then
     exit 0
 else
     exit 1

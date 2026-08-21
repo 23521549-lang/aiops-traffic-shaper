@@ -95,6 +95,13 @@ jobs:
           INTERNAL_SECRET: test-secret-for-ci
           REDIS_HOST: localhost
 
+      - name: Run Integration (local E2E) tests
+        run: python -m pytest tests/integration/ -v --tb=short
+        env:
+          PYTHONPATH: .
+          INTERNAL_SECRET: test-secret-for-ci
+          REDIS_HOST: localhost
+
   build-and-push:
     name: Build and Push Images
     runs-on: ubuntu-latest
