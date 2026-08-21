@@ -1052,51 +1052,36 @@ pass (moto only, no real AWS).
   `MitigationStateTable`, `WhitelistTable` (Stage 1).
 - Produces: `POST /agent/v1/telemetry` returning `TelemetryResponse` with a
   `decisions: list[MitigationState]` field per `docs/api-contract.md` —
-  this is what Stage 8's agent enforces locally.
+  this is what Stage 8's agent enforces locally. Also `GET
+  /agent/v1/decisions` (agent-key-authenticated, so it belongs in this
+  stage — `/agent/v1/register` needs Cognito and waits for Stage 6).
 
-- [ ] **Step 1: Write the failing test**
+**Design correction made before writing any code (caught reviewing the
+plan itself, not by running it):** the version of this stage originally
+drafted here used a hand-rolled `dynamo_resource_override()` that
+reassigns a module-level `_resource` global, with `build_agent_router(_resource, ...)`
+called once at import time to build the router. That does **not work** —
+`build_agent_router`'s `resource` parameter closes over whatever object
+`_resource` pointed to at that one call, and reassigning the module global
+afterward has zero effect on the already-built router. A test relying on
+this would either hit real AWS (unreachable in this environment) or
+silently pass against the wrong resource. Fixed with FastAPI's own
+dependency-injection: a `get_dynamo_resource` dependency resolved fresh
+per request via `Depends(...)`, swappable correctly in tests via
+`app.dependency_overrides[get_dynamo_resource] = lambda: dynamo_resource`.
+`agent_auth` becomes a plain dependency function (not a factory) for the
+same reason. The code below reflects the corrected design — no separate
+`build_agent_router()`/`dynamo_resource_override()` functions exist.
 
-```python
-# services/backend/tests/test_agent_routes.py
-from fastapi.testclient import TestClient
-from services.backend.core.tables import create_all_tables, AgentsTable
-from services.backend.main import app, dynamo_resource_override
-
-def _client(dynamo_resource):
-    create_all_tables(dynamo_resource)
-    AgentsTable(dynamo_resource).put(
-        tenant_id="t-1", agent_id="a-1", registered_at="2026-08-21T00:00:00Z",
-        last_seen_at="2026-08-21T00:00:00Z", agent_version="0.1.0",
-        api_key_hash="testkeyhash", status="active",
-    )
-    dynamo_resource_override(dynamo_resource)  # test-only DI seam, see Step 2
-    return TestClient(app)
-
-def test_telemetry_unauthenticated_is_401(dynamo_resource):
-    client = _client(dynamo_resource)
-    resp = client.post("/agent/v1/telemetry", json={"logs": []})
-    assert resp.status_code == 401
-
-def test_telemetry_empty_batch(dynamo_resource):
-    client = _client(dynamo_resource)
-    resp = client.post("/agent/v1/telemetry", json={"logs": []},
-                        headers={"X-Agent-Key": "t-1.testkeyhash"})
-    assert resp.status_code == 200
-    assert resp.json()["received"] == 0
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `cd services/backend && python -m pytest tests/test_agent_routes.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'services.backend.main'`
-
-- [ ] **Step 3: Implement `api/dependencies.py`**
+- [ ] **Step 1: Implement `api/dependencies.py`**
 
 ```python
 # services/backend/api/dependencies.py
 import hashlib
-from fastapi import Header, HTTPException
 
+from fastapi import Depends, Header, HTTPException
+
+from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.tables import AgentsTable
 
 
@@ -1104,94 +1089,113 @@ def hash_api_key(raw_key: str) -> str:
     return hashlib.sha256(raw_key.encode()).hexdigest()
 
 
-def agent_auth(resource):
-    def _dep(x_agent_key: str = Header(...)) -> str:
-        try:
-            tenant_id, key_part = x_agent_key.split(".", 1)
-        except ValueError:
-            raise HTTPException(status_code=401, detail="Malformed X-Agent-Key")
+def agent_auth(x_agent_key: str | None = Header(default=None),
+               resource=Depends(get_dynamo_resource)) -> str:
+    if x_agent_key is None:
+        raise HTTPException(status_code=401, detail="Missing X-Agent-Key")
 
-        agents = AgentsTable(resource).query_by_tenant(tenant_id)
-        for agent in agents:
-            if agent.get("api_key_hash") == key_part and agent.get("status") == "active":
-                return tenant_id
-        raise HTTPException(status_code=401, detail="Invalid agent key")
-    return _dep
+    try:
+        tenant_id, key_part = x_agent_key.split(".", 1)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Malformed X-Agent-Key")
+
+    agents = AgentsTable(resource).query_by_tenant(tenant_id)
+    for agent in agents:
+        if agent.get("api_key_hash") == key_part and agent.get("status") == "active":
+            return tenant_id
+    raise HTTPException(status_code=401, detail="Invalid agent key")
 ```
 
-- [ ] **Step 4: Implement `api/routes/agent.py`**
+`x_agent_key` defaults to `None` (not FastAPI's bare `Header(...)`
+required-param shape) so a missing header goes through this function and
+returns a consistent 401, not FastAPI's automatic 422 for a missing
+required parameter — found while writing the "unauthenticated" test: both
+401 and 422 are valid per `docs/api-contract.md`, but mixing "422 for
+missing, 401 for malformed/wrong" is an inconsistent auth error taxonomy
+worth avoiding on purpose.
+
+- [ ] **Step 2: Implement `api/routes/agent.py`**
 
 ```python
 # services/backend/api/routes/agent.py
 from fastapi import APIRouter, Depends
 
+from services.backend.api.dependencies import agent_auth
+from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.tables import MitigationStateTable, WhitelistTable
-from services.backend.ml.feature_engineering import record_batch, compute_features_for_ip
-from services.backend.ml.model import ModelManager, classify_score, AnomalyTier
+from services.backend.ml.feature_engineering import compute_features_for_ip, record_batch
+from services.backend.ml.model import AnomalyTier, ModelManager, classify_score
+from services.backend.schemas.mitigation import MitigationState
 from services.backend.schemas.telemetry import TelemetryBatch, TelemetryResponse
 
 router = APIRouter()
 
 
-def build_agent_router(resource, agent_auth_dep) -> APIRouter:
-    r = APIRouter()
+@router.post("/agent/v1/telemetry", response_model=TelemetryResponse)
+def ingest_telemetry(
+    batch: TelemetryBatch,
+    tenant_id: str = Depends(agent_auth),
+    resource=Depends(get_dynamo_resource),
+) -> TelemetryResponse:
+    if not batch.logs:
+        return TelemetryResponse(received=0, processed_ips=0, decisions=[])
 
-    @r.post("/agent/v1/telemetry", response_model=TelemetryResponse)
-    def ingest(batch: TelemetryBatch, tenant_id: str = Depends(agent_auth_dep)):
-        if not batch.logs:
-            return TelemetryResponse(received=0, processed_ips=0, decisions=[])
+    touched_ips = record_batch(resource, tenant_id, batch.logs)
+    whitelist = {i["ip"] for i in WhitelistTable(resource).query_by_tenant(tenant_id)}
 
-        touched_ips = record_batch(resource, tenant_id, batch.logs)
-        whitelist = {i["ip"] for i in WhitelistTable(resource).query_by_tenant(tenant_id)}
-        mgr = ModelManager()
-        mgr.load(resource, tenant_id)  # cached across warm invocations, see Stage 3 Step 6 —
-        # do NOT "simplify" this back to an unconditional registry.load_model() call
+    mgr = ModelManager()
+    mgr.load(resource, tenant_id)  # cached across warm invocations, see Stage 3 —
+    # do NOT "simplify" this back to an unconditional registry.load_model() call
 
-        decisions = []
-        for ip in touched_ips:
-            if ip in whitelist:
+    decisions: list[MitigationState] = []
+    for ip in touched_ips:
+        if ip in whitelist:
+            continue
+        vector = compute_features_for_ip(resource, tenant_id, ip)
+        if vector is None:
+            continue
+        for v, score in mgr.score_vectors([vector]):
+            tier = classify_score(score)
+            if tier == AnomalyTier.NORMAL:
                 continue
-            vector = compute_features_for_ip(resource, tenant_id, ip)
-            if vector is None:
-                continue
-            scored = mgr.score_vectors([vector])
-            for v, score in scored:
-                tier = classify_score(score)
-                if tier == AnomalyTier.NORMAL:
-                    continue
-                state = {"ip": v.remote_addr, "tier": int(tier), "score": score,
-                          "reason": "behavioral_anomaly", "expires_at": 0}
-                MitigationStateTable(resource).put(tenant_id=tenant_id, **state)
-                decisions.append(state)
+            state = MitigationState(
+                ip=v.remote_addr, tier=int(tier), score=score,
+                reason="behavioral_anomaly", expires_at=0,
+            )
+            MitigationStateTable(resource).put(tenant_id=tenant_id, **state.model_dump())
+            decisions.append(state)
 
-        return TelemetryResponse(received=len(batch.logs), processed_ips=len(touched_ips),
-                                  decisions=decisions)
+    return TelemetryResponse(
+        received=len(batch.logs), processed_ips=len(touched_ips), decisions=decisions,
+    )
 
-    return r
+
+@router.get("/agent/v1/decisions", response_model=list[MitigationState])
+def list_decisions(
+    tenant_id: str = Depends(agent_auth),
+    resource=Depends(get_dynamo_resource),
+) -> list[MitigationState]:
+    items = MitigationStateTable(resource).query_by_tenant(tenant_id)
+    return [MitigationState(**item) for item in items]
 ```
 
-- [ ] **Step 5: Implement `main.py`**
+`/agent/v1/register` (from `docs/api-contract.md`) is deliberately NOT
+built in this stage — it needs Cognito JWT auth (tenant owner,
+interactive), which doesn't exist until Stage 6. Building it now would
+mean either faking auth or blocking this stage on Stage 6 — neither is
+right, so it's listed as a Stage 6 deliverable instead.
+
+- [ ] **Step 3: Implement `main.py`**
 
 ```python
 # services/backend/main.py
 from fastapi import FastAPI
 from mangum import Mangum
 
-from services.backend.api.dependencies import agent_auth
-from services.backend.api.routes.agent import build_agent_router
-from services.backend.core.dynamo import get_dynamo_resource
-
-_resource = get_dynamo_resource()
-
-
-def dynamo_resource_override(resource) -> None:
-    """Test-only seam: swap the module-level resource for a moto-backed one."""
-    global _resource
-    _resource = resource
-
+from services.backend.api.routes.agent import router as agent_router
 
 app = FastAPI()
-app.include_router(build_agent_router(_resource, agent_auth(_resource)))
+app.include_router(agent_router)
 
 
 @app.get("/health")
@@ -1202,16 +1206,80 @@ def health():
 handler = Mangum(app)
 ```
 
-- [ ] **Step 6: Run test to verify it passes**
+- [ ] **Step 4: Add an autouse fixture to `tests/conftest.py` clearing dependency_overrides**
+
+```python
+# append to services/backend/tests/conftest.py
+@pytest.fixture(autouse=True)
+def _clear_fastapi_dependency_overrides():
+    """`services.backend.main.app` is a module-level singleton shared by
+    every test file that imports it — a test that sets
+    app.dependency_overrides[get_dynamo_resource] would leak into every
+    later test otherwise."""
+    yield
+    try:
+        from services.backend.main import app
+        app.dependency_overrides.clear()
+    except ImportError:
+        pass  # main.py doesn't exist yet in earlier stages' test runs
+```
+
+- [ ] **Step 5: Write the tests**
+
+```python
+# services/backend/tests/test_agent_routes.py
+from fastapi.testclient import TestClient
+
+from services.backend.core.dynamo import get_dynamo_resource
+from services.backend.core.tables import AgentsTable, create_all_tables
+from services.backend.main import app
+
+
+def _client(dynamo_resource):
+    create_all_tables(dynamo_resource)
+    AgentsTable(dynamo_resource).put(
+        tenant_id="t-1", agent_id="a-1", registered_at="2026-08-21T00:00:00Z",
+        last_seen_at="2026-08-21T00:00:00Z", agent_version="0.1.0",
+        api_key_hash="testkeyhash", status="active",
+    )
+    # The correct FastAPI DI override — swaps the resource for every route
+    # declaring Depends(get_dynamo_resource). See the "Design correction"
+    # note above this stage's Step 1 for why a hand-rolled global-reassign
+    # approach does not work here.
+    app.dependency_overrides[get_dynamo_resource] = lambda: dynamo_resource
+    return TestClient(app)
+
+
+def test_telemetry_unauthenticated_is_401(dynamo_resource):
+    client = _client(dynamo_resource)
+    resp = client.post("/agent/v1/telemetry", json={"logs": []})
+    assert resp.status_code == 401
+
+
+def test_telemetry_empty_batch(dynamo_resource):
+    client = _client(dynamo_resource)
+    resp = client.post("/agent/v1/telemetry", json={"logs": []},
+                        headers={"X-Agent-Key": "t-1.testkeyhash"})
+    assert resp.status_code == 200
+    assert resp.json()["received"] == 0
+
+# Plus: malformed-key/wrong-key 401 tests, a normal-traffic (shadow-mode,
+# no decisions) test, a whitelisted-IP-skipped test, and a
+# GET /agent/v1/decisions test — 7 tests total. See the checked-in
+# services/backend/tests/test_agent_routes.py for the full set; not
+# reproduced here to keep this plan from drifting out of sync with a file
+# that changes independently of it.
+```
+
+- [ ] **Step 6: Run tests, iterate to green, commit**
 
 Run: `cd services/backend && python -m pytest tests/test_agent_routes.py -v`
-Expected: PASS (2 tests)
-
-- [ ] **Step 7: Commit**
+Expected: PASS (7 tests)
 
 ```bash
-git add services/backend/main.py services/backend/api/ services/backend/schemas/
-git commit -m "feat(backend): Lambda handler + agent-facing telemetry endpoint"
+git add services/backend/main.py services/backend/api/ services/backend/schemas/ \
+        services/backend/tests/test_agent_routes.py services/backend/tests/conftest.py
+git commit -m "feat(backend): Lambda handler + agent-facing endpoints"
 ```
 
 **Checkpoint (stage done when):**
