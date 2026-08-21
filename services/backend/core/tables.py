@@ -105,6 +105,7 @@ class _SimpleTable:
     _key_names: tuple[str, ...]
 
     def __init__(self, resource):
+        self._resource = resource
         self._table = resource.Table(self._table_name)
 
     def put(self, **item) -> None:
@@ -117,9 +118,38 @@ class _SimpleTable:
     def delete(self, **key) -> None:
         self._table.delete_item(Key={k: key[k] for k in self._key_names})
 
+    def update(self, key: dict, update_expression: str,
+               expr_names: dict | None = None, expr_values: dict | None = None) -> None:
+        """Shared wrapper for update_item calls. Unlike put(), a bare
+        `self._table.update_item(...)` call does NOT go through
+        _to_dynamo_safe — found during review: TelemetryEventsTable's
+        original add_aggregate() had to convert its one float field by
+        hand, which meant the next float field added via update_item
+        elsewhere (e.g. Stage 5's UsageCounters) would silently hit the
+        same 'Float types are not supported' error again. Routing every
+        update_item call through this method makes the fix apply
+        automatically everywhere, not just at the one call site it was
+        first noticed at."""
+        kwargs = {"Key": key, "UpdateExpression": update_expression}
+        if expr_names:
+            kwargs["ExpressionAttributeNames"] = expr_names
+        if expr_values:
+            kwargs["ExpressionAttributeValues"] = _to_dynamo_safe(expr_values)
+        self._table.update_item(**kwargs)
+
     def query_by_tenant(self, tenant_id: str) -> list[dict]:
+        """Queries by this table's partition key — meaningful only for
+        tables whose partition key IS a plain tenant_id (Tenants, Agents,
+        Whitelist, MitigationState, Models). Uses self._key_names[0]
+        rather than a hardcoded "tenant_id" string, found during review:
+        the hardcoded version silently returned zero rows (well-formed but
+        wrong) or would raise a DynamoDB ValidationException on any table
+        whose partition key is named differently (see
+        TelemetryEventsTable's override, which rejects this call outright
+        instead of returning a misleading empty/wrong result)."""
         from boto3.dynamodb.conditions import Key
-        resp = self._table.query(KeyConditionExpression=Key("tenant_id").eq(tenant_id))
+        partition_key = self._key_names[0]
+        resp = self._table.query(KeyConditionExpression=Key(partition_key).eq(tenant_id))
         return resp.get("Items", [])
 
 
@@ -155,19 +185,19 @@ class TelemetryEventsTable(_SimpleTable):
         distinct_uri_count, distinct_ua_count — all plain numbers, so the
         item stays a fixed handful of bytes regardless of traffic volume
         (no lists, nothing that grows with request count)."""
-        self._table.update_item(
-            Key={"tenant_ip": tenant_ip, "bucket_start_ts": bucket_start_ts},
-            UpdateExpression=(
+        self.update(
+            key={"tenant_ip": tenant_ip, "bucket_start_ts": bucket_start_ts},
+            update_expression=(
                 "ADD request_count :rc, error_count :ec, post_count :pc, "
                 "total_bytes :tb, total_time :tt, "
                 "distinct_uri_count :du, distinct_ua_count :da "
                 "SET #ttl = :ttl"
             ),
-            ExpressionAttributeNames={"#ttl": "ttl"},
-            ExpressionAttributeValues={
+            expr_names={"#ttl": "ttl"},
+            expr_values={
                 ":rc": agg["request_count"], ":ec": agg["error_count"],
                 ":pc": agg["post_count"], ":tb": agg["total_bytes"],
-                ":tt": _to_dynamo_safe(agg["total_time"]), ":du": agg["distinct_uri_count"],
+                ":tt": agg["total_time"], ":du": agg["distinct_uri_count"],
                 ":da": agg["distinct_ua_count"],
                 ":ttl": bucket_start_ts + ttl_seconds,
             },
@@ -175,6 +205,48 @@ class TelemetryEventsTable(_SimpleTable):
 
     def get_bucket(self, tenant_ip: str, bucket_start_ts: int) -> dict | None:
         return self.get(tenant_ip=tenant_ip, bucket_start_ts=bucket_start_ts)
+
+    def get_buckets_batch(self, tenant_ip: str, bucket_starts: list[int]) -> dict[int, dict]:
+        """Fetch multiple buckets for the same tenant_ip in one DynamoDB
+        BatchGetItem call instead of one GetItem per bucket — found during
+        review: compute_features_for_ip() was issuing two independent
+        sequential GetItem calls (current bucket, previous bucket) that
+        don't depend on each other's result. Same total RCU cost, fewer
+        round trips on the hot telemetry-scoring path. Retries any
+        UnprocessedKeys (DynamoDB may partially fail a batch under
+        throttling) up to 3 times before giving up on the remainder."""
+        if not bucket_starts:
+            return {}
+
+        pending = [{"tenant_ip": tenant_ip, "bucket_start_ts": ts} for ts in bucket_starts]
+        found: dict[int, dict] = {}
+
+        for _ in range(3):
+            if not pending:
+                break
+            resp = self._resource.batch_get_item(
+                RequestItems={self._table_name: {"Keys": pending}}
+            )
+            for item in resp.get("Responses", {}).get(self._table_name, []):
+                found[int(item["bucket_start_ts"])] = item
+            pending = resp.get("UnprocessedKeys", {}).get(self._table_name, {}).get("Keys", [])
+
+        return found
+
+    def query_by_tenant(self, tenant_id: str) -> list[dict]:
+        # This table's partition key is "{tenant_id}#{ip}", a composite —
+        # NOT a plain tenant_id — so it can't be queried by tenant alone
+        # (DynamoDB Query only supports begins_with on a SORT key, not the
+        # partition key). Found during review: the inherited base
+        # implementation would have silently queried the wrong attribute
+        # and returned an empty list instead of failing loudly. Raising
+        # here is deliberate — a caller needing "all telemetry for tenant
+        # X" needs a GSI on tenant_id, which doesn't exist yet.
+        raise NotImplementedError(
+            "TelemetryEventsTable's partition key is a tenant_id#ip composite, "
+            "not a plain tenant_id — query_by_tenant() doesn't apply here. "
+            "Use get_bucket(tenant_ip, bucket_start_ts) for a specific IP/bucket."
+        )
 
 
 class ModelsTable(_SimpleTable):

@@ -84,8 +84,11 @@ def compute_features_for_ip(resource, tenant_id: str, ip: str, bucket_seconds: i
     previous_start = current_start - bucket_seconds
     elapsed_fraction = (now - current_start) / bucket_seconds  # 0..1
 
-    current = table.get_bucket(tenant_ip, current_start) or {}
-    previous = table.get_bucket(tenant_ip, previous_start) or {}
+    # One BatchGetItem round trip instead of two sequential GetItem calls —
+    # neither bucket depends on the other's result (found during review).
+    buckets = table.get_buckets_batch(tenant_ip, [current_start, previous_start])
+    current = buckets.get(current_start, {})
+    previous = buckets.get(previous_start, {})
     prev_weight = 1.0 - elapsed_fraction
 
     def _w(field: str, cast=int) -> float:

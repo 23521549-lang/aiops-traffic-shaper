@@ -1,4 +1,8 @@
-from services.backend.core.tables import create_all_tables, TenantsTable
+import pytest
+
+from services.backend.core.tables import (
+    create_all_tables, TenantsTable, AgentsTable, TelemetryEventsTable,
+)
 
 
 def test_create_all_tables_is_idempotent(dynamo_resource):
@@ -28,3 +32,24 @@ def test_tenants_get_missing_returns_none(dynamo_resource):
     create_all_tables(dynamo_resource)
     table = TenantsTable(dynamo_resource)
     assert table.get(tenant_id="does-not-exist") is None
+
+
+def test_query_by_tenant_uses_correct_partition_key(dynamo_resource):
+    create_all_tables(dynamo_resource)
+    table = AgentsTable(dynamo_resource)
+    table.put(tenant_id="t-1", agent_id="a-1", status="active")
+    table.put(tenant_id="t-1", agent_id="a-2", status="active")
+    table.put(tenant_id="t-2", agent_id="a-3", status="active")
+
+    results = table.query_by_tenant("t-1")
+    assert {r["agent_id"] for r in results} == {"a-1", "a-2"}
+
+
+def test_telemetry_events_query_by_tenant_raises_not_implemented(dynamo_resource):
+    # Partition key here is a "{tenant_id}#{ip}" composite, not a plain
+    # tenant_id — must fail loudly, not silently return an empty/wrong
+    # result via the inherited base implementation.
+    create_all_tables(dynamo_resource)
+    table = TelemetryEventsTable(dynamo_resource)
+    with pytest.raises(NotImplementedError):
+        table.query_by_tenant("t-1")

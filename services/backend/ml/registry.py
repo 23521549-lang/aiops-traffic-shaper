@@ -1,11 +1,14 @@
 import gzip
 import io
+import logging
 from dataclasses import asdict, dataclass
 
 import joblib
 from sklearn.ensemble import IsolationForest
 
 from services.backend.core.tables import ModelsTable
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -38,8 +41,18 @@ def load_model(resource, tenant_id: str, stage: str = "production") -> Isolation
     item = table.get(tenant_id=tenant_id, stage_version=stage)
     if item is None:
         return None
-    raw = gzip.decompress(bytes(item["model_blob"]))
-    return joblib.load(io.BytesIO(raw))
+    try:
+        raw = gzip.decompress(bytes(item["model_blob"]))
+        return joblib.load(io.BytesIO(raw))
+    except Exception as e:
+        # A corrupted blob or a joblib/sklearn version mismatch between the
+        # training Lambda and the serving Lambda must fall back to shadow
+        # mode (return None), not crash the whole telemetry request with an
+        # unhandled 500 — restores the behavior the old ai_engine/ml/registry.py
+        # had and this port initially dropped.
+        logger.error("Failed to deserialize model: tenant=%s stage=%s: %s",
+                     tenant_id, stage, e)
+        return None
 
 
 def model_exists(resource, tenant_id: str, stage: str = "production") -> bool:

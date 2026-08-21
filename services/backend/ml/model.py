@@ -98,11 +98,12 @@ class ModelManager:
         try:
             scores = self._predict_sync(X)
             return list(zip(vectors, scores.tolist()))
-        except ValueError as e:
-            logger.error("Model shape mismatch: tenant=%s: %s", self._tenant_id, e)
-            return [(v, 0.0) for v in vectors]
         except Exception as e:
-            logger.error("Unexpected error during inference: %s", e)
+            # A separate `except ValueError` (feature-shape mismatch) used
+            # to sit above this with an identical fallback body — merged,
+            # since ValueError is already an Exception subclass and both
+            # branches did the same thing (found on review).
+            logger.error("Inference failed: tenant=%s: %s", self._tenant_id, e)
             return [(v, 0.0) for v in vectors]
 
 

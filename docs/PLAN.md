@@ -277,6 +277,7 @@ class _SimpleTable:
     _key_names: tuple[str, ...]
 
     def __init__(self, resource):
+        self._resource = resource
         self._table = resource.Table(self._table_name)
 
     def put(self, **item) -> None:
@@ -289,9 +290,35 @@ class _SimpleTable:
     def delete(self, **key) -> None:
         self._table.delete_item(Key={k: key[k] for k in self._key_names})
 
+    def update(self, key: dict, update_expression: str,
+               expr_names: dict | None = None, expr_values: dict | None = None) -> None:
+        """Shared wrapper for update_item calls. Unlike put(), a bare
+        update_item call does NOT go through _to_dynamo_safe — found on
+        review after Stage 2 shipped: TelemetryEventsTable's add_aggregate
+        had to convert its one float field by hand, which meant the next
+        float field added via update_item elsewhere (e.g. Stage 5's
+        UsageCounters) would silently hit the same float/Decimal error
+        again. Routing every update_item call through this method makes
+        the fix automatic everywhere, not just at the first call site."""
+        kwargs = {"Key": key, "UpdateExpression": update_expression}
+        if expr_names:
+            kwargs["ExpressionAttributeNames"] = expr_names
+        if expr_values:
+            kwargs["ExpressionAttributeValues"] = _to_dynamo_safe(expr_values)
+        self._table.update_item(**kwargs)
+
     def query_by_tenant(self, tenant_id: str) -> list[dict]:
+        """Queries by this table's partition key — meaningful only for
+        tables whose partition key IS a plain tenant_id. Uses
+        self._key_names[0] rather than a hardcoded "tenant_id" string —
+        found on review: the hardcoded version would raise a DynamoDB
+        ValidationException (or silently query the wrong attribute) on any
+        table whose partition key is named differently. See
+        TelemetryEventsTable's override below, which rejects this call
+        outright instead of returning a misleading result."""
         from boto3.dynamodb.conditions import Key
-        resp = self._table.query(KeyConditionExpression=Key("tenant_id").eq(tenant_id))
+        partition_key = self._key_names[0]
+        resp = self._table.query(KeyConditionExpression=Key(partition_key).eq(tenant_id))
         return resp.get("Items", [])
 
 
@@ -485,19 +512,19 @@ class TelemetryEventsTable(_SimpleTable):
         distinct_uri_count, distinct_ua_count — all plain numbers, so the
         item stays a fixed handful of bytes regardless of traffic volume
         (no lists, nothing that grows with request count)."""
-        self._table.update_item(
-            Key={"tenant_ip": tenant_ip, "bucket_start_ts": bucket_start_ts},
-            UpdateExpression=(
+        self.update(
+            key={"tenant_ip": tenant_ip, "bucket_start_ts": bucket_start_ts},
+            update_expression=(
                 "ADD request_count :rc, error_count :ec, post_count :pc, "
                 "total_bytes :tb, total_time :tt, "
                 "distinct_uri_count :du, distinct_ua_count :da "
                 "SET #ttl = :ttl"
             ),
-            ExpressionAttributeNames={"#ttl": "ttl"},
-            ExpressionAttributeValues={
+            expr_names={"#ttl": "ttl"},
+            expr_values={
                 ":rc": agg["request_count"], ":ec": agg["error_count"],
                 ":pc": agg["post_count"], ":tb": agg["total_bytes"],
-                ":tt": _to_dynamo_safe(agg["total_time"]), ":du": agg["distinct_uri_count"],
+                ":tt": agg["total_time"], ":du": agg["distinct_uri_count"],
                 ":da": agg["distinct_ua_count"],
                 ":ttl": bucket_start_ts + ttl_seconds,
             },
@@ -505,6 +532,41 @@ class TelemetryEventsTable(_SimpleTable):
 
     def get_bucket(self, tenant_ip: str, bucket_start_ts: int) -> dict | None:
         return self.get(tenant_ip=tenant_ip, bucket_start_ts=bucket_start_ts)
+
+    def get_buckets_batch(self, tenant_ip: str, bucket_starts: list[int]) -> dict[int, dict]:
+        """Fetch multiple buckets for the same tenant_ip in one DynamoDB
+        BatchGetItem call instead of one GetItem per bucket — found on
+        review: the sliding-window read below issued two independent
+        sequential GetItem calls (current + previous bucket) that don't
+        depend on each other's result. Same total RCU cost, fewer round
+        trips on the hot telemetry-scoring path. Retries any
+        UnprocessedKeys up to 3 times before giving up on the remainder."""
+        if not bucket_starts:
+            return {}
+        pending = [{"tenant_ip": tenant_ip, "bucket_start_ts": ts} for ts in bucket_starts]
+        found: dict[int, dict] = {}
+        for _ in range(3):
+            if not pending:
+                break
+            resp = self._resource.batch_get_item(RequestItems={self._table_name: {"Keys": pending}})
+            for item in resp.get("Responses", {}).get(self._table_name, []):
+                found[int(item["bucket_start_ts"])] = item
+            pending = resp.get("UnprocessedKeys", {}).get(self._table_name, {}).get("Keys", [])
+        return found
+
+    def query_by_tenant(self, tenant_id: str) -> list[dict]:
+        # Partition key here is "{tenant_id}#{ip}", a composite — NOT a
+        # plain tenant_id — so it can't be queried by tenant alone
+        # (DynamoDB Query only supports begins_with on a SORT key, not the
+        # partition key). Found on review: the inherited base
+        # implementation would have silently queried the wrong attribute.
+        # A caller needing "all telemetry for tenant X" needs a GSI on
+        # tenant_id, which doesn't exist yet — fail loudly instead.
+        raise NotImplementedError(
+            "TelemetryEventsTable's partition key is a tenant_id#ip composite, "
+            "not a plain tenant_id — query_by_tenant() doesn't apply here. "
+            "Use get_bucket()/get_buckets_batch() for specific IP/bucket lookups."
+        )
 ```
 
 - [ ] **Step 4: Implement `ml/feature_engineering.py`**
@@ -597,8 +659,11 @@ def compute_features_for_ip(resource, tenant_id: str, ip: str, bucket_seconds: i
     previous_start = current_start - bucket_seconds
     elapsed_fraction = (now - current_start) / bucket_seconds  # 0..1
 
-    current  = table.get_bucket(tenant_ip, current_start) or {}
-    previous = table.get_bucket(tenant_ip, previous_start) or {}
+    # One BatchGetItem round trip instead of two sequential GetItem calls —
+    # neither bucket depends on the other's result (found on review).
+    buckets  = table.get_buckets_batch(tenant_ip, [current_start, previous_start])
+    current  = buckets.get(current_start, {})
+    previous = buckets.get(previous_start, {})
     prev_weight = 1.0 - elapsed_fraction
 
     def _w(field: str, cast=int) -> float:
@@ -766,12 +831,15 @@ Expected: FAIL with `ModuleNotFoundError`
 # services/backend/ml/registry.py
 import gzip
 import io
+import logging
 from dataclasses import asdict, dataclass
 
 import joblib
 from sklearn.ensemble import IsolationForest
 
 from services.backend.core.tables import ModelsTable
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -804,8 +872,19 @@ def load_model(resource, tenant_id: str, stage: str = "production") -> Isolation
     item = table.get(tenant_id=tenant_id, stage_version=stage)
     if item is None:
         return None
-    raw = gzip.decompress(bytes(item["model_blob"]))
-    return joblib.load(io.BytesIO(raw))
+    try:
+        raw = gzip.decompress(bytes(item["model_blob"]))
+        return joblib.load(io.BytesIO(raw))
+    except Exception as e:
+        # A corrupted blob or a joblib/sklearn version mismatch between the
+        # training Lambda and the serving Lambda must fall back to shadow
+        # mode (None), not crash the telemetry request with an unhandled
+        # 500 — found on review: this try/except was missing from the
+        # first draft, unlike the old ai_engine/ml/registry.py it was
+        # ported from.
+        logger.error("Failed to deserialize model: tenant=%s stage=%s: %s",
+                     tenant_id, stage, e)
+        return None
 
 
 def model_exists(resource, tenant_id: str, stage: str = "production") -> bool:
@@ -875,6 +954,14 @@ rewrite):
   `FEATURE_NAMES` as a fixed module-level constant; use that directly
   instead of the old configurable-registry pattern (the registry pattern
   added no value here and is one less file to port).
+- `score_vectors()` gets a single `except Exception` block, not a separate
+  `except ValueError` above it — found on review: the two branches had
+  identical bodies (`ValueError` is already an `Exception` subclass), so
+  the split added nothing but noise.
+- `services/backend/requirements.txt` does not include `pandas` — found on
+  review: nothing in `services/backend` imports it (unlike the old
+  `ai_engine`), and this project is otherwise deliberately careful about
+  Lambda package size (see the 400KB model-blob limit).
 
 - [ ] **Step 7: Write tests for cache behavior and classify_score thresholds**
 

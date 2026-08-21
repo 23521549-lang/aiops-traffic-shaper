@@ -38,3 +38,19 @@ def test_save_model_rejects_oversized_blob(dynamo_resource):
 def test_load_missing_model_returns_none(dynamo_resource):
     create_all_tables(dynamo_resource)
     assert load_model(dynamo_resource, "no-such-tenant") is None
+
+
+def test_load_corrupted_blob_returns_none_not_crash(dynamo_resource):
+    # Simulates a truncated write or a joblib/sklearn version mismatch
+    # between the training Lambda and the serving Lambda — must fall back
+    # to shadow mode (None), not propagate an unhandled exception into the
+    # telemetry request path.
+    from services.backend.core.tables import ModelsTable
+    create_all_tables(dynamo_resource)
+    ModelsTable(dynamo_resource).put(
+        tenant_id="t-1", stage_version="production", model_blob=b"not a valid gzip blob",
+        version="v1", trained_at="2026-08-21T00:00:00Z", training_samples=1,
+        contamination=0.05, score_mean=0.0, score_std=1.0,
+        features=["request_rate"], stage="production",
+    )
+    assert load_model(dynamo_resource, "t-1", stage="production") is None
