@@ -24,8 +24,30 @@ router = APIRouter()
 _patcher = ConfigMapPatcher(
     namespace=settings.namespace,
     configmap_name=settings.blocklist_configmap,
+    rule_template="deny {ip};",
+)
+_ratelimit_patcher = ConfigMapPatcher(
+    namespace=settings.namespace,
+    configmap_name=settings.ratelimit_configmap,
+    rule_template="{ip} 1;",
 )
 _reloader = NginxReloader()
+
+
+async def _apply_mitigation(
+    redis: aioredis.Redis,
+    patcher: ConfigMapPatcher,
+    mitigation_key: str,
+    target_ip: str,
+    state: str,
+    ttl_seconds: int,
+) -> None:
+    existing = await redis.get(mitigation_key)
+    if existing != state:
+        patcher.add_rule(target_ip)
+        _reloader.trigger_reload()
+
+    await redis.set(mitigation_key, state, ex=ttl_seconds)
 
 
 @router.post("/mitigate", response_model=MitigationResponse)
@@ -53,11 +75,11 @@ async def mitigate(
     mitigation_key = f"{settings.mitigation_key_prefix}:{request.target_ip}"
 
     if request.tier == MitigationTier.RATE_LIMIT:
-        await redis.set(
-            mitigation_key, "rate_limited", ex=settings.tier1_ttl_seconds
-        )
         action = "rate_limited"
         ttl = settings.tier1_ttl_seconds
+        await _apply_mitigation(
+            redis, _ratelimit_patcher, mitigation_key, request.target_ip, action, ttl
+        )
         logger.info(
             "Tier 1 mitigation applied: ip=%s reason=%s ttl=%ss",
             request.target_ip,
@@ -66,16 +88,11 @@ async def mitigate(
         )
 
     else:
-        existing = await redis.get(mitigation_key)
-        if existing != "blocked":
-            _patcher.add_deny_rule(request.target_ip)
-            _reloader.trigger_reload()
-
-        await redis.set(
-            mitigation_key, "blocked", ex=settings.tier2_ttl_seconds
-        )
         action = "blocked"
         ttl = settings.tier2_ttl_seconds
+        await _apply_mitigation(
+            redis, _patcher, mitigation_key, request.target_ip, action, ttl
+        )
         logger.info(
             "Tier 2 mitigation applied: ip=%s reason=%s ttl=%ss",
             request.target_ip,

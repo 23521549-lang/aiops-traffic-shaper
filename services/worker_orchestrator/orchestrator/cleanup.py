@@ -18,6 +18,12 @@ async def cleanup_expired_mitigations() -> None:
     patcher = ConfigMapPatcher(
         namespace=settings.namespace,
         configmap_name=settings.blocklist_configmap,
+        rule_template="deny {ip};",
+    )
+    ratelimit_patcher = ConfigMapPatcher(
+        namespace=settings.namespace,
+        configmap_name=settings.ratelimit_configmap,
+        rule_template="{ip} 1;",
     )
 
     cursor = 0
@@ -32,15 +38,24 @@ async def cleanup_expired_mitigations() -> None:
             ttl = await redis.ttl(key)
             if ttl == -2:
                 ip = key.removeprefix("mitigation:")
-                removed = patcher.remove_deny_rule(ip)
-                if removed:
+                # Tier is unknown once the key has already expired — try
+                # both ConfigMaps, each removal is a safe no-op if the IP
+                # isn't present there.
+                removed_blocklist  = patcher.remove_rule(ip)
+                removed_ratelimit  = ratelimit_patcher.remove_rule(ip)
+                if removed_blocklist or removed_ratelimit:
                     removed_count += 1
                     logger.info(
-                        "Cleanup: removed expired block for IP %s", ip
+                        "Cleanup: removed expired rule(s) for IP %s "
+                        "(blocklist=%s ratelimit=%s)",
+                        ip, removed_blocklist, removed_ratelimit,
                     )
 
         if cursor == 0:
             break
+
+    patcher.flush()
+    ratelimit_patcher.flush()
 
     await update_mitigation_metrics(redis)
 

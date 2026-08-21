@@ -43,6 +43,18 @@ data:
             zone=strict_limit:10m
             rate=5r/s;
 
+        geo $strict_ip {
+            default 0;
+            include /etc/nginx/ratelimit/*;
+        }
+        map $strict_ip $strict_key {
+            1 $binary_remote_addr;
+            0 "";
+        }
+        limit_req_zone $strict_key
+            zone=ml_tier1:10m
+            rate=5r/s;
+
         limit_req_status 429;
         limit_conn_status 429;
 
@@ -58,6 +70,7 @@ data:
 
         location / {
             limit_req zone=global_limit burst=100 nodelay;
+            limit_req zone=ml_tier1 burst=10 nodelay;
             return 200 'OK';
             add_header Content-Type text/plain;
         }

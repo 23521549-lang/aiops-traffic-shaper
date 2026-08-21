@@ -16,6 +16,7 @@ from services.ai_engine.ml.feature_engineering import (
 from services.ai_engine.ml.model import AnomalyTier, classify_score, model_manager
 from services.ai_engine.ml.monitoring import (
     ai_anomalies_detected_total,
+    ai_whitelist_suppressed_total,
     inference_duration_seconds,
     model_monitor,
     shadow_mode_active,
@@ -208,6 +209,17 @@ async def ingest_telemetry(
             reason=reason,
             tier=str(int(tier)),
         ).inc()
+
+        is_whitelisted = await redis.sismember(
+            settings.whitelist_redis_key, vector.remote_addr
+        )
+        if is_whitelisted:
+            logger.info(
+                "Mitigation suppressed for whitelisted IP: ip=%s score=%.4f tier=%d",
+                vector.remote_addr, score, int(tier),
+            )
+            ai_whitelist_suppressed_total.inc()
+            continue
 
         if not settings.shadow_mode:
             success = await _trigger_mitigation(vector.remote_addr, tier, reason)

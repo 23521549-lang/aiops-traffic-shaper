@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, patch
 
 from services.ai_engine.main import app
 from services.ai_engine.core.config import settings
+from services.ai_engine.core.redis_client import get_redis
+from services.ai_engine.ml.feature_engineering import FeatureVector
 
 
 @pytest.fixture
@@ -137,3 +139,113 @@ class TestTelemetryEndpoint:
         assert "received" in data
         assert "processed_ips" in data
         assert "message" in data
+
+    def _anomalous_vector(self) -> FeatureVector:
+        return FeatureVector(
+            remote_addr="9.9.9.9",
+            request_rate=100.0,
+            error_ratio=0.9,
+            avg_bytes_sent=10.0,
+            avg_request_time=0.01,
+            unique_uri_ratio=0.9,
+            user_agent_entropy=3.0,
+            post_ratio=0.9,
+            sample_size=50,
+        )
+
+    def _override_redis_whitelisted(self):
+        # NOTE: patch("...telemetry.get_redis", ...) does NOT work here —
+        # `Depends(get_redis)` binds the real function object at import
+        # time, so patching the module attribute afterward never reaches
+        # it. FastAPI's own override mechanism is required instead.
+        mock_redis = AsyncMock()
+
+        async def sismember_side_effect(key, ip):
+            if key == settings.reputation_redis_key:
+                return False
+            if key == settings.whitelist_redis_key:
+                return True
+            return False
+
+        mock_redis.sismember = AsyncMock(side_effect=sismember_side_effect)
+        app.dependency_overrides[get_redis] = lambda: mock_redis
+        return mock_redis
+
+    def test_whitelisted_ip_not_mitigated(self, client, auth_headers, sample_log):
+        log = {**sample_log, "remote_addr": "9.9.9.9"}
+        vector = self._anomalous_vector()
+        self._override_redis_whitelisted()
+
+        try:
+            with patch(
+                "services.ai_engine.api.routes.telemetry.store_logs_to_window",
+                new_callable=AsyncMock,
+                return_value={"9.9.9.9"},
+            ), patch(
+                "services.ai_engine.api.routes.telemetry.compute_features_for_batch",
+                new_callable=AsyncMock,
+                return_value=[vector],
+            ), patch(
+                "services.ai_engine.api.routes.telemetry.model_manager.score_vectors",
+                new_callable=AsyncMock,
+                return_value=[(vector, -0.5)],
+            ), patch(
+                "services.ai_engine.api.routes.telemetry.worker_circuit_breaker.call",
+                new_callable=AsyncMock,
+            ) as mock_call, patch(
+                "services.ai_engine.api.routes.telemetry.store_shadow_vector",
+                new_callable=AsyncMock,
+            ), patch(
+                "services.ai_engine.ml.registry.load_metadata",
+                return_value=None,
+            ), patch(
+                "services.ai_engine.api.routes.telemetry.settings.shadow_mode",
+                False,
+            ):
+                client.post(
+                    "/api/v1/telemetry",
+                    json={"logs": [log]},
+                    headers=auth_headers,
+                )
+
+            mock_call.assert_not_called()
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_whitelisted_ip_still_scored(self, client, auth_headers, sample_log):
+        log = {**sample_log, "remote_addr": "9.9.9.9"}
+        vector = self._anomalous_vector()
+        self._override_redis_whitelisted()
+
+        try:
+            with patch(
+                "services.ai_engine.api.routes.telemetry.store_logs_to_window",
+                new_callable=AsyncMock,
+                return_value={"9.9.9.9"},
+            ), patch(
+                "services.ai_engine.api.routes.telemetry.compute_features_for_batch",
+                new_callable=AsyncMock,
+                return_value=[vector],
+            ), patch(
+                "services.ai_engine.api.routes.telemetry.model_manager.score_vectors",
+                new_callable=AsyncMock,
+                return_value=[(vector, -0.5)],
+            ), patch(
+                "services.ai_engine.api.routes.telemetry.worker_circuit_breaker.call",
+                new_callable=AsyncMock,
+            ), patch(
+                "services.ai_engine.api.routes.telemetry.store_shadow_vector",
+                new_callable=AsyncMock,
+            ) as mock_store, patch(
+                "services.ai_engine.ml.registry.load_metadata",
+                return_value=None,
+            ):
+                client.post(
+                    "/api/v1/telemetry",
+                    json={"logs": [log]},
+                    headers=auth_headers,
+                )
+
+            mock_store.assert_called_once()
+        finally:
+            app.dependency_overrides.clear()

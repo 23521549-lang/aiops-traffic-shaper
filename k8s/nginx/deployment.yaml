@@ -53,6 +53,8 @@ spec:
               subPath: default.conf
             - name: nginx-blocklist
               mountPath: /etc/nginx/blocklist.d
+            - name: nginx-ratelimit
+              mountPath: /etc/nginx/ratelimit
             - name: nginx-logs
               mountPath: /var/log/nginx
 
@@ -63,10 +65,11 @@ spec:
             - -c
             - |
               apk add --no-cache inotify-tools procps
-              echo "Reloader started, watching /etc/nginx/blocklist.d"
+              echo "Reloader started, watching /etc/nginx/blocklist.d and /etc/nginx/ratelimit"
               while true; do
-                inotifywait -e modify,create,delete,move /etc/nginx/blocklist.d
-                echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] blocklist.d changed, reloading nginx"
+                inotifywait -r -e modify,create,delete,move \
+                  /etc/nginx/blocklist.d /etc/nginx/ratelimit
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] blocklist.d or ratelimit changed, reloading nginx"
                 NGINX_PID=$(pgrep -f 'nginx: master' | head -1)
                 if [ -n "$NGINX_PID" ]; then
                   kill -HUP "$NGINX_PID"
@@ -85,6 +88,8 @@ spec:
           volumeMounts:
             - name: nginx-blocklist
               mountPath: /etc/nginx/blocklist.d
+            - name: nginx-ratelimit
+              mountPath: /etc/nginx/ratelimit
 
         - name: fluent-bit
           image: fluent/fluent-bit:3.0
@@ -117,6 +122,10 @@ spec:
         - name: nginx-blocklist
           configMap:
             name: nginx-blocklist
+            optional: true
+        - name: nginx-ratelimit
+          configMap:
+            name: nginx-ratelimit
             optional: true
         - name: nginx-logs
           emptyDir: {}

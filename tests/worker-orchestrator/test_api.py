@@ -78,16 +78,21 @@ class TestMitigateEndpoint:
     ):
         mock_redis = AsyncMock()
         mock_redis.sismember = AsyncMock(return_value=False)
+        mock_redis.get       = AsyncMock(return_value=None)
         mock_redis.set       = AsyncMock()
         mock_redis.scan      = AsyncMock(return_value=(0, []))
 
         app.dependency_overrides[get_redis] = lambda: mock_redis
         try:
-            response = client.post(
-                "/api/v1/mitigate",
-                json={**sample_mitigate_payload, "tier": 1},
-                headers=auth_headers,
-            )
+            with patch(
+                "services.worker_orchestrator.api.routes.mitigate._ratelimit_patcher",
+                MagicMock(),
+            ):
+                response = client.post(
+                    "/api/v1/mitigate",
+                    json={**sample_mitigate_payload, "tier": 1},
+                    headers=auth_headers,
+                )
         finally:
             app.dependency_overrides.pop(get_redis, None)
 
@@ -96,6 +101,66 @@ class TestMitigateEndpoint:
         assert data["action"] == "rate_limited"
         assert data["tier"] == 1
         mock_redis.set.assert_called_once()
+
+    def test_tier1_patches_ratelimit_configmap(
+        self, client, auth_headers, sample_mitigate_payload
+    ):
+        mock_redis = AsyncMock()
+        mock_redis.sismember = AsyncMock(return_value=False)
+        mock_redis.get       = AsyncMock(return_value=None)
+        mock_redis.set       = AsyncMock()
+        mock_redis.scan      = AsyncMock(return_value=(0, []))
+
+        mock_ratelimit_patcher = MagicMock()
+        mock_ratelimit_patcher.add_rule.return_value = True
+
+        app.dependency_overrides[get_redis] = lambda: mock_redis
+        try:
+            with patch(
+                "services.worker_orchestrator.api.routes.mitigate._ratelimit_patcher",
+                mock_ratelimit_patcher,
+            ):
+                response = client.post(
+                    "/api/v1/mitigate",
+                    json={**sample_mitigate_payload, "tier": 1},
+                    headers=auth_headers,
+                )
+        finally:
+            app.dependency_overrides.pop(get_redis, None)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["action"] == "rate_limited"
+        assert data["tier"] == 1
+        mock_ratelimit_patcher.add_rule.assert_called_once_with("1.2.3.4")
+
+    def test_tier1_skips_ratelimit_patch_when_already_active(
+        self, client, auth_headers, sample_mitigate_payload
+    ):
+        mock_redis = AsyncMock()
+        mock_redis.sismember = AsyncMock(return_value=False)
+        mock_redis.get       = AsyncMock(return_value="rate_limited")
+        mock_redis.set       = AsyncMock()
+        mock_redis.scan      = AsyncMock(return_value=(0, []))
+
+        mock_ratelimit_patcher = MagicMock()
+
+        app.dependency_overrides[get_redis] = lambda: mock_redis
+        try:
+            with patch(
+                "services.worker_orchestrator.api.routes.mitigate._ratelimit_patcher",
+                mock_ratelimit_patcher,
+            ):
+                response = client.post(
+                    "/api/v1/mitigate",
+                    json={**sample_mitigate_payload, "tier": 1},
+                    headers=auth_headers,
+                )
+        finally:
+            app.dependency_overrides.pop(get_redis, None)
+
+        assert response.status_code == 200
+        mock_ratelimit_patcher.add_rule.assert_not_called()
 
     def test_tier2_mitigation_patches_configmap(
         self, client, auth_headers, sample_mitigate_payload
@@ -107,7 +172,7 @@ class TestMitigateEndpoint:
         mock_redis.scan      = AsyncMock(return_value=(0, []))
 
         mock_patcher = MagicMock()
-        mock_patcher.add_deny_rule.return_value = True
+        mock_patcher.add_rule.return_value = True
 
         app.dependency_overrides[get_redis] = lambda: mock_redis
         try:
@@ -127,7 +192,7 @@ class TestMitigateEndpoint:
         data = response.json()
         assert data["action"] == "blocked"
         assert data["tier"] == 2
-        mock_patcher.add_deny_rule.assert_called_once_with("1.2.3.4")
+        mock_patcher.add_rule.assert_called_once_with("1.2.3.4")
 
     def test_invalid_ip_returns_422(self, client, auth_headers):
         response = client.post(
@@ -169,6 +234,34 @@ class TestBlocklistEndpoint:
             app.dependency_overrides.pop(get_redis, None)
 
         assert response.status_code == 404
+
+    def test_unblock_removes_from_both_configmaps(self, client, auth_headers):
+        mock_redis = AsyncMock()
+        mock_redis.exists = AsyncMock(return_value=True)
+        mock_redis.delete = AsyncMock()
+
+        mock_patcher = MagicMock()
+        mock_ratelimit_patcher = MagicMock()
+
+        app.dependency_overrides[get_redis] = lambda: mock_redis
+        try:
+            with patch(
+                "services.worker_orchestrator.api.routes.blocklist._patcher",
+                mock_patcher,
+            ), patch(
+                "services.worker_orchestrator.api.routes.blocklist._ratelimit_patcher",
+                mock_ratelimit_patcher,
+            ):
+                response = client.delete(
+                    "/api/v1/blocklist/1.2.3.4",
+                    headers=auth_headers,
+                )
+        finally:
+            app.dependency_overrides.pop(get_redis, None)
+
+        assert response.status_code == 200
+        mock_patcher.remove_rule.assert_called_once_with("1.2.3.4")
+        mock_ratelimit_patcher.remove_rule.assert_called_once_with("1.2.3.4")
 
 
 class TestWhitelistEndpoint:

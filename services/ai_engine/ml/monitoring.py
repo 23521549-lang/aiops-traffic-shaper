@@ -19,6 +19,11 @@ ai_anomalies_detected_total = Counter(
     ["reason", "tier"],
 )
 
+ai_whitelist_suppressed_total = Counter(
+    "ai_whitelist_suppressed_total",
+    "Total times ML flagged a whitelisted IP as anomalous but mitigation was suppressed",
+)
+
 shadow_mode_active = Gauge(
     "shadow_mode_active",
     "1 if system is in shadow mode (no mitigation), 0 if live",

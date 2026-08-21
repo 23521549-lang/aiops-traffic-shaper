@@ -19,6 +19,12 @@ router = APIRouter()
 _patcher = ConfigMapPatcher(
     namespace=settings.namespace,
     configmap_name=settings.blocklist_configmap,
+    rule_template="deny {ip};",
+)
+_ratelimit_patcher = ConfigMapPatcher(
+    namespace=settings.namespace,
+    configmap_name=settings.ratelimit_configmap,
+    rule_template="{ip} 1;",
 )
 _reloader = NginxReloader()
 
@@ -65,7 +71,8 @@ async def unblock_ip(
         )
 
     await redis.delete(mitigation_key)
-    _patcher.remove_deny_rule(ip)
+    _patcher.remove_rule(ip)
+    _ratelimit_patcher.remove_rule(ip)
     _reloader.trigger_reload()
 
     logger.info("Manual unblock applied for IP: %s", ip)

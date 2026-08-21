@@ -51,10 +51,37 @@ ML inference run in an anyio thread pool to avoid blocking the ASGI event loop.
 ### Tier 3 — Mitigation (Worker Orchestrator)
 
 On receiving an anomaly signal, the Worker Orchestrator validates the internal
-token, checks the whitelist, and applies a graduated response. All block rules
-carry a Redis TTL and are automatically removed by an APScheduler cleanup job
-every 60 seconds. Nginx is reloaded via a sidecar container watching the
-ConfigMap mount with inotify — no Docker socket required.
+token, checks the whitelist, and applies a graduated response. Both tiers now
+carry real enforcement, symmetric with each other:
+
+- **Tier 1 (rate_limit):** the IP is added to the `nginx-ratelimit` ConfigMap
+  (`<ip> 1;` lines), consumed by a Nginx `geo`/`map` block that keys a
+  dedicated `limit_req_zone` (`ml_tier1`) off that list — so only ML-flagged
+  IPs get the stricter dynamic limit, everyone else is unaffected by that
+  zone. This is distinct from `strict_limit`, the pre-existing *static*,
+  path-based limit applied to `/login`, `/api/auth`, `/admin` regardless of
+  which IPs are hitting them.
+- **Tier 2 (hard_block):** the IP is added to the `nginx-blocklist` ConfigMap
+  (`deny <ip>;` lines), as before.
+
+Both ConfigMaps are patched by the same generalized `ConfigMapPatcher`
+(`services/worker_orchestrator/orchestrator/configmap_patcher.py`),
+parameterized by rule format — one instance per ConfigMap. Changes are
+debounced (default 3s) so a burst of per-IP mitigations during an actual
+attack coalesces into one ConfigMap patch + one Nginx reload instead of one
+per IP. All block/rate-limit rules carry a Redis TTL and are automatically
+removed from both ConfigMaps by an APScheduler cleanup job every 60 seconds.
+Nginx is reloaded via a sidecar container watching both ConfigMap mounts
+(`/etc/nginx/blocklist.d`, `/etc/nginx/ratelimit`) with inotify — no Docker
+socket required.
+
+**Caveat:** the `geo $strict_ip` / `limit_req_zone` keys on
+`$binary_remote_addr`, which is only the real client IP when traffic hits
+this pod directly (NodePort). If a load balancer or additional reverse proxy
+is ever placed in front of nginx-proxy, this must switch to a validated
+`X-Forwarded-For` value instead, or every request will appear to come from
+the LB's IP and Tier 1 rate limiting will misfire (either limiting nothing,
+or limiting every client at once).
 
 ### Tier 4 — State (Redis)
 

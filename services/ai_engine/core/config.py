@@ -1,7 +1,9 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
     internal_secret: str
     redis_host: str = "redis"
     redis_port: int = 6379
@@ -19,9 +21,6 @@ class Settings(BaseSettings):
     retrain_interval_hours: int = 24
     shadow_mode_hours: int = 24
     redis_stream_maxlen: int = 500000
-
-    class Config:
-        env_file = ".env"
 
 
 settings = Settings()
