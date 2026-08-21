@@ -1,289 +1,1424 @@
-# Implementation Plan
+# AI Traffic Shaper — Hybrid Free Model Implementation Plan
 
-Brownfield project. Phase 2 intake found the codebase substantively complete
-and well-tested once one local-only config bug was fixed — this plan is the
-remaining work to take it from "code exists and passes tests" to
-"verified running in production, OSS-ready, at the project's declared
-`web-saas` / strict quality bar" (see `.sdlc/project-state.json`).
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Each stage lists a goal, file/module scope, and a checkpoint command that
-proves the stage is done. Stages are ordered by dependency.
+**Goal:** Rebuild the backend as a single AWS Lambda (Always-Free forever)
+serving a multi-tenant ML detection/mitigation API, and build the two new
+components the old architecture never had — a thin agent the end user
+installs, and a CLI to register it — so the product can be distributed for
+free with the publisher's own infra cost target at 0đ.
 
-## Stage 0 — Unblock local dev and verify the existing test suite [DONE]
+**Architecture:** One FastAPI app behind a Lambda Function URL (Mangum
+adapter), all state in DynamoDB (7 tables, see `docs/schema.md`), per-tenant
+IsolationForest models stored as gzip-compressed DynamoDB binary items,
+Cognito for dashboard/control-platform auth, EventBridge for the daily
+retrain schedule. The agent is a separate, sklearn-free process that runs on
+the tenant's own infrastructure and talks to the Lambda over HTTPS.
 
-**Goal:** confirm the codebase actually runs, not just that it reads well.
+**Tech Stack:** Python 3.12, FastAPI + Mangum, boto3, DynamoDB, Cognito,
+EventBridge, scikit-learn 1.5.0 (unchanged), Click (CLI). Local testing via
+`moto` (DynamoDB mock) — no real AWS account needed until Stage 4's
+`deploy-check` checkpoint.
 
-**Scope:** `services/ai_engine/core/config.py`,
-`services/worker_orchestrator/core/config.py`.
+**Spec:** `docs/PRD.md` (retro-PRD), `docs/adr/002-tech-stack-hybrid.md`
+(stack decision, reuse/rewrite/discard table, measured model-size
+constraint), `docs/schema.md` (DynamoDB tables), `docs/api-contract.md`
+(endpoints).
 
-**What happened:** both services' `Settings` loaded the repo's shared,
-multi-purpose `.env` (Terraform + CI + app vars combined) with
-pydantic-settings' default `extra="forbid"`, so `Settings()` raised a
-`ValidationError` on import the moment a real `.env` existed — breaking
-every local test run and app boot. Fixed by adding `extra="ignore"` to
-`model_config` on both. See `docs/adr/001-tech-stack.md` for the full
-root-cause writeup.
+## Global Constraints
 
-**Checkpoint (met 2026-08-20):** `bash scripts/run_tests.sh` exits 0 —
-`49 passed` (ai-engine) + `28 passed` (worker-orchestrator), run against the
-pinned dependency versions, Python 3.12, and a real Redis instance (not
-mocked infra, matching what CI already does).
+- Infra cost target: **0đ, forever** — no AWS service outside the
+  Always-Free-forever list (Lambda, DynamoDB, Cognito, EventBridge basic
+  rules, SQS/SNS if needed later). No S3, no EFS, no API Gateway, no RDS,
+  no NAT Gateway. (ADR-002)
+- DynamoDB item hard limit: **400KB**. Model binary blobs MUST stay under
+  this — verified `n_estimators=50` → ~238KB gzip; do not raise
+  `n_estimators` without re-measuring (ADR-002, "Model-size finding").
+- DynamoDB Always-Free capacity is **25 RCU + 25 WCU total, shared across
+  every tenant** — this is the real ceiling for a DDoS-detection product
+  (bursts are exactly when you need capacity most). Every write-heavy path
+  (telemetry ingestion) must be designed as aggregate counters, not
+  one-write-per-request-line (see Stage 2).
+- No real AWS access in this environment. Every stage up through Stage 3
+  must be fully testable locally via `moto`. Stage 4 onward needs a real
+  AWS account for the final `deploy-check`; local dev still runs against
+  `moto` first in every stage.
+- Local Python env: WSL Ubuntu, venv at `~/aiops-venv` (already has
+  scikit-learn 1.5.0/joblib/numpy matching `requirements.txt`, confirmed
+  working in this session). Add `boto3`, `moto[dynamodb]`, `mangum`, `click`
+  to a new `services/backend/requirements.txt` — do not touch the old
+  `services/ai_engine/requirements.txt` / `services/worker_orchestrator/requirements.txt`,
+  which stay as-is for reference (ADR-001, superseded).
+- New code lives under `services/backend/` (Lambda) and `services/agent/`
+  (thin client) — do not modify `services/ai_engine/` or
+  `services/worker_orchestrator/` in place; copy/adapt the reusable pieces
+  named in ADR-002's reuse table into the new package instead. This keeps
+  the old, still-`git`-tracked implementation intact as a diffable
+  reference while it's being ported.
 
-## Stage 1 — Suppress mitigation calls for whitelisted IPs (hybrid fix) [DONE]
+---
 
-**Goal:** close gap (a) from `docs/schema.md` without losing shadow-stream
-training data. Decision made 2026-08-20 (user-directed, hybrid approach —
-see `docs/schema.md` "Gaps" for the full rationale).
+## Stage 1 — DynamoDB data-access layer
 
-**Scope:** `services/ai_engine/api/routes/telemetry.py`,
-`services/ai_engine/ml/monitoring.py` (new counter).
+**Goal:** A tested, moto-backed client module for the four "simple" tables
+(`Tenants`, `Agents`, `Whitelist`, `MitigationState`) — the foundation every
+later stage's storage calls go through. No feature/model logic yet.
 
-**Design:**
-- Keep feature computation + ML scoring running for *every* IP, including
-  whitelisted ones — the shadow stream / drift signal must not be lost.
-- Add the whitelist check only at the mitigation-trigger boundary: once an
-  IP scores anomalous in `telemetry.py`, `SISMEMBER whitelist:ips` before
-  calling `_trigger_mitigation`. Whitelisted → skip the HTTP call to the
-  Worker Orchestrator entirely. This check only runs on already-anomalous
-  IPs (a small subset of traffic), so no caching layer is needed.
-- Add a new Prometheus counter `ai_whitelist_suppressed_total`, incremented
-  every time this skip fires — gives operators a signal for tuning
-  thresholds ("the model wants to block this whitelisted IP N times/hour").
+**Files:**
+- Create: `services/backend/requirements.txt`
+- Create: `services/backend/core/dynamo.py`
+- Create: `services/backend/core/tables.py`
+- Test: `services/backend/tests/test_dynamo_tables.py`
+- Test: `services/backend/tests/conftest.py` (moto fixture, shared by all later stages)
 
-**Tests to add** (`tests/ai-engine/test_api.py`):
-- `test_whitelisted_ip_not_mitigated` — anomalous + whitelisted IP →
-  `_trigger_mitigation`/circuit breaker never called.
-- `test_whitelisted_ip_still_scored` — anomalous + whitelisted IP → feature
-  vector still computed and still written to `training:shadow_data`.
+**Interfaces:**
+- Produces: `get_dynamo_resource() -> boto3.resource("dynamodb")` in
+  `core/dynamo.py` — every later module imports this, never instantiates
+  its own boto3 client, so tests can swap it for `moto`.
+- Produces: `create_all_tables(resource) -> None` in `core/tables.py` —
+  idempotent, creates all 7 tables from `docs/schema.md` (only 4 populated
+  with CRUD in this stage; the rest exist as empty tables so later stages
+  don't need a migration step).
+- Produces: `TenantsTable`, `AgentsTable`, `WhitelistTable`,
+  `MitigationStateTable` classes in `core/tables.py`, each with `put`,
+  `get`, `delete`, `query_by_tenant` methods matching the PK/SK from
+  `docs/schema.md`.
 
-**Checkpoint:** both new tests pass; `bash scripts/run_tests.sh` still
-exits 0 with the two new tests included.
+- [ ] **Step 1: Write requirements.txt**
 
-## Stage 2 — Tier 1 dynamic per-IP rate limiting (real enforcement) [DONE]
+```
+fastapi==0.134.0
+mangum==0.17.0
+boto3==1.34.144
+pydantic==2.7.1
+pydantic-settings==2.2.1
+scikit-learn==1.5.0
+pandas==2.2.2
+numpy==1.26.4
+click==8.1.7
 
-**Goal:** close gap (b) from `docs/schema.md`. Decision made 2026-08-20:
-this is not intentional bookkeeping — Tier 1 was meant to trigger a real,
-dynamic, per-IP stricter rate limit and that wiring was never built. Build
-it, symmetric with how Tier 2 already patches the blocklist ConfigMap.
+# dev/test only
+moto[dynamodb]==5.0.9
+pytest==8.2.0
+pytest-asyncio==0.23.6
+```
 
-**Scope:** `k8s/nginx/configmap-nginx.yaml`, new `k8s/nginx/configmap-ratelimit.yaml`
-(or equivalent), `services/worker_orchestrator/orchestrator/configmap_patcher.py`,
-`services/worker_orchestrator/api/routes/mitigate.py`, the TTL cleanup job
-(`orchestrator/cleanup.py`), `docs/architecture.md`.
+- [ ] **Step 2: Write the failing test for table creation + Tenants CRUD**
 
-**Design (as implemented — two deviations from the original spec, both
-forced by how the existing `ConfigMapPatcher` actually stores rules, caught
-during implementation):**
-1. **Nginx config** (`config/nginx/nginx.conf`, mirrored in
-   `k8s/nginx/configmap-nginx.yaml`):
-   ```nginx
-   geo $strict_ip {
-       default 0;
-       include /etc/nginx/ratelimit/*;
-   }
-   map $strict_ip $strict_key {
-       1 $binary_remote_addr;
-       0 "";
-   }
-   limit_req_zone $strict_key zone=ml_tier1:10m rate=${NGINX_STRICT_RATE_LIMIT_RPS}r/s;
-   ```
-   Two deviations from the original spec:
-   - **Glob include (`/etc/nginx/ratelimit/*`), not a single named file.**
-     `ConfigMapPatcher` stores one ConfigMap *key* per IP (`data[ip_key] =
-     rule`), which becomes one *file* per IP when mounted — exactly how
-     `nginx-blocklist` → `/etc/nginx/blocklist.d/*` already works. An
-     exact-filename include (`strict-ips.conf`) would never match any file
-     the patcher actually writes. Fixed to glob, matching the established
-     blocklist pattern exactly.
-   - **Zone named `ml_tier1`, not `strict`.** `strict_limit` already exists
-     (static, path-based limit for `/login`, `/api/auth`, `/admin`) —
-     naming the new zone `strict` too would be confusing to read even
-     though there's no technical collision. `ml_tier1` makes the ML-vs-path
-     distinction explicit. Documented in `docs/architecture.md`.
+```python
+# services/backend/tests/conftest.py
+import boto3
+import pytest
+from moto import mock_aws
 
-   In `location /` (`default.conf` / `configmap-nginx.yaml`), alongside the
-   existing static limit: `limit_req zone=ml_tier1 burst=${NGINX_STRICT_RATE_LIMIT_BURST} nodelay;`.
-   An empty `$strict_key` makes Nginx skip the zone entirely, so `ml_tier1`
-   only ever applies to IPs actually present in the ConfigMap — no risk of
-   it silently rate-limiting everyone. Note: the sensitive-path location
-   redefines its own `limit_req` (just `strict_limit`), so per Nginx's
-   directive-inheritance rules `ml_tier1` does not additionally apply
-   there — acceptable, since those paths already carry the same 5r/s cap.
-2. **New ConfigMap** `nginx-ratelimit` (`k8s/nginx/configmap-ratelimit.yaml`,
-   starts as `data: {}` — same as `nginx-blocklist`), mounted at
-   `/etc/nginx/ratelimit/`. Reloader sidecar's `inotifywait` extended to
-   watch both `/etc/nginx/blocklist.d` and `/etc/nginx/ratelimit`.
-3. **Generalized `configmap_patcher.py`** into one class parameterized by
-   `rule_template`, instantiated twice: blocklist (`deny {ip};`) and
-   ratelimit (`{ip} 1;`). Methods renamed `add_rule`/`remove_rule` (from
-   `add_deny_rule`/`remove_deny_rule`) since they're no longer blocklist-
-   specific — all call sites and tests updated.
-4. **`mitigate.py` Tier 1 branch**: now symmetric with Tier 2 — checks
-   Redis for an existing `rate_limited` state before calling the ratelimit
-   patcher's `add_rule` + triggering an Nginx reload (avoids redundant
-   patches on repeat detections of the same already-limited IP).
-5. **`blocklist.py` `unblock_ip`**: now calls `remove_rule` on *both*
-   patchers unconditionally (safe no-op if the IP isn't present in one of
-   them) — a manual unblock no longer only lifts a Tier 2 hard block while
-   leaving a Tier 1 rate limit in place.
-6. **TTL cleanup job** (`cleanup.py`): extended to also remove expired
-   Tier 1 entries from the ratelimit ConfigMap. Since an *already-expired*
-   Redis key can no longer be read for its tier, cleanup tries
-   `remove_rule` on both patchers for every expired IP (each is a no-op if
-   the IP isn't in that particular ConfigMap) rather than guessing the
-   tier.
-7. **Debounced flush**: `ConfigMapPatcher.add_rule`/`remove_rule` queue a
-   change and schedule `flush()` `debounce_seconds` (default 3s) later via
-   `asyncio`, coalescing a burst of per-IP changes into one ConfigMap patch.
-   `cleanup.py` calls `flush()` explicitly at the end of each sweep instead
-   of waiting on the timer, since it already runs on its own interval.
-8. **Doc note** added to `docs/architecture.md`: `$binary_remote_addr` is
-   only correct when traffic hits the NodePort directly; switch to a
-   validated `X-Forwarded-For` if a load balancer is ever placed in front.
+@pytest.fixture
+def dynamo_resource():
+    with mock_aws():
+        yield boto3.resource("dynamodb", region_name="ap-southeast-1")
+```
 
-**Tests added** (92 total passing, up from 77 at Phase 2 handoff):
-- `tests/worker-orchestrator/test_mitigation.py::TestConfigMapPatcher` —
-  rewritten for `add_rule`/`remove_rule` + debounce (`flush()` called
-  explicitly in tests to force-apply queued changes), plus new tests for
-  custom rule templates and coalescing multiple pending changes into one
-  patch call.
-- `tests/worker-orchestrator/test_api.py` — `test_tier1_patches_ratelimit_configmap`,
-  `test_tier1_skips_ratelimit_patch_when_already_active`,
-  `test_unblock_removes_from_both_configmaps`; existing Tier 2 test updated
-  for the renamed method.
-- `tests/worker-orchestrator/test_cleanup.py` (new file, `cleanup.py` had
-  no tests before this stage) — expired-IP removal from both ConfigMaps,
-  one flush per sweep, non-expired keys untouched.
-- E2E confirmation deferred to Stage 6 (needs a live cluster): a Tier
-  1-mitigated IP must actually receive `429`/`503` once it exceeds 5 r/s —
-  the nginx directives were reviewed manually for syntax correctness
-  (matches Nginx's documented geo+map conditional-rate-limit pattern) but
-  never run against a real `nginx -t` in this environment (no nginx binary
-  available locally, and installing one via WSL `sudo apt-get` prompted for
-  a password non-interactively rather than proceeding — not forced).
+```python
+# services/backend/tests/test_dynamo_tables.py
+from services.backend.core.tables import create_all_tables, TenantsTable
 
-**Checkpoint (met 2026-08-21):** all new/updated unit tests pass;
-`bash scripts/run_tests.sh` exits 0 with 51 (ai-engine) + 41
-(worker-orchestrator) = 92 passed.
+def test_create_all_tables_is_idempotent(dynamo_resource):
+    create_all_tables(dynamo_resource)
+    create_all_tables(dynamo_resource)  # must not raise on second call
+    existing = [t.name for t in dynamo_resource.tables.all()]
+    assert "Tenants" in existing
+    assert "Agents" in existing
+    assert "Whitelist" in existing
+    assert "MitigationState" in existing
+    assert "Models" in existing
+    assert "TelemetryEvents" in existing
+    assert "UsageCounters" in existing
 
-## Stage 3 — Verify real AWS/Kubernetes deployment state [DEFERRED]
+def test_tenants_put_and_get(dynamo_resource):
+    create_all_tables(dynamo_resource)
+    table = TenantsTable(dynamo_resource)
+    table.put(tenant_id="t-1", name="Acme", contact_email="a@acme.test",
+              created_at="2026-08-21T00:00:00Z", status="active")
+    item = table.get(tenant_id="t-1")
+    assert item["name"] == "Acme"
+    assert item["status"] == "active"
 
-**Deferred 2026-08-21 (user decision):** no AWS/kubectl access in this
-environment. Not blocking the Phase 3→4 gate — tracked here for the user
-to run when they have cluster access, per the checkpoint below.
+def test_tenants_get_missing_returns_none(dynamo_resource):
+    create_all_tables(dynamo_resource)
+    table = TenantsTable(dynamo_resource)
+    assert table.get(tenant_id="does-not-exist") is None
+```
 
-**Goal:** resolve the open question from Phase 2 intake — is the cluster
-described in README.md ("Deployed and verified stable on AWS
-ap-southeast-1") actually live right now? This could not be determined from
-the repo alone (no AWS CLI/credentials in this environment; Terraform state
-lives in S3, not locally).
+- [ ] **Step 3: Run test to verify it fails**
 
-**Scope:** requires the user's AWS access, not code changes.
+Run: `cd services/backend && python -m pytest tests/test_dynamo_tables.py -v`
+Expected: FAIL with `ModuleNotFoundError: No module named 'services.backend.core.tables'`
 
-**Checkpoint:** run `bash scripts/health-check.sh` against the real cluster
-(needs a working `kubectl` context) — or, if the cluster was torn down,
-`terraform plan` in `terraform/` to see current vs. desired state. Record
-the outcome in `docs/runbook.md` and correct README.md's status section to
-match reality (dated, not just "stable" in the present tense indefinitely).
+- [ ] **Step 4: Implement `core/dynamo.py`**
 
-## Stage 4 — Security & OSS-readiness gate prep (feeds Phase 4) [DONE]
+```python
+# services/backend/core/dynamo.py
+import boto3
 
-**Goal:** this project is open source (`closed_source: false`) and
-internet-facing — close the gaps that matter before a security review.
+_REGION = "ap-southeast-1"
 
-**Scope:** repo root, `docs/`.
+def get_dynamo_resource():
+    return boto3.resource("dynamodb", region_name=_REGION)
+```
 
-1. **LICENSE — deferred, non-blocking.** User decision 2026-08-20: pick a
-   license later; this item does not block any other stage in this plan or
-   the Phase 4 gate itself, it's just tracked here so it isn't forgotten
-   before any public release/announcement of the repo.
-2. Dependency vulnerability scan: `pip-audit -r services/ai_engine/requirements.txt`
-   and same for `worker_orchestrator` — neither has been run per repo
-   evidence. Record results in `docs/security-report.md` (created in
-   Phase 4).
-3. Confirm no secrets ever entered git history (`.env`, `terraform.tfvars`,
-   `*.pem` are gitignored and were never tracked per `git status` — worth a
-   `git log --all --full-history -- .env` sanity check before going public).
+- [ ] **Step 5: Implement `core/tables.py`**
 
-**Checkpoint (met 2026-08-21, remediation applied same day in Phase 4):**
-`pip-audit` initially found 11 advisories in ai_engine (scikit-learn 1.4.2,
-starlette 0.37.2 transitive), 9 in worker_orchestrator (starlette only).
-Fixed by bumping `scikit-learn` to 1.5.0 and `fastapi` to 0.134.0 (→
-starlette 1.6.0) in both services — `pip-audit` re-run against the actual
-`requirements.txt` files now reports no known vulnerabilities for either
-service, full test suite (137 tests) still green. Secret-history check
-clean (`.env`, `terraform.tfvars`, `*.pem` never entered git history).
-Full detail in `docs/security-report.md`. LICENSE still explicitly
-deferred, not required for this checkpoint.
+```python
+# services/backend/core/tables.py
+from botocore.exceptions import ClientError
 
-## Stage 5 — Raise test coverage to the project's 80% target [DONE]
+# IMPORTANT: DynamoDB's Always-Free-forever allowance (25 RCU + 25 WCU,
+# account-wide, across every table AND every GSI) applies ONLY to
+# PROVISIONED billing mode. PAY_PER_REQUEST (on-demand) has NO free
+# allowance and bills from the first request — using it here would
+# silently break the project's core "0đ forever" constraint (ADR-002).
+# Budget below sums to 15 WCU / 12 RCU, leaving headroom under 25/25.
+_TABLE_SPECS = [
+    {"TableName": "Tenants", "KeySchema": [{"AttributeName": "tenant_id", "KeyType": "HASH"}],
+     "AttributeDefinitions": [{"AttributeName": "tenant_id", "AttributeType": "S"}],
+     "ProvisionedThroughput": {"ReadCapacityUnits": 1, "WriteCapacityUnits": 1}},
+    {"TableName": "Agents", "KeySchema": [
+        {"AttributeName": "tenant_id", "KeyType": "HASH"},
+        {"AttributeName": "agent_id", "KeyType": "RANGE"}],
+     "AttributeDefinitions": [
+        {"AttributeName": "tenant_id", "AttributeType": "S"},
+        {"AttributeName": "agent_id", "AttributeType": "S"},
+        {"AttributeName": "status", "AttributeType": "S"},
+        {"AttributeName": "last_seen_at", "AttributeType": "S"}],
+     "ProvisionedThroughput": {"ReadCapacityUnits": 1, "WriteCapacityUnits": 1},
+     "GlobalSecondaryIndexes": [{
+        "IndexName": "LastSeenIndex",
+        "KeySchema": [
+            {"AttributeName": "status", "KeyType": "HASH"},
+            {"AttributeName": "last_seen_at", "KeyType": "RANGE"}],
+        "Projection": {"ProjectionType": "ALL"},
+        # GSI throughput is billed SEPARATELY from the base table and
+        # counts against the same account-wide 25/25 free pool — budgeted
+        # explicitly here, not an afterthought (Stage 6 needs this GSI).
+        "ProvisionedThroughput": {"ReadCapacityUnits": 1, "WriteCapacityUnits": 1},
+     }]},
+    {"TableName": "Whitelist", "KeySchema": [
+        {"AttributeName": "tenant_id", "KeyType": "HASH"},
+        {"AttributeName": "ip", "KeyType": "RANGE"}],
+     "AttributeDefinitions": [
+        {"AttributeName": "tenant_id", "AttributeType": "S"},
+        {"AttributeName": "ip", "AttributeType": "S"}],
+     "ProvisionedThroughput": {"ReadCapacityUnits": 1, "WriteCapacityUnits": 1}},
+    {"TableName": "MitigationState", "KeySchema": [
+        {"AttributeName": "tenant_id", "KeyType": "HASH"},
+        {"AttributeName": "ip", "KeyType": "RANGE"}],
+     "AttributeDefinitions": [
+        {"AttributeName": "tenant_id", "AttributeType": "S"},
+        {"AttributeName": "ip", "AttributeType": "S"}],
+     "ProvisionedThroughput": {"ReadCapacityUnits": 3, "WriteCapacityUnits": 3}},
+    {"TableName": "Models", "KeySchema": [
+        {"AttributeName": "tenant_id", "KeyType": "HASH"},
+        {"AttributeName": "stage_version", "KeyType": "RANGE"}],
+     "AttributeDefinitions": [
+        {"AttributeName": "tenant_id", "AttributeType": "S"},
+        {"AttributeName": "stage_version", "AttributeType": "S"}],
+     # Low RCU is safe ONLY because Stage 4 caches the loaded model across
+     # warm Lambda invocations — do not raise telemetry-path read volume
+     # against this table without revisiting this number.
+     "ProvisionedThroughput": {"ReadCapacityUnits": 2, "WriteCapacityUnits": 1}},
+    {"TableName": "TelemetryEvents", "KeySchema": [
+        {"AttributeName": "tenant_ip", "KeyType": "HASH"},
+        {"AttributeName": "bucket_start_ts", "KeyType": "RANGE"}],
+     "AttributeDefinitions": [
+        {"AttributeName": "tenant_ip", "AttributeType": "S"},
+        {"AttributeName": "bucket_start_ts", "AttributeType": "N"}],
+     # Highest-write table by design (every unique IP per telemetry batch) —
+     # gets the largest share of the WCU budget.
+     "ProvisionedThroughput": {"ReadCapacityUnits": 2, "WriteCapacityUnits": 5}},
+    {"TableName": "UsageCounters", "KeySchema": [{"AttributeName": "date", "KeyType": "HASH"}],
+     "AttributeDefinitions": [{"AttributeName": "date", "AttributeType": "S"}],
+     "ProvisionedThroughput": {"ReadCapacityUnits": 1, "WriteCapacityUnits": 2}},
+]
 
-**Goal:** `coverage_target` in `.sdlc/project-state.json` is 80%; no
-coverage tooling exists yet (`pytest-cov` not in either `requirements.txt`,
-no `.coveragerc`/`pyproject.toml` config).
+def create_all_tables(resource) -> None:
+    existing = {t.name for t in resource.tables.all()}
+    for spec in _TABLE_SPECS:
+        if spec["TableName"] in existing:
+            continue
+        try:
+            resource.create_table(**spec)
+        except ClientError as e:
+            if e.response["Error"]["Code"] != "ResourceInUseException":
+                raise
 
-**What was done:** `pytest-cov` used locally (not added to
-`requirements.txt` — only needed for coverage runs, not normal test runs).
-Baseline was AI Engine 63%, Worker Orchestrator 94% (already well above
-target thanks to Stage 1/2 work). Added 5 new AI Engine test files:
-- `tests/ai-engine/test_whitelist.py` — the `/whitelist` routes had zero
-  tests before this (36 stmts, was 53%, now 100%).
-- `tests/ai-engine/test_model_routes.py` — `/model/status|retrain|promote`
-  routes, same gap (30 stmts, was 50%, now 100%).
-- `tests/ai-engine/test_http_client.py` — full `CircuitBreaker` state
-  machine (closed→open→half-open→closed/open), previously only exercised
-  incidentally (59 stmts, was 37%, now 97%).
-- `tests/ai-engine/test_validator.py` — `validate_model`'s block-rate and
-  std-regression rejection paths, previously untested (32 stmts, was 28%,
-  now 100%).
-- `tests/ai-engine/test_registry.py` — save/load/promote round-trips
-  against a real (tmp_path-isolated) filesystem and a real tiny
-  `IsolationForest`, monkeypatching `registry.PRODUCTION_PATH` etc. instead
-  of mocking joblib (96 stmts, was 36%, now 94%).
 
-**Checkpoint (met 2026-08-21):** AI Engine 82%, Worker Orchestrator 94% —
-both ≥80%. Full detail in `docs/test-report.md`. Remaining known gap:
-`ml/training.py` (32%) — the retrain orchestration module, expensive to
-unit-test in isolation (real Redis Stream + real model fit + registry/
-validator coordination); left as a documented follow-up since overall
-target is already met without it.
+class _SimpleTable:
+    _table_name: str
+    _key_names: tuple[str, ...]
 
-## Stage 6 — End-to-end verification against a live cluster [DEFERRED]
+    def __init__(self, resource):
+        self._table = resource.Table(self._table_name)
 
-**Deferred 2026-08-21 (user decision), same reason as Stage 3.**
+    def put(self, **item) -> None:
+        self._table.put_item(Item=item)
 
-**Goal:** unit tests mock Redis/K8s — they prove the code's logic, not that
-the detection→mitigation pipeline works end-to-end. The repo already has
-the tools for this (`scripts/load-test.sh`, `scripts/simulate-attack.sh`);
-they just haven't been run against a confirmed-live cluster in this session.
+    def get(self, **key) -> dict | None:
+        resp = self._table.get_item(Key={k: key[k] for k in self._key_names})
+        return resp.get("Item")
 
-**Scope:** requires Stage 3's live cluster.
+    def delete(self, **key) -> None:
+        self._table.delete_item(Key={k: key[k] for k in self._key_names})
 
-**Checkpoint:**
-- `bash scripts/simulate-attack.sh http://<worker-ip>:30080 all` against
-  the real deployment, followed by checking Grafana
-  (`ai_anomalies_detected_total`, `nginx_blocked_ips_total`) for the
-  expected signal.
-- Tier 1 E2E from Stage 2: an IP mitigated at Tier 1 must actually receive
-  `429`/`503` once it exceeds `NGINX_STRICT_RATE_LIMIT_RPS` (5 r/s) —
-  proves the dynamic ratelimit ConfigMap wiring works end-to-end, not just
-  in unit tests.
+    def query_by_tenant(self, tenant_id: str) -> list[dict]:
+        from boto3.dynamodb.conditions import Key
+        resp = self._table.query(KeyConditionExpression=Key("tenant_id").eq(tenant_id))
+        return resp.get("Items", [])
 
-This is the PRD-equivalent acceptance test for a project that has no formal
-PRD (brownfield, retro-documented per `.sdlc/project-state.json`
-phase_history).
 
-## Stage 7 — Docs polish for public/OSS handover [DEFERRED]
+class TenantsTable(_SimpleTable):
+    _table_name = "Tenants"
+    _key_names = ("tenant_id",)
 
-**Deferred 2026-08-21 (user decision):** depends on Stage 3/6 output
-(README status correction needs a confirmed live-or-not answer). Revisit
-together with Stage 3/6.
+class AgentsTable(_SimpleTable):
+    _table_name = "Agents"
+    _key_names = ("tenant_id", "agent_id")
 
-**Goal:** once Stages 3–6 land, close the loop on documentation accuracy.
+class WhitelistTable(_SimpleTable):
+    _table_name = "Whitelist"
+    _key_names = ("tenant_id", "ip")
 
-**Scope:** `README.md`, add `CONTRIBUTING.md` and `SECURITY.md` (standard
-for a public OSS repo accepting external issues/PRs).
+class MitigationStateTable(_SimpleTable):
+    _table_name = "MitigationState"
+    _key_names = ("tenant_id", "ip")
+```
 
-**Checkpoint:** README's "System Status" section reflects a dated, verified
-state (not an undated "stable" claim); `CONTRIBUTING.md` and `SECURITY.md`
-exist.
+- [ ] **Step 6: Run test to verify it passes**
+
+Run: `cd services/backend && python -m pytest tests/test_dynamo_tables.py -v`
+Expected: PASS (3 tests)
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add services/backend/requirements.txt services/backend/core/dynamo.py \
+        services/backend/core/tables.py services/backend/tests/conftest.py \
+        services/backend/tests/test_dynamo_tables.py
+git commit -m "feat(backend): add moto-tested DynamoDB data-access layer"
+```
+
+**Checkpoint (stage done when):**
+`cd services/backend && python -m pytest tests/test_dynamo_tables.py -v`
+→ all pass, zero real AWS calls (moto only).
+
+---
+
+## Stage 2 — Telemetry aggregation & feature computation on DynamoDB (highest technical risk — do this before anything depends on it)
+
+**Goal:** Replace the old Redis `ZADD`/`ZRANGEBYSCORE` sliding window
+(`ai_engine/ml/feature_engineering.py`, `window_seconds=5`) with a
+DynamoDB-native design that fits inside the 25 WCU/RCU Always-Free ceiling.
+
+**Design decisions, made here because they follow directly from the
+already-agreed 0đ constraint:**
+
+1. **Aggregate in Lambda memory before touching DynamoDB.** A batch can
+   contain many log lines for the same IP (that's exactly what a DDoS
+   burst looks like). Grouping and summing in Python first, then issuing
+   **exactly one `UpdateItem` per unique IP per batch**, is what actually
+   keeps writes at 1/IP/batch — looping the DynamoDB call per log line
+   (a mistake caught and fixed in this same pass) would silently recreate
+   the old Redis design's per-line write cost.
+2. **Bounded numeric aggregates only — no growing lists.** The first draft
+   stored raw `uris`/`user_agents` via `list_append`, which grows the item
+   without bound and gets most expensive exactly during a real attack
+   (more requests → bigger item → more WCU per write). Replaced with
+   fixed-size numeric fields (`distinct_uri_count`, `distinct_ua_count`)
+   computed once per batch in Python and added via numeric `ADD` — O(1)
+   item size regardless of traffic volume. Trade-off, stated explicitly:
+   `user_agent_entropy` becomes an approximation (`distinct_ua_count / total`,
+   a diversity ratio) rather than true Shannon entropy merged across
+   batches — true entropy isn't additive across separately-computed
+   batches, and storing a full frequency distribution reintroduces the
+   unbounded-growth problem this fix exists to remove.
+3. **Sliding-window counter (2 buckets, weighted) instead of one fixed
+   bucket.** A single fixed 5-second bucket lets an attacker split volume
+   across a bucket boundary (half the requests in bucket N, half in N+1,
+   each individually under threshold). Reading the *current* bucket plus a
+   *weighted* fraction of the *previous* bucket — the standard "sliding
+   window counter" rate-limiting algorithm — closes this gap at the cost
+   of one extra `GetItem` per feature computation (still O(1), not a scan).
+
+**Files:**
+- Create: `services/backend/ml/feature_engineering.py`
+- Create: `services/backend/core/tables.py` — extend with `TelemetryEventsTable`
+  (append to the file from Stage 1, not a new file)
+- Test: `services/backend/tests/test_feature_engineering.py`
+
+**Interfaces:**
+- Consumes: `TenantsTable`/etc. patterns from Stage 1 (`_SimpleTable`),
+  `get_dynamo_resource()`.
+- Produces: `FeatureVector` dataclass (same 7 fields + `sample_size` as the
+  old `ai_engine/ml/feature_engineering.py::FeatureVector` — kept
+  byte-for-byte identical so `services/backend/ml/model.py` in Stage 3 can
+  reuse `to_list()`/`to_dict()` unmodified).
+- Produces: `record_batch(resource, tenant_id: str, logs: list[LogRecord], bucket_seconds: int = 5) -> set[str]`
+  — the new equivalent of the old `store_logs_to_window`; aggregates the
+  whole batch in memory FIRST, then issues exactly one `UpdateItem` per
+  unique IP. Returns the unique IPs touched in this batch.
+- Produces: `compute_features_for_ip(resource, tenant_id: str, ip: str, bucket_seconds: int = 5) -> FeatureVector | None`
+  — reads current bucket + weighted previous bucket (sliding-window
+  counter), not a single fixed bucket.
+
+- [ ] **Step 1: Write the failing test for bucketed aggregate writes**
+
+```python
+# services/backend/tests/test_feature_engineering.py
+import time
+from services.backend.core.tables import create_all_tables
+from services.backend.ml.feature_engineering import record_batch, compute_features_for_ip
+
+class _Log:
+    def __init__(self, remote_addr, status="200", body_bytes_sent="512",
+                 request_time="0.05", request_uri="/a", request_method="GET",
+                 http_user_agent="ua-1"):
+        self.remote_addr = remote_addr
+        self.status = status
+        self.body_bytes_sent = body_bytes_sent
+        self.request_time = request_time
+        self.request_uri = request_uri
+        self.request_method = request_method
+        self.http_user_agent = http_user_agent
+
+def test_record_batch_issues_one_write_per_unique_ip_not_per_log_line(dynamo_resource, monkeypatch):
+    create_all_tables(dynamo_resource)
+    from services.backend.core import tables as tables_mod
+    call_count = {"n": 0}
+    original = tables_mod.TelemetryEventsTable.add_aggregate
+    def _counting_add_aggregate(self, *a, **kw):
+        call_count["n"] += 1
+        return original(self, *a, **kw)
+    monkeypatch.setattr(tables_mod.TelemetryEventsTable, "add_aggregate", _counting_add_aggregate)
+
+    logs = [_Log("1.2.3.4") for _ in range(5)] + [_Log("9.9.9.9")]  # 5 lines, 1 IP + 1 line, 1 IP
+    touched = record_batch(dynamo_resource, "t-1", logs, bucket_seconds=5)
+    assert touched == {"1.2.3.4", "9.9.9.9"}
+    # exactly 2 DynamoDB writes for 6 log lines across 2 IPs — NOT 6
+    assert call_count["n"] == 2
+
+def test_compute_features_below_threshold_returns_none(dynamo_resource):
+    create_all_tables(dynamo_resource)
+    record_batch(dynamo_resource, "t-1", [_Log("1.2.3.4")], bucket_seconds=5)
+    # min_requests_threshold=3 (same default as the old ai_engine settings)
+    vector = compute_features_for_ip(dynamo_resource, "t-1", "1.2.3.4",
+                                      bucket_seconds=5, min_requests_threshold=3)
+    assert vector is None
+
+def test_compute_features_above_threshold(dynamo_resource):
+    create_all_tables(dynamo_resource)
+    logs = [_Log("1.2.3.4", status="500")] * 2 + [_Log("1.2.3.4", status="200")]
+    record_batch(dynamo_resource, "t-1", logs, bucket_seconds=5)
+    vector = compute_features_for_ip(dynamo_resource, "t-1", "1.2.3.4",
+                                      bucket_seconds=5, min_requests_threshold=3)
+    assert vector is not None
+    assert vector.sample_size == 3
+    assert round(vector.error_ratio, 3) == round(2 / 3, 3)
+
+def test_split_burst_across_bucket_boundary_still_detected(dynamo_resource):
+    # The exact evasion the old fixed-bucket-only design was vulnerable to:
+    # attacker sends half a burst right before a bucket boundary, half
+    # right after. Each half alone might look clean; the sliding-window
+    # counter must still see the combined rate.
+    create_all_tables(dynamo_resource)
+    prev_bucket = 1000  # bucket_seconds=5 -> boundary at t=1000
+    logs_prev = [_Log("1.2.3.4") for _ in range(20)]
+    record_batch(dynamo_resource, "t-1", logs_prev, bucket_seconds=5, now=1004.9)
+    logs_curr = [_Log("1.2.3.4") for _ in range(20)]
+    record_batch(dynamo_resource, "t-1", logs_curr, bucket_seconds=5, now=1005.1)
+
+    vector = compute_features_for_ip(dynamo_resource, "t-1", "1.2.3.4",
+                                      bucket_seconds=5, min_requests_threshold=3,
+                                      now=1005.1)
+    assert vector is not None
+    # near the boundary, the weighted sliding count should reflect close to
+    # the full 40 requests, not just the 20 in the current bucket alone
+    assert vector.sample_size > 30
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd services/backend && python -m pytest tests/test_feature_engineering.py -v`
+Expected: FAIL with `ModuleNotFoundError`
+
+- [ ] **Step 3: Extend `core/tables.py` with `TelemetryEventsTable`**
+
+```python
+# append to services/backend/core/tables.py
+class TelemetryEventsTable(_SimpleTable):
+    _table_name = "TelemetryEvents"
+    _key_names = ("tenant_ip", "bucket_start_ts")
+
+    def add_aggregate(self, tenant_ip: str, bucket_start_ts: int, agg: dict,
+                       ttl_seconds: int = 3600) -> None:
+        """Single atomic write of an ALREADY-AGGREGATED batch summary for
+        one (tenant, ip, bucket) — never called per log line. `agg` keys:
+        request_count, error_count, post_count, total_bytes, total_time,
+        distinct_uri_count, distinct_ua_count — all plain numbers, so the
+        item stays a fixed handful of bytes regardless of traffic volume
+        (no lists, nothing that grows with request count)."""
+        self._table.update_item(
+            Key={"tenant_ip": tenant_ip, "bucket_start_ts": bucket_start_ts},
+            UpdateExpression=(
+                "ADD request_count :rc, error_count :ec, post_count :pc, "
+                "total_bytes :tb, total_time :tt, "
+                "distinct_uri_count :du, distinct_ua_count :da "
+                "SET #ttl = :ttl"
+            ),
+            ExpressionAttributeNames={"#ttl": "ttl"},
+            ExpressionAttributeValues={
+                ":rc": agg["request_count"], ":ec": agg["error_count"],
+                ":pc": agg["post_count"], ":tb": agg["total_bytes"],
+                ":tt": agg["total_time"], ":du": agg["distinct_uri_count"],
+                ":da": agg["distinct_ua_count"],
+                ":ttl": bucket_start_ts + ttl_seconds,
+            },
+        )
+
+    def get_bucket(self, tenant_ip: str, bucket_start_ts: int) -> dict | None:
+        return self.get(tenant_ip=tenant_ip, bucket_start_ts=bucket_start_ts)
+```
+
+- [ ] **Step 4: Implement `ml/feature_engineering.py`**
+
+```python
+# services/backend/ml/feature_engineering.py
+import time
+from dataclasses import dataclass
+
+from services.backend.core.tables import TelemetryEventsTable
+
+FEATURE_NAMES = [
+    "request_rate", "error_ratio", "avg_bytes_sent", "avg_request_time",
+    "unique_uri_ratio", "user_agent_entropy", "post_ratio",
+]
+
+
+@dataclass
+class FeatureVector:
+    remote_addr:        str
+    request_rate:       float
+    error_ratio:        float
+    avg_bytes_sent:     float
+    avg_request_time:   float
+    unique_uri_ratio:   float
+    user_agent_entropy: float
+    post_ratio:         float
+    sample_size:        int
+
+    def to_list(self) -> list[float]:
+        return [getattr(self, name) for name in FEATURE_NAMES]
+
+    def to_dict(self) -> dict:
+        return {n: getattr(self, n) for n in ["remote_addr", *FEATURE_NAMES, "sample_size"]}
+
+
+def _bucket_start(bucket_seconds: int, at: float) -> int:
+    return int(at // bucket_seconds) * bucket_seconds
+
+
+def record_batch(resource, tenant_id: str, logs: list, bucket_seconds: int = 5,
+                  now: float | None = None) -> set[str]:
+    now = now if now is not None else time.time()
+    bucket = _bucket_start(bucket_seconds, now)
+    table = TelemetryEventsTable(resource)
+
+    # Aggregate the WHOLE batch in memory first, grouped by IP — this is
+    # what keeps writes at 1/IP/batch regardless of how many log lines
+    # any single IP contributed (a batch-per-line loop here would silently
+    # recreate the old Redis design's per-line write cost).
+    by_ip: dict[str, dict] = {}
+    for log in logs:
+        agg = by_ip.setdefault(log.remote_addr, {
+            "request_count": 0, "error_count": 0, "post_count": 0,
+            "total_bytes": 0, "total_time": 0.0,
+            "_uris": set(), "_uas": set(),
+        })
+        agg["request_count"] += 1
+        if str(log.status).startswith(("4", "5")):
+            agg["error_count"] += 1
+        if log.request_method.upper() == "POST":
+            agg["post_count"] += 1
+        agg["total_bytes"] += int(float(log.body_bytes_sent))
+        agg["total_time"] += float(log.request_time)
+        agg["_uris"].add(log.request_uri)
+        agg["_uas"].add(log.http_user_agent)
+
+    touched: set[str] = set()
+    for ip, agg in by_ip.items():
+        agg["distinct_uri_count"] = len(agg.pop("_uris"))
+        agg["distinct_ua_count"] = len(agg.pop("_uas"))
+        table.add_aggregate(f"{tenant_id}#{ip}", bucket, agg)
+        touched.add(ip)
+    return touched
+
+
+def compute_features_for_ip(resource, tenant_id: str, ip: str, bucket_seconds: int = 5,
+                             min_requests_threshold: int = 3,
+                             now: float | None = None) -> "FeatureVector | None":
+    """Sliding-window counter: current bucket's full count plus a weighted
+    fraction of the previous bucket, weighted by how far `now` is into the
+    current bucket. Standard fixed-window-counter-approximates-sliding-window
+    technique — closes the boundary-split evasion a single fixed bucket has,
+    at the cost of one extra GetItem (still O(1), no scan)."""
+    now = now if now is not None else time.time()
+    table = TelemetryEventsTable(resource)
+    tenant_ip = f"{tenant_id}#{ip}"
+
+    current_start = _bucket_start(bucket_seconds, now)
+    previous_start = current_start - bucket_seconds
+    elapsed_fraction = (now - current_start) / bucket_seconds  # 0..1
+
+    current  = table.get_bucket(tenant_ip, current_start) or {}
+    previous = table.get_bucket(tenant_ip, previous_start) or {}
+    prev_weight = 1.0 - elapsed_fraction
+
+    def _w(field: str, cast=int) -> float:
+        return cast(current.get(field, 0)) + prev_weight * cast(previous.get(field, 0))
+
+    total = _w("request_count")
+    if total < min_requests_threshold:
+        return None
+
+    distinct_uri = _w("distinct_uri_count")
+    distinct_ua  = _w("distinct_ua_count")
+
+    return FeatureVector(
+        remote_addr=ip,
+        request_rate=round(total / bucket_seconds, 6),
+        error_ratio=round(_w("error_count") / total, 6),
+        avg_bytes_sent=round(_w("total_bytes") / total, 6),
+        avg_request_time=round(_w("total_time", float) / total, 6),
+        unique_uri_ratio=round(min(distinct_uri / total, 1.0), 6),
+        # Approximation, not true Shannon entropy — see Stage 2 design
+        # note: true entropy doesn't merge additively across buckets, and
+        # storing a full frequency distribution reintroduces unbounded
+        # item growth. distinct_ua/total is a bounded diversity proxy.
+        user_agent_entropy=round(min(distinct_ua / total, 1.0), 6),
+        post_ratio=round(_w("post_count") / total, 6),
+        sample_size=int(total),
+    )
+```
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `cd services/backend && python -m pytest tests/test_feature_engineering.py -v`
+Expected: PASS (4 tests)
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add services/backend/ml/feature_engineering.py services/backend/core/tables.py \
+        services/backend/tests/test_feature_engineering.py
+git commit -m "feat(backend): DynamoDB-native sliding-window feature aggregation (replaces Redis sliding window)"
+```
+
+**Checkpoint (stage done when):**
+`cd services/backend && python -m pytest tests/test_feature_engineering.py -v`
+→ all 4 pass, including `test_record_batch_issues_one_write_per_unique_ip_not_per_log_line`
+(proves the WCU story: 1 write per unique IP per batch, not per log line —
+this is the number that must stay far below the 5 WCU provisioned on
+`TelemetryEvents` in Stage 1 at expected load) and
+`test_split_burst_across_bucket_boundary_still_detected` (proves the
+sliding-window-counter closes the fixed-bucket evasion gap). Re-check the
+WCU number against real traffic estimates before Stage 8 (agent) goes live
+for real users.
+
+---
+
+## Stage 3 — Model registry rewrite + ML core port
+
+**Goal:** Port `ai_engine/ml/model.py`, `training.py`, `validator.py`,
+`monitoring.py` into `services/backend/ml/`, adding `tenant_id` scoping,
+and replace `ai_engine/ml/registry.py`'s local-filesystem storage
+(`/app/models`, incompatible with stateless Lambda) with the DynamoDB
+binary-item storage decided in ADR-002 (`n_estimators=50`, gzip, single
+item, per tenant).
+
+**Files:**
+- Create: `services/backend/ml/registry.py`
+- Create: `services/backend/ml/model.py` (ported from `ai_engine/ml/model.py`, add `tenant_id` param)
+- Create: `services/backend/ml/training.py` (ported from `ai_engine/ml/training.py`, `n_estimators=50`)
+- Create: `services/backend/core/tables.py` — extend with `ModelsTable`
+- Test: `services/backend/tests/test_registry.py`
+
+**Interfaces:**
+- Consumes: `FeatureVector` from Stage 2's `ml/feature_engineering.py`.
+- Produces: `save_model(resource, tenant_id: str, model: IsolationForest, metadata: ModelMetadata, stage: str = "staging") -> None`
+  — raises `ValueError("model exceeds DynamoDB item limit")` if the
+  gzip-compressed blob is over 400,000 bytes, so an accidental
+  `n_estimators` bump fails loudly in CI instead of failing silently in
+  production.
+- Produces: `load_model(resource, tenant_id: str, stage: str = "production") -> IsolationForest | None`.
+- Produces: `ModelManager.score_vectors(vectors: list[FeatureVector]) -> list[tuple[FeatureVector, float]]`
+  — same signature as the old `ai_engine/ml/model.py::ModelManager`, so
+  Stage 4's telemetry handler calls it identically. `ModelManager.load()`
+  caches per-tenant models at class level across warm Lambda invocations
+  (see Step 6) — this is load-bearing for staying inside the RCU budget,
+  not an optional optimization.
+
+- [ ] **Step 1: Extend `core/tables.py` with `ModelsTable` (binary put/get + size guard)**
+
+```python
+# append to services/backend/core/tables.py
+class ModelsTable(_SimpleTable):
+    _table_name = "Models"
+    _key_names = ("tenant_id", "stage_version")
+
+    MAX_BLOB_BYTES = 400_000
+
+    def put_model_blob(self, tenant_id: str, stage_version: str, blob: bytes, **metadata) -> None:
+        if len(blob) > self.MAX_BLOB_BYTES:
+            raise ValueError(
+                f"model blob {len(blob)} bytes exceeds DynamoDB item limit "
+                f"{self.MAX_BLOB_BYTES} — reduce n_estimators (see ADR-002)"
+            )
+        self.put(tenant_id=tenant_id, stage_version=stage_version, model_blob=blob, **metadata)
+```
+
+- [ ] **Step 2: Write the failing test**
+
+```python
+# services/backend/tests/test_registry.py
+import numpy as np
+import pytest
+from sklearn.ensemble import IsolationForest
+from services.backend.core.tables import create_all_tables
+from services.backend.ml.registry import save_model, load_model, ModelMetadata
+
+def _trained_model(n_estimators=50):
+    X = np.random.rand(500, 7)
+    return IsolationForest(n_estimators=n_estimators, contamination=0.05, random_state=0).fit(X)
+
+def test_save_and_load_model_roundtrip(dynamo_resource):
+    create_all_tables(dynamo_resource)
+    model = _trained_model()
+    meta = ModelMetadata(version="v1", trained_at="2026-08-21T00:00:00Z",
+                          training_samples=500, contamination=0.05,
+                          score_mean=0.0, score_std=1.0,
+                          features=["request_rate"], stage="production")
+    save_model(dynamo_resource, "t-1", model, meta, stage="production")
+    loaded = load_model(dynamo_resource, "t-1", stage="production")
+    assert loaded is not None
+    assert loaded.n_estimators == 50
+
+def test_save_model_rejects_oversized_blob(dynamo_resource):
+    create_all_tables(dynamo_resource)
+    model = _trained_model(n_estimators=100)  # measured ~474KB gzip in ADR-002 — over limit
+    meta = ModelMetadata(version="v1", trained_at="2026-08-21T00:00:00Z",
+                          training_samples=500, contamination=0.05,
+                          score_mean=0.0, score_std=1.0,
+                          features=["request_rate"], stage="production")
+    with pytest.raises(ValueError, match="exceeds DynamoDB item limit"):
+        save_model(dynamo_resource, "t-1", model, meta, stage="production")
+
+def test_load_missing_model_returns_none(dynamo_resource):
+    create_all_tables(dynamo_resource)
+    assert load_model(dynamo_resource, "no-such-tenant") is None
+```
+
+- [ ] **Step 3: Run test to verify it fails**
+
+Run: `cd services/backend && python -m pytest tests/test_registry.py -v`
+Expected: FAIL with `ModuleNotFoundError`
+
+- [ ] **Step 4: Implement `ml/registry.py`**
+
+```python
+# services/backend/ml/registry.py
+import gzip
+import io
+from dataclasses import asdict, dataclass
+
+import joblib
+from sklearn.ensemble import IsolationForest
+
+from services.backend.core.tables import ModelsTable
+
+
+@dataclass
+class ModelMetadata:
+    version: str
+    trained_at: str
+    training_samples: int
+    contamination: float
+    score_mean: float
+    score_std: float
+    features: list[str]
+    stage: str
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def save_model(resource, tenant_id: str, model: IsolationForest,
+                metadata: ModelMetadata, stage: str = "staging") -> None:
+    buf = io.BytesIO()
+    joblib.dump(model, buf)
+    blob = gzip.compress(buf.getvalue())
+
+    table = ModelsTable(resource)
+    table.put_model_blob(tenant_id, stage, blob, **metadata.to_dict())
+
+
+def load_model(resource, tenant_id: str, stage: str = "production") -> IsolationForest | None:
+    table = ModelsTable(resource)
+    item = table.get(tenant_id=tenant_id, stage_version=stage)
+    if item is None:
+        return None
+    raw = gzip.decompress(bytes(item["model_blob"]))
+    return joblib.load(io.BytesIO(raw))
+
+
+def model_exists(resource, tenant_id: str, stage: str = "production") -> bool:
+    table = ModelsTable(resource)
+    return table.get(tenant_id=tenant_id, stage_version=stage) is not None
+```
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `cd services/backend && python -m pytest tests/test_registry.py -v`
+Expected: PASS (3 tests)
+
+- [ ] **Step 6: Port `ml/model.py` and `ml/training.py`, adding a module-level cache to `ModelManager`**
+
+**Why this step exists (found and fixed in this pass):** a naive port that
+calls `registry.load_model` on every `ModelManager.load()` would read the
+full ~238KB compressed model item on **every single telemetry request** —
+a strongly-consistent read of an item that size costs roughly 60 RCU,
+which alone blows past the entire 25 RCU/sec account-wide budget in one
+request. Lambda reuses its execution environment across "warm" invocations
+of the same container — module-level state survives between calls — so
+the fix is to cache the deserialized model there and only hit DynamoDB
+again on a cold start.
+
+Copy `services/ai_engine/ml/model.py` → `services/backend/ml/model.py` and
+`services/ai_engine/ml/training.py` → `services/backend/ml/training.py`.
+Required edits (do NOT change anything else — this is a port, not a
+rewrite):
+- `ModelManager` gets a class-level `_cache: dict[str, IsolationForest] = {}`
+  shared by every instance in the container. `load(resource, tenant_id)`
+  checks `_cache` first; only calls `registry.load_model` on a cache miss.
+  **Explicit trade-off, not an oversight:** this means a warm container can
+  keep serving a stale model for up to that container's lifetime after a
+  retrain promotes a new version (Stage 7) — no version-check read is
+  added, because a cheap version-check would itself need a DynamoDB read
+  on every request, reintroducing the exact cost problem this fix removes.
+  Lambda containers recycle naturally (AWS-managed, not app-managed); if
+  faster propagation is ever needed, add a manual "flush cache" control-
+  platform action rather than a per-request check.
+- `reload()` clears this tenant's cache entry and calls `load()` again —
+  used by the manual-retrain path only, not the hot path.
+- `training.py`: change `IsolationForest(n_estimators=100, ...)` to
+  `IsolationForest(n_estimators=50, ...)` (ADR-002 measured constraint) and
+  thread a `tenant_id` param through `save_model`'s call.
+- Remove the old `feature_config.py` import (`get_enabled_feature_names`,
+  `get_feature_count`) — Stage 2's `feature_engineering.py` already has
+  `FEATURE_NAMES` as a fixed module-level constant; use that directly
+  instead of the old configurable-registry pattern (the registry pattern
+  added no value here and is one less file to port).
+
+- [ ] **Step 7: Write tests for cache behavior and classify_score thresholds**
+
+```python
+# services/backend/tests/test_model_port.py
+import numpy as np
+from sklearn.ensemble import IsolationForest as SKIsolationForest
+from services.backend.core.tables import create_all_tables
+from services.backend.ml import registry
+from services.backend.ml.model import classify_score, AnomalyTier, ModelManager
+
+def test_classify_score_thresholds_match_old_service():
+    # TIER1_THRESHOLD = -0.1, TIER2_THRESHOLD = -0.3 — unchanged from
+    # ai_engine/ml/model.py, must not silently drift during the port
+    assert classify_score(0.5) == AnomalyTier.NORMAL
+    assert classify_score(-0.15) == AnomalyTier.RATE_LIMIT
+    assert classify_score(-0.35) == AnomalyTier.HARD_BLOCK
+
+def test_model_manager_only_reads_dynamodb_once_across_warm_calls(dynamo_resource, monkeypatch):
+    create_all_tables(dynamo_resource)
+    X = np.random.rand(200, 7)
+    model = SKIsolationForest(n_estimators=50, random_state=0).fit(X)
+    registry.save_model(dynamo_resource, "t-1", model, registry.ModelMetadata(
+        version="v1", trained_at="2026-08-21T00:00:00Z", training_samples=200,
+        contamination=0.05, score_mean=0.0, score_std=1.0,
+        features=["request_rate"], stage="production"))
+
+    ModelManager._cache.clear()  # simulate a fresh cold start
+    read_count = {"n": 0}
+    original = registry.load_model
+    def _counting_load(*a, **kw):
+        read_count["n"] += 1
+        return original(*a, **kw)
+    monkeypatch.setattr(registry, "load_model", _counting_load)
+
+    mgr1 = ModelManager()
+    mgr1.load(dynamo_resource, "t-1")
+    mgr2 = ModelManager()  # simulates the next warm invocation, new instance
+    mgr2.load(dynamo_resource, "t-1")
+
+    assert read_count["n"] == 1  # second `load()` hit the cache, not DynamoDB
+```
+
+Run: `cd services/backend && python -m pytest tests/test_model_port.py -v`
+Expected: PASS (2 tests)
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add services/backend/ml/
+git commit -m "feat(backend): port ML core to backend package, DynamoDB model storage"
+```
+
+**Checkpoint (stage done when):**
+`cd services/backend && python -m pytest tests/ -v` → all Stage 1-3 tests
+pass (moto only, no real AWS).
+
+---
+
+## Stage 4 — Lambda API handler + agent-facing endpoints
+
+**Goal:** Wire Stages 1-3 into the FastAPI app + Mangum handler, implement
+`/agent/v1/register`, `/agent/v1/telemetry`, `/agent/v1/decisions` from
+`docs/api-contract.md`.
+
+**Files:**
+- Create: `services/backend/main.py` (FastAPI app + `handler = Mangum(app)`)
+- Create: `services/backend/api/routes/agent.py`
+- Create: `services/backend/schemas/telemetry.py` (port `LogRecord`,
+  `TelemetryBatch` from `services/ai_engine/schemas/telemetry.py` unchanged
+  — pure Pydantic, no infra coupling, nothing to adapt)
+- Create: `services/backend/api/dependencies.py` (agent API-key auth,
+  hash-compares against `AgentsTable`)
+- Test: `services/backend/tests/test_agent_routes.py` (FastAPI `TestClient`, moto DynamoDB)
+
+**Interfaces:**
+- Consumes: `ModelManager`, `classify_score`, `AnomalyTier` (Stage 3),
+  `record_batch`/`compute_features_for_ip` (Stage 2), `AgentsTable`,
+  `MitigationStateTable`, `WhitelistTable` (Stage 1).
+- Produces: `POST /agent/v1/telemetry` returning `TelemetryResponse` with a
+  `decisions: list[MitigationState]` field per `docs/api-contract.md` —
+  this is what Stage 8's agent enforces locally.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# services/backend/tests/test_agent_routes.py
+from fastapi.testclient import TestClient
+from services.backend.core.tables import create_all_tables, AgentsTable
+from services.backend.main import app, dynamo_resource_override
+
+def _client(dynamo_resource):
+    create_all_tables(dynamo_resource)
+    AgentsTable(dynamo_resource).put(
+        tenant_id="t-1", agent_id="a-1", registered_at="2026-08-21T00:00:00Z",
+        last_seen_at="2026-08-21T00:00:00Z", agent_version="0.1.0",
+        api_key_hash="testkeyhash", status="active",
+    )
+    dynamo_resource_override(dynamo_resource)  # test-only DI seam, see Step 2
+    return TestClient(app)
+
+def test_telemetry_unauthenticated_is_401(dynamo_resource):
+    client = _client(dynamo_resource)
+    resp = client.post("/agent/v1/telemetry", json={"logs": []})
+    assert resp.status_code == 401
+
+def test_telemetry_empty_batch(dynamo_resource):
+    client = _client(dynamo_resource)
+    resp = client.post("/agent/v1/telemetry", json={"logs": []},
+                        headers={"X-Agent-Key": "t-1.testkeyhash"})
+    assert resp.status_code == 200
+    assert resp.json()["received"] == 0
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd services/backend && python -m pytest tests/test_agent_routes.py -v`
+Expected: FAIL with `ModuleNotFoundError: No module named 'services.backend.main'`
+
+- [ ] **Step 3: Implement `api/dependencies.py`**
+
+```python
+# services/backend/api/dependencies.py
+import hashlib
+from fastapi import Header, HTTPException
+
+from services.backend.core.tables import AgentsTable
+
+
+def hash_api_key(raw_key: str) -> str:
+    return hashlib.sha256(raw_key.encode()).hexdigest()
+
+
+def agent_auth(resource):
+    def _dep(x_agent_key: str = Header(...)) -> str:
+        try:
+            tenant_id, key_part = x_agent_key.split(".", 1)
+        except ValueError:
+            raise HTTPException(status_code=401, detail="Malformed X-Agent-Key")
+
+        agents = AgentsTable(resource).query_by_tenant(tenant_id)
+        for agent in agents:
+            if agent.get("api_key_hash") == key_part and agent.get("status") == "active":
+                return tenant_id
+        raise HTTPException(status_code=401, detail="Invalid agent key")
+    return _dep
+```
+
+- [ ] **Step 4: Implement `api/routes/agent.py`**
+
+```python
+# services/backend/api/routes/agent.py
+from fastapi import APIRouter, Depends
+
+from services.backend.core.tables import MitigationStateTable, WhitelistTable
+from services.backend.ml.feature_engineering import record_batch, compute_features_for_ip
+from services.backend.ml.model import ModelManager, classify_score, AnomalyTier
+from services.backend.schemas.telemetry import TelemetryBatch, TelemetryResponse
+
+router = APIRouter()
+
+
+def build_agent_router(resource, agent_auth_dep) -> APIRouter:
+    r = APIRouter()
+
+    @r.post("/agent/v1/telemetry", response_model=TelemetryResponse)
+    def ingest(batch: TelemetryBatch, tenant_id: str = Depends(agent_auth_dep)):
+        if not batch.logs:
+            return TelemetryResponse(received=0, processed_ips=0, decisions=[])
+
+        touched_ips = record_batch(resource, tenant_id, batch.logs)
+        whitelist = {i["ip"] for i in WhitelistTable(resource).query_by_tenant(tenant_id)}
+        mgr = ModelManager()
+        mgr.load(resource, tenant_id)  # cached across warm invocations, see Stage 3 Step 6 —
+        # do NOT "simplify" this back to an unconditional registry.load_model() call
+
+        decisions = []
+        for ip in touched_ips:
+            if ip in whitelist:
+                continue
+            vector = compute_features_for_ip(resource, tenant_id, ip)
+            if vector is None:
+                continue
+            scored = mgr.score_vectors([vector])
+            for v, score in scored:
+                tier = classify_score(score)
+                if tier == AnomalyTier.NORMAL:
+                    continue
+                state = {"ip": v.remote_addr, "tier": int(tier), "score": score,
+                          "reason": "behavioral_anomaly", "expires_at": 0}
+                MitigationStateTable(resource).put(tenant_id=tenant_id, **state)
+                decisions.append(state)
+
+        return TelemetryResponse(received=len(batch.logs), processed_ips=len(touched_ips),
+                                  decisions=decisions)
+
+    return r
+```
+
+- [ ] **Step 5: Implement `main.py`**
+
+```python
+# services/backend/main.py
+from fastapi import FastAPI
+from mangum import Mangum
+
+from services.backend.api.dependencies import agent_auth
+from services.backend.api.routes.agent import build_agent_router
+from services.backend.core.dynamo import get_dynamo_resource
+
+_resource = get_dynamo_resource()
+
+
+def dynamo_resource_override(resource) -> None:
+    """Test-only seam: swap the module-level resource for a moto-backed one."""
+    global _resource
+    _resource = resource
+
+
+app = FastAPI()
+app.include_router(build_agent_router(_resource, agent_auth(_resource)))
+
+
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
+
+
+handler = Mangum(app)
+```
+
+- [ ] **Step 6: Run test to verify it passes**
+
+Run: `cd services/backend && python -m pytest tests/test_agent_routes.py -v`
+Expected: PASS (2 tests)
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add services/backend/main.py services/backend/api/ services/backend/schemas/
+git commit -m "feat(backend): Lambda handler + agent-facing telemetry endpoint"
+```
+
+**Checkpoint (stage done when):**
+`cd services/backend && python -m pytest tests/ -v` passes locally (moto).
+Real-AWS checkpoint (run by the developer, not in this environment):
+`sam local start-lambda` or an actual `aws lambda invoke` against a
+deployed function returns 200 for `GET /health`.
+
+---
+
+## Stage 5 — Usage counters + free-tier ceiling warning (do this before Stage 6, not after)
+
+**Goal:** Protect the 0đ constraint — the single highest-risk assumption in
+the whole project. Every Lambda invocation increments `UsageCounters`;
+`/admin/v1/usage` reports today's totals against the Always-Free ceilings
+(Lambda 1M req / 400,000 GB-s per month; DynamoDB 25 RCU/WCU) so the
+publisher gets a warning before a ceiling is hit, not an AWS bill after.
+
+**Files:**
+- Create: `services/backend/core/usage.py`
+- Modify: `services/backend/main.py:24-27` (add middleware calling `usage.record_invocation`)
+- Create: `services/backend/api/routes/admin_usage.py`
+- Test: `services/backend/tests/test_usage.py`
+
+**Interfaces:**
+- Produces: `record_invocation(resource, estimated_gb_seconds: float) -> None`
+  — atomic `UpdateItem ADD` on today's `UsageCounters` item (1 WCU per
+  Lambda invocation, well inside the 25 WCU/sec ceiling at expected v1 scale).
+- Produces: `get_usage_report(resource, date: str) -> UsageReport` (from
+  `docs/api-contract.md`'s schema) with `ceiling_warning: bool` set true
+  when `total_requests` crosses 80% of `1_000_000 / 30` (a rough daily
+  share of the monthly Lambda ceiling — exact allocation strategy is a
+  Phase-3-tunable constant, not re-derived here).
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# services/backend/tests/test_usage.py
+from services.backend.core.tables import create_all_tables
+from services.backend.core.usage import record_invocation, get_usage_report
+
+def test_record_invocation_increments_counter(dynamo_resource):
+    create_all_tables(dynamo_resource)
+    record_invocation(dynamo_resource, estimated_gb_seconds=0.05)
+    record_invocation(dynamo_resource, estimated_gb_seconds=0.05)
+    report = get_usage_report(dynamo_resource, date=None)  # None = today
+    assert report.total_requests == 2
+    assert round(report.estimated_gb_seconds, 2) == 0.10
+
+def test_ceiling_warning_flips_true_near_daily_share(dynamo_resource):
+    create_all_tables(dynamo_resource)
+    daily_share = 1_000_000 / 30
+    for _ in range(int(daily_share * 0.85)):
+        record_invocation(dynamo_resource, estimated_gb_seconds=0.0)
+    report = get_usage_report(dynamo_resource, date=None)
+    assert report.ceiling_warning is True
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd services/backend && python -m pytest tests/test_usage.py -v`
+Expected: FAIL with `ModuleNotFoundError`
+
+- [ ] **Step 3: Implement `core/usage.py`**
+
+```python
+# services/backend/core/usage.py
+from datetime import datetime, timezone
+from dataclasses import dataclass
+
+_DAILY_REQUEST_CEILING = 1_000_000 / 30
+_WARNING_RATIO = 0.8
+
+
+@dataclass
+class UsageReport:
+    date: str
+    total_requests: int
+    estimated_gb_seconds: float
+    dynamodb_consumed_rcu: float
+    dynamodb_consumed_wcu: float
+    ceiling_warning: bool
+
+
+def _today() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def record_invocation(resource, estimated_gb_seconds: float = 0.0) -> None:
+    table = resource.Table("UsageCounters")
+    table.update_item(
+        Key={"date": _today()},
+        UpdateExpression="ADD total_requests :one, estimated_gb_seconds :gbs",
+        ExpressionAttributeValues={":one": 1, ":gbs": estimated_gb_seconds},
+    )
+
+
+def get_usage_report(resource, date: str | None) -> UsageReport:
+    d = date or _today()
+    table = resource.Table("UsageCounters")
+    item = table.get_item(Key={"date": d}).get("Item", {})
+    total = int(item.get("total_requests", 0))
+    return UsageReport(
+        date=d,
+        total_requests=total,
+        estimated_gb_seconds=float(item.get("estimated_gb_seconds", 0)),
+        dynamodb_consumed_rcu=float(item.get("dynamodb_consumed_rcu", 0)),
+        dynamodb_consumed_wcu=float(item.get("dynamodb_consumed_wcu", 0)),
+        ceiling_warning=total >= _DAILY_REQUEST_CEILING * _WARNING_RATIO,
+    )
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd services/backend && python -m pytest tests/test_usage.py -v`
+Expected: PASS (2 tests)
+
+- [ ] **Step 5: Wire into `main.py` as middleware**
+
+```python
+# services/backend/main.py — add after `app = FastAPI()`
+from services.backend.core.usage import record_invocation
+
+@app.middleware("http")
+async def track_usage(request, call_next):
+    response = await call_next(request)
+    record_invocation(_resource)
+    return response
+```
+
+- [ ] **Step 6: Implement `/admin/v1/usage` route**
+
+```python
+# services/backend/api/routes/admin_usage.py
+from fastapi import APIRouter
+
+from services.backend.core.usage import get_usage_report
+
+
+def build_admin_usage_router(resource) -> APIRouter:
+    r = APIRouter()
+
+    @r.get("/admin/v1/usage")
+    def usage():
+        return get_usage_report(resource, date=None)
+
+    return r
+```
+
+Register it in `main.py`: `app.include_router(build_admin_usage_router(_resource))`
+— auth (Cognito admin group) is added in Stage 6 once the auth dependency
+exists; do not ship this route publicly without it.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add services/backend/core/usage.py services/backend/api/routes/admin_usage.py \
+        services/backend/main.py services/backend/tests/test_usage.py
+git commit -m "feat(backend): usage counters + free-tier ceiling warning"
+```
+
+**Checkpoint (stage done when):**
+`cd services/backend && python -m pytest tests/test_usage.py -v` passes.
+Manually confirm `track_usage` middleware fires on every request by hitting
+`/health` twice in a test and checking `UsageCounters` incremented by 2.
+
+---
+
+## Stage 6 — Cognito auth + dashboard/control-platform endpoints
+
+**Goal:** Implement `/dashboard/v1/*` (tenant-scoped) and the remaining
+`/admin/v1/*` routes (`tenants`, `agents`, `tenants/{id}/suspend`) from
+`docs/api-contract.md`, gated by Cognito JWT.
+
+**Files:**
+- Create: `services/backend/api/cognito_auth.py`
+- Create: `services/backend/api/routes/dashboard.py`
+- Create: `services/backend/api/routes/admin.py`
+- Test: `services/backend/tests/test_dashboard_routes.py`
+- Test: `services/backend/tests/test_admin_routes.py`
+
+**Interfaces:**
+- Produces: `dashboard_auth(id_token: str) -> str` (returns `tenant_id`
+  from the JWT's custom claim), `admin_auth(id_token: str) -> None` (raises
+  403 if the `cognito:groups` claim doesn't contain `admin`) in
+  `api/cognito_auth.py`. Local tests use a fake JWT decoder (`python-jose`
+  with a test key) — do not require a real Cognito user pool to run tests.
+- Consumes: `WhitelistTable`, `MitigationStateTable`, `TenantsTable`,
+  `AgentsTable` (Stage 1), `get_usage_report` (Stage 5).
+
+**Task-level scope** (same TDD rhythm as Stages 1-5: write the failing
+`TestClient` test against each endpoint in `docs/api-contract.md`'s
+Dashboard/Control-Platform tables first, then implement):
+- `GET/POST/DELETE /dashboard/v1/whitelist`, `GET /dashboard/v1/mitigations`,
+  `GET /dashboard/v1/model/status` — each mirrors an old `ai_engine`
+  endpoint 1:1 in behavior, only the storage/auth layer changed (reuse the
+  request/response shapes already in `docs/api-contract.md`'s Schemas
+  section verbatim).
+- `GET /admin/v1/tenants`, `GET /admin/v1/agents` (query via `AgentsTable`'s
+  `LastSeenIndex` GSI — already provisioned in Stage 1's `_TABLE_SPECS`,
+  budgeted into the account-wide 25/25 free capacity from the start since
+  GSI throughput bills separately from its base table),
+  `POST /admin/v1/tenants/{tenant_id}/suspend`.
+
+**Checkpoint (stage done when):**
+`cd services/backend && python -m pytest tests/ -v` — all tests from
+Stages 1-6 pass locally.
+
+---
+
+## Stage 7 — Daily retrain via EventBridge
+
+**Goal:** A scheduled Lambda entry point that retrains each tenant's model
+from that tenant's accumulated `TelemetryEvents` buckets, using
+`services/backend/ml/training.py` from Stage 3, then promotes staging→production
+via the same validator logic ported from `ai_engine/ml/validator.py`.
+
+**Files:**
+- Create: `services/backend/retrain_handler.py` (separate Lambda entry
+  point, triggered by an EventBridge scheduled rule, NOT the API handler)
+- Test: `services/backend/tests/test_retrain_handler.py`
+
+**Task-level scope:**
+- `retrain_all_tenants(resource) -> None` loops `TenantsTable` and calls
+  per-tenant train/validate/promote (ported from `ai_engine/ml/training.py`
+  + `ai_engine/ml/validator.py`, `n_estimators=50`).
+- v1 is a serial loop — **explicitly acceptable for v1** given the small
+  expected tenant count; the 15-minute Lambda timeout means this must
+  switch to one invocation per tenant (EventBridge fan-out or Step
+  Functions) once retrain time × tenant count approaches ~10 minutes.
+  Add a log line emitting total elapsed time per run so this threshold is
+  observable, not guessed at.
+
+**Checkpoint (stage done when):**
+`cd services/backend && python -m pytest tests/test_retrain_handler.py -v`
+passes with a moto-backed multi-tenant fixture (≥2 tenants, confirms each
+gets its own `Models` item, not a shared one).
+
+---
+
+## Stage 8 — Agent (thin client) + CLI
+
+**Goal:** Build the two components that don't exist in the old codebase at
+all (PRD US-3, US-5) — a sklearn-free process the tenant runs next to their
+own service, and a CLI to register it.
+
+**Files:**
+- Create: `services/agent/requirements.txt` (no scikit-learn/pandas/numpy —
+  agent stays lightweight per ADR-002's "Agent design" section)
+- Create: `services/agent/collector.py` (captures request metadata,
+  batches, POSTs to `/agent/v1/telemetry`)
+- Create: `services/agent/enforcer.py` (applies returned `MitigationState`
+  decisions locally — reuses the *concept*, not the code, from the
+  discarded `worker_orchestrator/orchestrator/configmap_patcher.py`; no
+  Kubernetes here, just a local rate-limit/block mechanism appropriate to
+  whatever the tenant is running in front of)
+- Create: `services/agent/cli.py` (Click-based; `POST /agent/v1/register`
+  against the backend, stores the returned `api_key` locally)
+- Test: `services/agent/tests/test_collector.py`, `test_cli.py`
+
+**Task-level scope:**
+- `cli.py` command `agent register --backend-url <url>` calls
+  `/agent/v1/register` (Stage 4/6 must add this endpoint — not yet built
+  in Stage 4, add it here as the CLI's dependency), writes `~/.aiops-agent/config.json`
+  with `tenant_id`/`agent_id`/`api_key`.
+- `collector.py` batches every N seconds or M events (whichever first,
+  mirrors the agent-is-thin design — no ML, just forwarding), POSTs to
+  `/agent/v1/telemetry` with `X-Agent-Key: <tenant_id>.<api_key>`.
+- `enforcer.py` reads the `decisions` field of the telemetry response and
+  applies it locally — concrete mechanism (e.g. an in-process reverse
+  proxy that rejects listed IPs, vs. writing a config file for the
+  tenant's own reverse proxy to reload) is an open question for whoever
+  starts this stage to resolve with the developer before writing code —
+  flagged here rather than guessed, since it depends on what kind of
+  system agents will typically sit in front of (not yet known).
+
+**Checkpoint (stage done when):**
+`cd services/agent && python -m pytest tests/ -v` passes for `collector.py`
+(mock HTTP backend) and `cli.py` (mock backend + tmp config dir). The
+`enforcer.py` mechanism decision above must be resolved with the developer
+— via `/sdlc use 2 ...` support mode or continuing Phase 2 — before this
+stage's checkpoint counts as fully done.
+
+---
+
+## Stage 9 — Dashboard + Control Platform UI
+
+**Goal:** Serve the two human-facing UIs (PRD US-6, US-7) as HTML/JS
+directly from the Lambda Function URL, per ADR-002's UI decision.
+
+**Files:**
+- Create: `services/backend/ui/dashboard.py` (renders tenant-scoped views
+  over `/dashboard/v1/*` data)
+- Create: `services/backend/ui/control_platform.py` (renders
+  cross-tenant/admin views over `/admin/v1/*` data)
+
+**Task-level scope:** Deferred to Phase 3 start-of-stage — depends on every
+API endpoint from Stages 4-6 existing and stable first. No frontend
+framework has been chosen yet (ADR-002 left this open deliberately); that
+choice should be made with the developer as this stage begins, the same
+way the backend stack was chosen in this Phase 2 session, not guessed here.
+
+**Checkpoint (stage done when):** A logged-in tenant can see their own
+active mitigations and edit their whitelist end-to-end; a logged-in admin
+can see all tenants and today's usage-ceiling status end-to-end.
+
+---
+
+## Self-review notes (written against this plan, not a separate document)
+
+- **PRD coverage:** US-1/US-2 [Done, old model] → superseded by Stages 2-3
+  (feature computation + ML core, ported and adapted). US-3 (agent) →
+  Stage 8. US-4 (backend) → Stages 1-5, 7. US-5 (CLI) → Stage 8. US-6
+  (dashboard) → Stage 6 + 9. US-7 (control platform) → Stages 5, 6, 9.
+  US-8 (security review) → intentionally NOT a stage here, per PRD's own
+  note: run via `/sdlc use 4` once this plan is implemented, not before.
+  US-9 (real-AWS verification) → the "real-AWS checkpoint" notes on Stages
+  4 and 7 exist for this; full verification is the developer's to run,
+  same constraint as the old PLAN.md's Stage 3/6/7.
+- **Highest-risk item surfaced early, not late:** Stage 2 (telemetry
+  aggregation under the 25 WCU/RCU ceiling) and Stage 5 (usage-ceiling
+  warning) both come before the dashboard/UI polish work, per the
+  developer's explicit priority for this session.
+- **Known open decision, not silently resolved:** Stage 8's `enforcer.py`
+  mechanism is left explicitly open rather than guessed — it depends on
+  what kind of system a typical agent will sit in front of, which hasn't
+  been discussed yet.
+- **Hardening pass (2026-08-21), found and fixed before first approval:**
+  reviewing this plan against its own 0đ constraint surfaced four real
+  weaknesses, all fixed in the stages above, not just noted: (1) Stage 1's
+  table spec used `PAY_PER_REQUEST` billing, which has no Always-Free
+  allowance at all and would have billed from request one — changed to
+  `PROVISIONED` with an explicit ≤25 RCU/25 WCU account-wide budget; (2)
+  Stage 2's first draft wrote to DynamoDB once per raw log line and grew
+  `uris`/`user_agents` lists without bound — both defeated the stage's own
+  purpose and got more expensive exactly during a real attack; fixed by
+  aggregating in Lambda memory first (1 write/IP/batch) and switching to
+  fixed-size numeric fields only; (3) Stage 4's telemetry handler would
+  have read the ~238KB model item on every request (≈60 RCU, over budget
+  in a single call) — fixed with a module-level cache in `ModelManager`
+  across warm Lambda invocations; (4) a single fixed time bucket let an
+  attacker split volume across the bucket boundary to evade detection —
+  fixed with a two-bucket weighted sliding-window counter (Stage 2).
+- **Residual risk, documented rather than solved (no Always-Free AWS
+  primitive fully closes it):** the public Lambda Function URL has no
+  built-in request throttling once API Gateway (which had it) was dropped
+  for cost reasons (ADR-002). An anonymous flood of unauthenticated
+  requests still consumes Lambda's request-count quota and a small amount
+  of `Agents` table RCU on the auth check before failing with 401. This is
+  bounded, not catastrophic — Lambda's own per-request pricing beyond the
+  free tier is fractions of a cent per thousand requests, not the "vài đô
+  bất ngờ" the developer explicitly ruled out earlier — and Stage 5's
+  `UsageCounters`/ceiling-warning is the intended early-warning mechanism.
+  A stronger fix (CloudFront, WAF) is NOT Always-Free and is out of scope
+  under the confirmed constraint; if this risk becomes unacceptable later,
+  that trade-off needs a fresh conversation with the developer, not a
+  silent architecture change here.

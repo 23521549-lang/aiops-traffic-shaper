@@ -1,87 +1,122 @@
-# Data Model: Redis Key Schema
+# Data model — hybrid free model (DynamoDB)
 
-There is no relational database in this system — Redis is the single source
-of runtime state for both `ai_engine` and `worker_orchestrator` (see
-`docs/architecture.md`, "Tier 4 — State"). This document maps every key the
-code actually reads or writes (verified against source, not just the design
-docs) instead of a traditional ER diagram.
+> Supersedes the Redis-based schema for the abandoned single-org model. See
+> `docs/adr/002-tech-stack-hybrid.md` for why: no persistent server is
+> Always-Free forever on AWS, so all runtime state moves to DynamoDB
+> (Always Free: 25GB storage + 25 RCU/WCU, forever).
+>
+> **Billing mode: PROVISIONED, not on-demand.** The Always-Free allowance
+> only applies to provisioned capacity — on-demand (`PAY_PER_REQUEST`)
+> bills from the first request with no free tier at all. Every table below
+> (plus the `Agents.LastSeenIndex` GSI, billed separately from its base
+> table) is provisioned with an explicit RCU/WCU number that sums to ≤25/25
+> account-wide; see `docs/PLAN.md` Stage 1 for the exact per-table budget.
 
-## Key flow
+## Entity relationships
 
 ```mermaid
-flowchart LR
-    subgraph AI["AI Engine"]
-        T["POST /telemetry"]
-        M["ml/model.py"]
-        TR["ml/training.py"]
-    end
-    subgraph WO["Worker Orchestrator"]
-        MIT["POST /mitigate"]
-        BL["GET/DELETE /blocklist"]
-    end
-
-    T -->|"ZADD window:{ip}"| WIN[("window:{ip}\nSorted Set, TTL=window_ttl_seconds")]
-    T -->|"SISMEMBER"| REP[("reputation:blacklist\nSet, TTL=172800s")]
-    T --> M
-    M -->|"XADD"| SHADOW[("training:shadow_data\nStream, MAXLEN=redis_stream_maxlen, TTL=7d")]
-    TR -->|"XRANGE + SMEMBERS"| SHADOW
-    TR -->|"SMEMBERS"| EXCL[("training:excluded_ips\nSet")]
-    T -->|"HTTP mitigate call"| MIT
-    MIT -->|"SISMEMBER"| WL[("whitelist:ips\nSet, shared by both services")]
-    MIT -->|"SET mitigation:{ip} EX ttl"| MITK[("mitigation:{ip}\nString: rate_limited|blocked")]
-    BL -->|"SCAN mitigation:*"| MITK
-    BL -->|"SADD/SREM"| WL
+erDiagram
+    TENANT ||--o{ AGENT : "registers"
+    TENANT ||--o{ MODEL : "owns (per-tenant IsolationForest)"
+    TENANT ||--o{ MITIGATION_STATE : "has active decisions for"
+    TENANT ||--o{ WHITELIST : "excludes IPs via"
+    TENANT ||--o{ USAGE_COUNTER : "accrues"
+    AGENT  ||--o{ TELEMETRY_EVENT : "reports"
 ```
 
-## Keys
+## Tables
 
-| Key | Type | Written by | Read by | TTL / lifecycle |
-|---|---|---|---|---|
-| `window:{ip}` | Sorted Set (member=JSON log record, score=unix ts) | AI Engine `telemetry.py::store_logs_to_window` | AI Engine `ml/feature_engineering.py` (5s sliding window query) | `EXPIRE window_ttl_seconds` (default 10s) after every write; stale members pruned via `ZREMRANGEBYSCORE` on each batch |
-| `reputation:blacklist` | Set of IPs | `scripts/deploy.sh` step 10 (seeds from FireHOL Level 1) + `scripts/update-ip-reputation.sh` (daily CronJob, `k8s/reputation/cronjob.yaml`) | AI Engine `telemetry.py::check_ip_reputation` | `EXPIRE 172800` (2 days) reset on each reload |
-| `whitelist:ips` | Set of IPs | AI Engine `POST /whitelist`, Worker `POST /whitelist` | AI Engine (feature-vector skip — *not currently checked in telemetry.py, see gap below*), Worker `POST /mitigate` (skip check) | No TTL — manual add/remove only |
-| `training:excluded_ips` | Set of IPs | AI Engine `POST /whitelist` (added alongside `whitelist:ips`) | AI Engine `ml/training.py::_read_shadow_data` (excludes from training set) | No TTL |
-| `training:shadow_data` | Stream (fields: `remote_addr`, `score`, `features` (JSON list[float]), `ts`) | AI Engine `ml/training.py::store_shadow_vector`, called on every scored vector in `telemetry.py` | AI Engine `ml/training.py::run_baseline_training` / `run_daily_retrain` | `XADD ... MAXLEN redis_stream_maxlen approximate=True` (default 500,000) + `EXPIRE 7*24*3600` (7 days) reset on every write |
-| `mitigation:{ip}` | String (`"rate_limited"` or `"blocked"`) | Worker `POST /mitigate` | Worker `GET /blocklist` (via `SCAN mitigation:*`), `DELETE /blocklist/{ip}` | `EX tier1_ttl_seconds` (300s, Tier 1) or `EX tier2_ttl_seconds` (3600s, Tier 2) |
+### `Tenants`
+| Key | Attribute | Type | Notes |
+|---|---|---|---|
+| PK | `tenant_id` | S | ULID |
+| | `name` | S | |
+| | `contact_email` | S | |
+| | `created_at` | S | ISO 8601 |
+| | `status` | S | `active` \| `suspended` |
 
-Tier 2 (`blocked`) mitigations additionally patch the `nginx-blocklist`
-ConfigMap directly via the Kubernetes API (`orchestrator/configmap_patcher.py`)
-so Nginx enforces the deny rule — the Redis key is bookkeeping/TTL tracking
-for the blocklist API, not the enforcement mechanism itself for Tier 2.
-Tier 1 (`rate_limited`) currently has no enforcement side effect beyond the
-Redis key — see gap below.
+### `Agents`
+| Key | Attribute | Type | Notes |
+|---|---|---|---|
+| PK | `tenant_id` | S | |
+| SK | `agent_id` | S | ULID, generated at registration (CLI) |
+| | `registered_at` | S | |
+| | `last_seen_at` | S | updated on each telemetry batch |
+| | `agent_version` | S | |
+| | `api_key_hash` | S | hashed, never store plaintext |
+| | `status` | S | `active` \| `stale` \| `revoked` |
 
-## Gaps found while mapping this — resolved, implementation tracked in PLAN.md
+GSI `LastSeenIndex` (PK `status`, SK `last_seen_at`) — lets the Control
+Platform list stale/dead agents across all tenants without a table scan.
 
-1. **`whitelist:ips` is written by both services but only read by
-   `worker_orchestrator`.** `ai_engine/api/routes/telemetry.py` never checks
-   the whitelist before scoring/mitigating an IP — only the reputation
-   blacklist is checked pre-ML. A whitelisted IP still gets ML-scored and a
-   mitigation HTTP call is still sent to the Worker Orchestrator on every
-   anomalous batch (the Worker then correctly no-ops via its own whitelist
-   check). Functionally safe today, but wasteful and inconsistent with the
-   "feedback loop" in `docs/mlops-design.md`.
+### `Models`
+| Key | Attribute | Type | Notes |
+|---|---|---|---|
+| PK | `tenant_id` | S | |
+| SK | `stage_version` | S | `production`, `staging#<ts>`, `archive#<ts>` |
+| | `model_blob` | B | gzip(joblib.dump(IsolationForest)); **must stay under DynamoDB's 400KB item limit — verified at `n_estimators=50` ≈ 238KB gzip, see ADR-002** |
+| | `trained_at` | S | |
+| | `training_samples` | N | |
+| | `contamination` | N | |
+| | `score_mean` / `score_std` | N | |
+| | `features` | SS | feature name list, must match `feature_config.py` |
 
-   **Decision (2026-08-20):** hybrid fix, Stage 1 of `docs/PLAN.md`. Keep
-   feature computation + ML scoring running for every IP including
-   whitelisted ones (shadow stream / drift data must not be lost). Add the
-   whitelist check only at the mitigation-trigger boundary: in
-   `telemetry.py`, once an IP scores anomalous, `SISMEMBER whitelist:ips`
-   before sending the HTTP call to the Worker — skip the call if
-   whitelisted. Runs only on already-anomalous IPs, so no caching needed.
-   Add a `ai_whitelist_suppressed_total` Prometheus counter (how often ML
-   wanted to mitigate a whitelisted IP — a signal for threshold tuning).
+### `MitigationState`
+Replaces the old Redis TTL keys for active rate-limit/block decisions.
+| Key | Attribute | Type | Notes |
+|---|---|---|---|
+| PK | `tenant_id` | S | |
+| SK | `ip` | S | |
+| | `tier` | N | 0=normal, 1=rate-limit, 2=hard-block (same enum as `ml/model.py::AnomalyTier`) |
+| | `score` | N | IsolationForest decision score |
+| | `reason` | S | |
+| | `expires_at` | N | epoch seconds — set as the table's **native DynamoDB TTL attribute** (free auto-expiry, replaces Redis key TTL) |
 
-2. **Tier 1 (`rate_limited`) has no observed enforcement action** in
-   `worker_orchestrator/api/routes/mitigate.py` beyond setting the Redis key
-   — no ConfigMap patch, no Nginx signal, unlike Tier 2.
+### `Whitelist`
+| Key | Attribute | Type | Notes |
+|---|---|---|---|
+| PK | `tenant_id` | S | |
+| SK | `ip` | S | |
+| | `added_at` | S | |
+| | `added_by` | S | dashboard user or CLI |
 
-   **Decision (2026-08-20):** not intentional bookkeeping — build real
-   per-IP dynamic enforcement. New PLAN.md stage (Stage 2) right after
-   Stage 1: Nginx `geo`/`map`-driven `limit_req_zone` keyed off a
-   ConfigMap-mounted IP list, `configmap_patcher.py` generalized to a
-   single class with two instances (blocklist "deny IP;" format, ratelimit
-   "IP 1;" format), `mitigate.py` Tier 1 made symmetric with Tier 2 (patch +
-   reload), and the TTL cleanup job extended to remove expired Tier 1
-   entries from the ratelimit ConfigMap the same way it already does for
-   Tier 2. Full design in `docs/PLAN.md` Stage 2.
+### `TelemetryEvents`
+Not one item per request — one **aggregate item per (tenant, ip, time
+bucket)**, updated with atomic numeric `ADD` operations. An earlier draft
+stored one item per raw log line plus growing `uris`/`user_agents` lists;
+both were found to defeat the table's own purpose (WCU cost scaled with
+raw request volume — worst exactly during a real attack) and were replaced
+with this fixed-size design before Phase 2 sign-off. See `docs/PLAN.md`
+Stage 2 for the full aggregation code and the sliding-window-counter read
+pattern (current bucket + weighted previous bucket, closing the
+fixed-bucket-boundary evasion gap).
+| Key | Attribute | Type | Notes |
+|---|---|---|---|
+| PK | `tenant_ip` | S | `"{tenant_id}#{ip}"` |
+| SK | `bucket_start_ts` | N | epoch seconds, floored to the bucket size (default 5s) |
+| | `request_count`, `error_count`, `post_count` | N | atomic `ADD` per batch |
+| | `total_bytes`, `total_time` | N | atomic `ADD` per batch, sums for averaging |
+| | `distinct_uri_count`, `distinct_ua_count` | N | computed once per batch in Lambda memory, then `ADD`ed — bounded size regardless of traffic volume, unlike a stored list |
+| | `ttl` | N | native DynamoDB TTL, e.g. 1h — bounds storage growth automatically |
+
+### `UsageCounters`
+Exists specifically to protect the 0đ constraint — the Control Platform
+reads this to warn before any Always-Free ceiling (Lambda 1M req/month +
+400,000 GB-seconds; DynamoDB 25 RCU/WCU) is reached.
+| Key | Attribute | Type | Notes |
+|---|---|---|---|
+| PK | `date` | S | `YYYY-MM-DD` |
+| | `total_requests` | N | incremented per Lambda invocation |
+| | `estimated_gb_seconds` | N | |
+| | `dynamodb_consumed_rcu` / `_wcu` | N | |
+
+## Notes carried over from the old Redis design
+
+- Old `docs/schema.md` (Redis) documented sliding-window sorted sets for
+  per-IP feature computation. DynamoDB has no free equivalent range-query
+  primitive — Phase 3 must design the sliding window as explicit item
+  writes with a bounded SK range query (`event_ts BETWEEN`) against
+  `TelemetryEvents`, not assume it "just works" the same way.
+- `expires_at`/`ttl` fields are DynamoDB's native Time To Live feature
+  (item auto-deleted by AWS, no cost, best-effort within 48h) — this is the
+  direct replacement for Redis `EXPIRE`, not a new invention.

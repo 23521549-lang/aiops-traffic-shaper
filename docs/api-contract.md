@@ -1,126 +1,153 @@
-# API Contract
+# API Contract — hybrid backend (single Lambda, public-facing)
 
-Two internal services, not public-facing (both sit behind the Nginx proxy /
-K8s NetworkPolicy — see `docs/architecture.md` "Security Model"). Verified
-against actual route/schema code, not just design docs.
+> Supersedes the old two-internal-service contract (`worker_orchestrator` +
+> `ai_engine` behind a private K8s NetworkPolicy). The hybrid backend is a
+> **single public Lambda** behind a Function URL (see ADR-002), reached
+> directly by agents on the open internet plus two authenticated UIs.
+> Endpoints are namespaced by audience since there is no network boundary
+> to separate them anymore.
 
-## Overview (both services)
-- Base URL: `/api/v1` (plus unauthenticated `/health` and `/metrics` at root)
-- Auth: header `X-Internal-Token: <INTERNAL_SECRET>`, validated by
-  `core/security.py::verify_internal_token` via a FastAPI `Security`
-  dependency (`InternalAuth`). Missing or wrong token → `401`.
+## Overview
+- Base URL: one Lambda Function URL, e.g. `https://<id>.lambda-url.<region>.on.aws`
 - Format: JSON, UTF-8
-- Error envelope: FastAPI default — `{"detail": "<message>"}` on
-  `HTTPException` (404) and Pydantic's standard `{"detail": [...]}` array on
-  `422` validation errors. No custom error envelope exists in code — do not
-  assume the `{"error": {...}}` shape without confirming it's still wanted.
+- Error envelope: FastAPI default — `{"detail": "<message>"}` (404/other
+  `HTTPException`), Pydantic's `{"detail": [...]}` array on 422. Kept
+  identical to the old services' convention on purpose — no reason to change it.
+- Auth: two schemes, see below. No shared internal-network trust boundary
+  exists anymore (old `X-Internal-Token` model is gone) — every request must
+  authenticate itself.
+
+### Auth schemes
+| Scheme | Used by | How |
+|---|---|---|
+| Agent API key | `/agent/v1/*` | Header `X-Agent-Key: <tenant_id>.<api_key>`; validated against `Agents.api_key_hash` (ADR-002/schema.md) |
+| Cognito JWT | `/dashboard/v1/*`, `/admin/v1/*` | Header `Authorization: Bearer <id_token>`; `/admin/v1/*` additionally requires the Cognito `admin` group claim |
 
 ---
 
-## AI Engine (`services/ai_engine`)
+## Agent-facing (`/agent/v1`) — called by the lightweight agent on the tenant's own system
 
 | Method | Path | Description | Auth | Request body | Response 200 | Errors |
 |---|---|---|---|---|---|---|
-| GET | /health | Liveness probe | no | — | `{"status": "healthy"}` | — |
-| GET | /metrics | Prometheus exposition | no | — | text/plain metrics | — |
-| POST | /api/v1/telemetry | Ingest a batch of Nginx access-log records; runs reputation check → feature extraction → ML scoring → mitigation trigger | yes | `TelemetryBatch` | `TelemetryResponse` | 401, 422 |
-| POST | /api/v1/whitelist | Add IP to whitelist + training exclusion | yes | `WhitelistRequest` | `{"message": str}` | 401, 422 (invalid IP) |
-| DELETE | /api/v1/whitelist/{ip} | Remove IP from whitelist | yes | — | `{"message": str}` | 401, 404 |
-| GET | /api/v1/whitelist | List whitelisted + training-excluded IPs | yes | — | `{"whitelisted_ips": str[], "training_excluded": str[]}` | 401 |
-| DELETE | /api/v1/whitelist/{ip}/training-exclusion | Re-include an IP in future training (does not un-whitelist it) | yes | — | `{"message": str}` | 401, 404 |
-| GET | /api/v1/model/status | Current model metadata + shadow-mode flag | yes | — | see schema below | 401 |
-| POST | /api/v1/model/retrain | Fire-and-forget manual retrain (`asyncio.create_task`, response returns immediately) | yes | — | `{"message": str}` | 401 |
-| POST | /api/v1/model/promote | Promote staging model to production if one exists | yes | — | `{"message": str}` | 401 |
+| POST | /agent/v1/register | One-time registration, issued via the CLI at install time | Cognito JWT (tenant owner, interactive) | `AgentRegisterRequest` | `AgentRegisterResponse` (api_key shown once) | 401, 422 |
+| POST | /agent/v1/telemetry | Batch-ingest request metadata; runs feature extraction → per-tenant model scoring → mitigation decision | Agent API key | `TelemetryBatch` | `TelemetryResponse` (includes per-IP decisions to enforce locally) | 401, 422 |
+| GET | /agent/v1/decisions | Pull current active mitigation state for this tenant (used on agent restart/reconnect, so enforcement survives a crash without waiting for new telemetry) | Agent API key | — | `MitigationState[]` | 401 |
 
-### Schemas
+## Dashboard-facing (`/dashboard/v1`) — end user, tenant-scoped only
+
+| Method | Path | Description | Auth | Request body | Response 200 | Errors |
+|---|---|---|---|---|---|---|
+| GET | /dashboard/v1/mitigations | Active rate-limit/block decisions for the caller's own tenant | Cognito JWT | — | `MitigationState[]` | 401 |
+| GET | /dashboard/v1/whitelist | List whitelisted IPs | Cognito JWT | — | `{"whitelisted_ips": str[]}` | 401 |
+| POST | /dashboard/v1/whitelist | Add IP to whitelist + training exclusion | Cognito JWT | `WhitelistRequest` | `{"message": str}` | 401, 422 |
+| DELETE | /dashboard/v1/whitelist/{ip} | Remove IP from whitelist | Cognito JWT | — | `{"message": str}` | 401, 404 |
+| GET | /dashboard/v1/model/status | This tenant's own model metadata | Cognito JWT | — | `ModelStatus` | 401 |
+
+## Control-Platform-facing (`/admin/v1`) — publisher only, cross-tenant
+
+| Method | Path | Description | Auth | Request body | Response 200 | Errors |
+|---|---|---|---|---|---|---|
+| GET | /admin/v1/tenants | List all tenants | Cognito JWT (admin group) | — | `Tenant[]` | 401, 403 |
+| GET | /admin/v1/agents | List all agents across tenants, via `Agents.LastSeenIndex` GSI (schema.md) | Cognito JWT (admin group) | — | `AgentSummary[]` | 401, 403 |
+| GET | /admin/v1/usage | Today's + recent `UsageCounters` vs. Always-Free ceilings (Lambda 1M req / 400,000 GB-s per month, DynamoDB 25 RCU/WCU) | Cognito JWT (admin group) | — | `UsageReport` | 401, 403 |
+| POST | /admin/v1/tenants/{tenant_id}/suspend | Suspend a tenant (abuse control — protects the shared 0đ backend from one tenant's runaway traffic) | Cognito JWT (admin group) | — | `{"message": str}` | 401, 403, 404 |
+
+## Health
+
+| Method | Path | Description | Auth |
+|---|---|---|---|
+| GET | /health | Liveness | no |
+
+---
+
+## Schemas
 
 ```yaml
-LogRecord:                    # one raw Nginx access-log entry
+# --- Agent ---
+AgentRegisterRequest:
+  agent_label: string           # human-readable, e.g. "prod-web-1"
+
+AgentRegisterResponse:
+  tenant_id: string
+  agent_id: string
+  api_key: string                # shown once, not retrievable again — matches Agents.api_key_hash
+
+LogRecord:                       # carried over from the old TelemetryBatch shape, unchanged
   time_iso8601: string
   remote_addr: string
   request_method: string
   request_uri: string
-  status: string               # coerced from int if needed
-  body_bytes_sent: string       # coerced from int if needed
-  request_time: string          # coerced from float if needed
+  status: string
+  body_bytes_sent: string
+  request_time: string
   http_user_agent: string
 
 TelemetryBatch:
   logs: LogRecord[]
 
 TelemetryResponse:
-  received: int                # logs received in this batch
-  processed_ips: int            # ML-processed + reputation-blocked count
-  message: string                # human-readable summary incl. circuit breaker state
+  received: int
+  processed_ips: int
+  decisions: MitigationState[]   # NEW vs. old contract — agent enforces these locally, no separate /mitigate call
+
+# --- Mitigation / shared ---
+MitigationState:                 # mirrors the DynamoDB MitigationState item, schema.md
+  ip: string
+  tier: int                      # 0=normal, 1=rate-limit, 2=hard-block
+  score: float
+  reason: string
+  expires_at: int                 # epoch seconds
 
 WhitelistRequest:
-  ip: string                    # validated via ipaddress.ip_address, 422 on invalid
+  ip: string                      # validated via ipaddress.ip_address, 422 on invalid
   reason: string = ""
 
-ModelStatus:                   # GET /model/status response, untyped dict in code
+ModelStatus:
   model_ready: bool
   shadow_mode: bool
   version: string | null
-  trained_at: string | null      # ISO 8601
+  trained_at: string | null
   training_samples: int | null
   contamination: float | null
   score_mean: float | null
   score_std: float | null
+
+# --- Control Platform ---
+Tenant:
+  tenant_id: string
+  name: string
+  status: string                  # active | suspended
+  created_at: string
+
+AgentSummary:
+  tenant_id: string
+  agent_id: string
+  agent_version: string
+  status: string                  # active | stale | revoked
+  last_seen_at: string
+
+UsageReport:
+  date: string
+  total_requests: int
+  estimated_gb_seconds: float
+  dynamodb_consumed_rcu: float
+  dynamodb_consumed_wcu: float
+  ceiling_warning: bool           # true if any dimension is above an alert threshold (Phase 3 to define, e.g. 80%)
 ```
-
----
-
-## Worker Orchestrator (`services/worker_orchestrator`)
-
-| Method | Path | Description | Auth | Request body | Response 200 | Errors |
-|---|---|---|---|---|---|---|
-| GET | /health | Liveness probe | no | — | `{"status": "healthy"}` | — |
-| GET | /metrics | Prometheus exposition | no | — | text/plain metrics | — |
-| POST | /api/v1/mitigate | Apply Tier 1 (rate-limit key) or Tier 2 (ConfigMap deny rule + Nginx reload) mitigation; no-ops if IP is whitelisted | yes | `MitigationRequest` | `MitigationResponse` | 401, 422 |
-| GET | /api/v1/blocklist | List active mitigations (scans `mitigation:*`) | yes | — | `BlocklistEntry[]` | 401 |
-| DELETE | /api/v1/blocklist/{ip} | Manually remove a mitigation (deletes key + removes ConfigMap deny rule + reloads Nginx) | yes | — | `{"message": str}` | 401, 404 |
-| POST | /api/v1/whitelist | Add IP to whitelist (this service's own copy of the endpoint — same Redis key as AI Engine's) | yes | `WhitelistRequest` | `{"message": str}` | 401, 422 |
-| DELETE | /api/v1/whitelist/{ip} | Remove IP from whitelist | yes | — | `{"message": str}` | 401, 404 |
-| GET | /api/v1/whitelist | List whitelisted IPs | yes | — | `{"whitelisted_ips": str[]}` | 401 |
-
-### Schemas
-
-```yaml
-MitigationTier:                # IntEnum
-  RATE_LIMIT: 1
-  HARD_BLOCK: 2
-
-MitigationRequest:
-  target_ip: string             # validated via ipaddress.ip_address, 422 on invalid
-  reason: string
-  tier: MitigationTier = 1       # RATE_LIMIT default
-
-MitigationResponse:
-  target_ip: string
-  tier: int
-  action: string                 # "skipped" | "rate_limited" | "blocked"
-  ttl_seconds: int
-  whitelisted: bool = false
-  message: string
-
-BlocklistEntry:
-  ip: string
-  tier: int                      # 1 or 2, derived from Redis value
-  ttl_remaining: int             # seconds, from Redis TTL
-```
-
-Note: this service duplicates the AI Engine's `/whitelist` endpoints against
-the same `whitelist:ips` Redis key, but without the
-`training:excluded_ips` side effect (that concept only exists in AI Engine).
-Calling `POST /whitelist` on the Worker Orchestrator will NOT exclude the IP
-from ML training — only the AI Engine's `/whitelist` endpoint does that. Two
-separate entry points writing the same key with different side effects is a
-latent footgun; flagged for `docs/PLAN.md`.
 
 ## Conventions
-- No pagination on any list endpoint (`/whitelist`, `/blocklist`) — both
-  return unbounded lists today. Fine at current scale (Redis Set/SCAN), would
-  need addressing if reputation/blocklist counts grow large.
-- No API versioning beyond the static `/v1` prefix — no version negotiation.
-- No idempotency keys — not needed given the mutation shapes (Set add/remove,
-  key set-with-TTL are naturally idempotent).
+- No pagination on `/admin/v1/tenants` or `/admin/v1/agents` yet — carried
+  over as a known gap from the old contract; revisit once tenant count is
+  large enough for it to matter (same call as before, not re-litigated).
+- No API versioning beyond the static `/v1` prefix per audience namespace.
+- Idempotency: agent registration is a one-time interactive action (not
+  retried automatically); telemetry ingestion is naturally idempotent per
+  event (`event_ts` in `TelemetryEvents`, schema.md).
+
+## Open item carried from the old contract
+
+The old contract flagged that `worker_orchestrator` and `ai_engine` both
+wrote the same `whitelist:ips` Redis key with different side effects (only
+one excluded from training) — a latent footgun. The hybrid contract
+collapses both into a single `/dashboard/v1/whitelist` endpoint precisely
+to remove this footgun, not carry it forward.

@@ -1,7 +1,10 @@
 # ADR-001: Tech stack (retro-documented, brownfield confirmation)
 
 - **Date:** 2026-08-20
-- **Status:** accepted
+- **Status:** superseded by ADR-002 (2026-08-21 — project pivoted from
+  "self-managed K8s cluster protecting one org's own AWS bill" to a free
+  hybrid product; this stack/infra is kept as reference for reusable ML
+  logic only, not as the current target architecture)
 
 ## Context
 
