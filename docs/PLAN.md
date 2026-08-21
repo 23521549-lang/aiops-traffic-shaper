@@ -169,7 +169,28 @@ def get_dynamo_resource():
 
 ```python
 # services/backend/core/tables.py
+from decimal import Decimal
+
 from botocore.exceptions import ClientError
+
+
+def _to_dynamo_safe(value):
+    """boto3's DynamoDB resource API rejects native Python float ('Float
+    types are not supported. Use Decimal types instead.') — found by
+    actually running Stage 2's tests against moto, not something the plan
+    anticipated on paper. Converts via str() to avoid binary-float
+    artifacts. Applied recursively so every table that stores a float
+    (this stage's total_time, Stage 3's model metadata, Stage 4's
+    mitigation score, Stage 5's estimated_gb_seconds) is safe without
+    repeating this at every call site."""
+    if isinstance(value, float):
+        return Decimal(str(value))
+    if isinstance(value, dict):
+        return {k: _to_dynamo_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_dynamo_safe(v) for v in value]
+    return value
+
 
 # IMPORTANT: DynamoDB's Always-Free-forever allowance (25 RCU + 25 WCU,
 # account-wide, across every table AND every GSI) applies ONLY to
@@ -259,7 +280,7 @@ class _SimpleTable:
         self._table = resource.Table(self._table_name)
 
     def put(self, **item) -> None:
-        self._table.put_item(Item=item)
+        self._table.put_item(Item=_to_dynamo_safe(item))
 
     def get(self, **key) -> dict | None:
         resp = self._table.get_item(Key={k: key[k] for k in self._key_names})
@@ -476,7 +497,7 @@ class TelemetryEventsTable(_SimpleTable):
             ExpressionAttributeValues={
                 ":rc": agg["request_count"], ":ec": agg["error_count"],
                 ":pc": agg["post_count"], ":tb": agg["total_bytes"],
-                ":tt": agg["total_time"], ":du": agg["distinct_uri_count"],
+                ":tt": _to_dynamo_safe(agg["total_time"]), ":du": agg["distinct_uri_count"],
                 ":da": agg["distinct_ua_count"],
                 ":ttl": bucket_start_ts + ttl_seconds,
             },
@@ -630,6 +651,16 @@ this is the number that must stay far below the 5 WCU provisioned on
 sliding-window-counter closes the fixed-bucket evasion gap). Re-check the
 WCU number against real traffic estimates before Stage 8 (agent) goes live
 for real users.
+
+**Found while actually running this stage (2026-08-21):** boto3's
+DynamoDB resource API raises `TypeError: Float types are not supported.
+Use Decimal types instead.` on any native Python float — code in this plan
+had never been executed before this pass. Fixed with a recursive
+`_to_dynamo_safe()` helper in `core/tables.py`, applied in `_SimpleTable.put()`
+and `TelemetryEventsTable.add_aggregate()`. Every later stage that stores a
+float (Stage 3 model metadata, Stage 4 mitigation score, Stage 5 usage
+GB-seconds) inherits this fix automatically through `put()` — do not
+special-case it again per table.
 
 ---
 
@@ -806,6 +837,19 @@ rewrite):
 - `ModelManager` gets a class-level `_cache: dict[str, IsolationForest] = {}`
   shared by every instance in the container. `load(resource, tenant_id)`
   checks `_cache` first; only calls `registry.load_model` on a cache miss.
+  **Import `registry` as a module (`from services.backend.ml import
+  registry`) and call `registry.load_model(...)`, not `from ...registry
+  import load_model`** — found while writing this stage's cache test: a
+  `from module import name` binds a local reference at import time, so
+  `monkeypatch.setattr(registry, "load_model", ...)` in a test silently
+  doesn't affect the already-bound name inside `model.py`. Qualified
+  access is also just better practice here regardless of testing.
+- `score_vectors()` is synchronous, not `async def` — the old `ai_engine`
+  version used `anyio.to_thread.run_sync` because it ran inside a
+  long-lived async FastAPI app. A single Mangum-wrapped Lambda invocation
+  has no such event loop to protect; Starlette runs sync routes in a
+  threadpool automatically, so the async wrapper added nothing here and
+  was dropped during the port.
   **Explicit trade-off, not an oversight:** this means a warm container can
   keep serving a stale model for up to that container's lifetime after a
   retrain promotes a new version (Stage 7) — no version-check read is
@@ -816,9 +860,16 @@ rewrite):
   platform action rather than a per-request check.
 - `reload()` clears this tenant's cache entry and calls `load()` again —
   used by the manual-retrain path only, not the hot path.
-- `training.py`: change `IsolationForest(n_estimators=100, ...)` to
-  `IsolationForest(n_estimators=50, ...)` (ADR-002 measured constraint) and
-  thread a `tenant_id` param through `save_model`'s call.
+- `training.py` is NOT a line-for-line port — the old file's shadow-data
+  collection (Redis `XADD`/`XRANGE` stream) and `AsyncIOScheduler` wiring
+  don't exist in Lambda (no long-lived process to run a scheduler in).
+  Stage 3 ships a narrower `train_and_save(resource, tenant_id,
+  feature_vectors: list[list[float]], stage="staging", contamination=0.01)
+  -> ModelMetadata | None` — given already-collected vectors, train
+  `IsolationForest(n_estimators=50, ...)` (ADR-002 measured constraint)
+  and save via `registry.save_model`. Collecting those vectors from
+  `TelemetryEvents` and looping every tenant on a schedule is Stage 7's
+  job (EventBridge entry point), not duplicated here.
 - Remove the old `feature_config.py` import (`get_enabled_feature_names`,
   `get_feature_count`) — Stage 2's `feature_engineering.py` already has
   `FEATURE_NAMES` as a fixed module-level constant; use that directly
@@ -849,7 +900,12 @@ def test_model_manager_only_reads_dynamodb_once_across_warm_calls(dynamo_resourc
     registry.save_model(dynamo_resource, "t-1", model, registry.ModelMetadata(
         version="v1", trained_at="2026-08-21T00:00:00Z", training_samples=200,
         contamination=0.05, score_mean=0.0, score_std=1.0,
-        features=["request_rate"], stage="production"))
+        features=["request_rate"], stage="production"), stage="production")
+    # NOTE: `stage=` kwarg to save_model controls the actual DynamoDB
+    # stage_version key — it does NOT read metadata.stage. Passing only
+    # metadata.stage="production" without also passing stage="production"
+    # here silently saves under "staging" instead (found while writing
+    # this test).
 
     ModelManager._cache.clear()  # simulate a fresh cold start
     read_count = {"n": 0}
@@ -858,6 +914,10 @@ def test_model_manager_only_reads_dynamodb_once_across_warm_calls(dynamo_resourc
         read_count["n"] += 1
         return original(*a, **kw)
     monkeypatch.setattr(registry, "load_model", _counting_load)
+    # NOTE: this monkeypatch only works because model.py calls
+    # registry.load_model(...) (qualified), not a bare load_model() bound
+    # via `from ...registry import load_model` at import time — see the
+    # note on Step 6 above.
 
     mgr1 = ModelManager()
     mgr1.load(dynamo_resource, "t-1")
