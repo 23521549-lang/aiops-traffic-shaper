@@ -1,4 +1,23 @@
+from decimal import Decimal
+
 from botocore.exceptions import ClientError
+
+
+def _to_dynamo_safe(value):
+    """boto3's DynamoDB resource API rejects native Python float ('Float
+    types are not supported. Use Decimal types instead.') — found by
+    actually running Stage 2's tests against moto, not anticipated in the
+    hand-written plan. Converts via str() to avoid binary-float artifacts
+    (e.g. Decimal(0.05) != Decimal("0.05")). Applied recursively so every
+    table that stores a float (this one's total_time, later ones' score/
+    contamination/etc.) is safe without repeating this at every call site."""
+    if isinstance(value, float):
+        return Decimal(str(value))
+    if isinstance(value, dict):
+        return {k: _to_dynamo_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_dynamo_safe(v) for v in value]
+    return value
 
 # IMPORTANT: DynamoDB's Always-Free-forever allowance (25 RCU + 25 WCU,
 # account-wide, across every table AND every GSI) applies ONLY to
@@ -89,7 +108,7 @@ class _SimpleTable:
         self._table = resource.Table(self._table_name)
 
     def put(self, **item) -> None:
-        self._table.put_item(Item=item)
+        self._table.put_item(Item=_to_dynamo_safe(item))
 
     def get(self, **key) -> dict | None:
         resp = self._table.get_item(Key={k: key[k] for k in self._key_names})
@@ -148,7 +167,7 @@ class TelemetryEventsTable(_SimpleTable):
             ExpressionAttributeValues={
                 ":rc": agg["request_count"], ":ec": agg["error_count"],
                 ":pc": agg["post_count"], ":tb": agg["total_bytes"],
-                ":tt": agg["total_time"], ":du": agg["distinct_uri_count"],
+                ":tt": _to_dynamo_safe(agg["total_time"]), ":du": agg["distinct_uri_count"],
                 ":da": agg["distinct_ua_count"],
                 ":ttl": bucket_start_ts + ttl_seconds,
             },
