@@ -26,12 +26,19 @@ def agent_auth(x_agent_key: str | None = Header(default=None),
         raise HTTPException(status_code=401, detail="Missing X-Agent-Key")
 
     try:
-        tenant_id, key_part = x_agent_key.split(".", 1)
+        tenant_id, raw_key = x_agent_key.split(".", 1)
     except ValueError:
         raise HTTPException(status_code=401, detail="Malformed X-Agent-Key")
 
+    # Found while wiring up Stage 8's /agent/v1/register (the first real
+    # caller to send a RAW key rather than a hash a test hardcoded by
+    # hand): this comparison used to check `api_key_hash == raw_key`
+    # directly — the client's raw key can never equal its own hash, so
+    # every legitimately registered agent would have failed auth here.
+    # hash_api_key() existed but was never actually called.
+    key_hash = hash_api_key(raw_key)
     agents = AgentsTable(resource).query_by_tenant(tenant_id)
     for agent in agents:
-        if agent.get("api_key_hash") == key_part and agent.get("status") == "active":
+        if agent.get("api_key_hash") == key_hash and agent.get("status") == "active":
             return tenant_id
     raise HTTPException(status_code=401, detail="Invalid agent key")

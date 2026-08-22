@@ -1,14 +1,51 @@
+import secrets
+import time
+import uuid
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends
 
-from services.backend.api.dependencies import agent_auth
+from services.backend.api.cognito_auth import dashboard_auth
+from services.backend.api.dependencies import agent_auth, hash_api_key
 from services.backend.core.dynamo import get_dynamo_resource
-from services.backend.core.tables import MitigationStateTable, WhitelistTable
+from services.backend.core.tables import AgentsTable, MitigationStateTable, WhitelistTable
 from services.backend.ml.feature_engineering import compute_features_for_ip, record_batch
 from services.backend.ml.model import AnomalyTier, ModelManager, classify_score
+from services.backend.schemas.agent_register import AgentRegisterRequest, AgentRegisterResponse
 from services.backend.schemas.mitigation import MitigationState
 from services.backend.schemas.telemetry import TelemetryBatch, TelemetryResponse
 
 router = APIRouter()
+
+
+@router.post("/agent/v1/register", response_model=AgentRegisterResponse)
+def register_agent(
+    body: AgentRegisterRequest,
+    tenant_id: str = Depends(dashboard_auth),  # the tenant owner, not the agent itself — the
+    # agent has no credentials yet at this point, that's the whole point of this endpoint
+    resource=Depends(get_dynamo_resource),
+) -> AgentRegisterResponse:
+    agent_id = uuid.uuid4().hex
+    raw_api_key = secrets.token_urlsafe(32)
+    now = datetime.now(timezone.utc).isoformat()
+
+    AgentsTable(resource).put(
+        tenant_id=tenant_id, agent_id=agent_id, agent_label=body.agent_label,
+        registered_at=now, last_seen_at=now, agent_version="unknown",
+        api_key_hash=hash_api_key(raw_api_key), status="active",
+    )
+
+    return AgentRegisterResponse(tenant_id=tenant_id, agent_id=agent_id, api_key=raw_api_key)
+
+# Found while designing Stage 8's agent enforcer: this route previously
+# hardcoded expires_at=0 for every decision, so an agent enforcing these
+# locally would have no real TTL to schedule an auto-unblock from — every
+# block would be effectively permanent until manually cleared. Real,
+# tier-dependent expiry, computed here where the tier is decided.
+_TTL_SECONDS = {
+    AnomalyTier.RATE_LIMIT: 300,     # 5 min — soft, re-evaluated often
+    AnomalyTier.HARD_BLOCK: 3600,    # 1 hour — harder, longer cooldown
+}
 
 
 @router.post("/agent/v1/telemetry", response_model=TelemetryResponse)
@@ -40,7 +77,8 @@ def ingest_telemetry(
                 continue
             state = MitigationState(
                 ip=v.remote_addr, tier=int(tier), score=score,
-                reason="behavioral_anomaly", expires_at=0,
+                reason="behavioral_anomaly",
+                expires_at=int(time.time()) + _TTL_SECONDS[tier],
             )
             MitigationStateTable(resource).put(tenant_id=tenant_id, **state.model_dump())
             decisions.append(state)
