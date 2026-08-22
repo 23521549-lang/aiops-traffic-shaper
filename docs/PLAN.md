@@ -1314,12 +1314,48 @@ publisher gets a warning before a ceiling is hit, not an AWS bill after.
   share of the monthly Lambda ceiling — exact allocation strategy is a
   Phase-3-tunable constant, not re-derived here).
 
-- [ ] **Step 1: Write the failing test**
+**Design corrections made before/while writing this stage (this plan code
+had never been executed):**
+1. `record_invocation` must NOT call `resource.Table("UsageCounters").update_item(...)`
+   directly — `estimated_gb_seconds` is a float, and a raw `update_item`
+   call bypasses `_to_dynamo_safe`, hitting the exact "Float types are not
+   supported" error Stage 2 already found and fixed once. Fixed by adding
+   a `UsageCountersTable(_SimpleTable)` class (`core/tables.py`) with an
+   `add_invocation()` method that goes through the shared `update()`
+   helper (Stage 1/2's review fix), same as every other table.
+2. The middleware code below originally referenced a module-level
+   `_resource` variable from `main.py` — that variable no longer exists
+   after Stage 4's redesign (FastAPI `Depends(get_dynamo_resource)`
+   replaced it). Middleware runs outside FastAPI's dependency-injection
+   call graph, so it does NOT automatically honor
+   `app.dependency_overrides` the way a route parameter does; a naive
+   `get_dynamo_resource()` call in middleware would hit the real
+   (unreachable in tests) resource even when a test has overridden it for
+   every route. Fixed with a small `_resolve_resource(request)` helper
+   that checks `request.app.dependency_overrides` manually.
+
+- [ ] **Step 1: Add `UsageCountersTable` to `core/tables.py`**
+
+```python
+# append to services/backend/core/tables.py
+class UsageCountersTable(_SimpleTable):
+    _table_name = "UsageCounters"
+    _key_names = ("date",)
+
+    def add_invocation(self, date: str, estimated_gb_seconds: float) -> None:
+        self.update(
+            key={"date": date},
+            update_expression="ADD total_requests :one, estimated_gb_seconds :gbs",
+            expr_values={":one": 1, ":gbs": estimated_gb_seconds},
+        )
+```
+
+- [ ] **Step 2: Write the failing test**
 
 ```python
 # services/backend/tests/test_usage.py
-from services.backend.core.tables import create_all_tables
-from services.backend.core.usage import record_invocation, get_usage_report
+from services.backend.core.tables import UsageCountersTable, create_all_tables
+from services.backend.core.usage import _today, get_usage_report, record_invocation
 
 def test_record_invocation_increments_counter(dynamo_resource):
     create_all_tables(dynamo_resource)
@@ -1330,25 +1366,32 @@ def test_record_invocation_increments_counter(dynamo_resource):
     assert round(report.estimated_gb_seconds, 2) == 0.10
 
 def test_ceiling_warning_flips_true_near_daily_share(dynamo_resource):
+    # Seed the counter directly in one write instead of looping ~28,000
+    # individual record_invocation() calls (the original version of this
+    # test) — that loop is real per-call moto overhead and takes long
+    # enough to time out a normal test run. Same threshold logic either way.
     create_all_tables(dynamo_resource)
     daily_share = 1_000_000 / 30
-    for _ in range(int(daily_share * 0.85)):
-        record_invocation(dynamo_resource, estimated_gb_seconds=0.0)
+    UsageCountersTable(dynamo_resource).put(
+        date=_today(), total_requests=int(daily_share * 0.85), estimated_gb_seconds=0.0,
+    )
     report = get_usage_report(dynamo_resource, date=None)
     assert report.ceiling_warning is True
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Run test to verify it fails**
 
 Run: `cd services/backend && python -m pytest tests/test_usage.py -v`
 Expected: FAIL with `ModuleNotFoundError`
 
-- [ ] **Step 3: Implement `core/usage.py`**
+- [ ] **Step 4: Implement `core/usage.py`**
 
 ```python
 # services/backend/core/usage.py
-from datetime import datetime, timezone
 from dataclasses import dataclass
+from datetime import datetime, timezone
+
+from services.backend.core.tables import UsageCountersTable
 
 _DAILY_REQUEST_CEILING = 1_000_000 / 30
 _WARNING_RATIO = 0.8
@@ -1369,18 +1412,12 @@ def _today() -> str:
 
 
 def record_invocation(resource, estimated_gb_seconds: float = 0.0) -> None:
-    table = resource.Table("UsageCounters")
-    table.update_item(
-        Key={"date": _today()},
-        UpdateExpression="ADD total_requests :one, estimated_gb_seconds :gbs",
-        ExpressionAttributeValues={":one": 1, ":gbs": estimated_gb_seconds},
-    )
+    UsageCountersTable(resource).add_invocation(_today(), estimated_gb_seconds)
 
 
 def get_usage_report(resource, date: str | None) -> UsageReport:
     d = date or _today()
-    table = resource.Table("UsageCounters")
-    item = table.get_item(Key={"date": d}).get("Item", {})
+    item = UsageCountersTable(resource).get(date=d) or {}
     total = int(item.get("total_requests", 0))
     return UsageReport(
         date=d,
@@ -1392,59 +1429,98 @@ def get_usage_report(resource, date: str | None) -> UsageReport:
     )
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 5: Run test to verify it passes**
 
 Run: `cd services/backend && python -m pytest tests/test_usage.py -v`
-Expected: PASS (2 tests)
-
-- [ ] **Step 5: Wire into `main.py` as middleware**
-
-```python
-# services/backend/main.py — add after `app = FastAPI()`
-from services.backend.core.usage import record_invocation
-
-@app.middleware("http")
-async def track_usage(request, call_next):
-    response = await call_next(request)
-    record_invocation(_resource)
-    return response
-```
+Expected: PASS (4 tests)
 
 - [ ] **Step 6: Implement `/admin/v1/usage` route**
 
 ```python
 # services/backend/api/routes/admin_usage.py
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-from services.backend.core.usage import get_usage_report
+from services.backend.core.dynamo import get_dynamo_resource
+from services.backend.core.usage import UsageReport, get_usage_report
+
+router = APIRouter()
 
 
-def build_admin_usage_router(resource) -> APIRouter:
-    r = APIRouter()
-
-    @r.get("/admin/v1/usage")
-    def usage():
-        return get_usage_report(resource, date=None)
-
-    return r
+@router.get("/admin/v1/usage", response_model=UsageReport)
+def usage(resource=Depends(get_dynamo_resource)) -> UsageReport:
+    # NOT auth-gated yet — Cognito admin-group auth is a Stage 6
+    # deliverable. Do not expose this route in a real deployment before
+    # Stage 6 adds that dependency.
+    return get_usage_report(resource, date=None)
 ```
 
-Register it in `main.py`: `app.include_router(build_admin_usage_router(_resource))`
-— auth (Cognito admin group) is added in Stage 6 once the auth dependency
-exists; do not ship this route publicly without it.
+- [ ] **Step 7: Wire into `main.py`: register the router and add usage-tracking middleware**
 
-- [ ] **Step 7: Commit**
+```python
+# services/backend/main.py — additions
+from services.backend.api.routes.admin_usage import router as admin_usage_router
+from services.backend.core.dynamo import get_dynamo_resource
+from services.backend.core.usage import record_invocation
+
+app.include_router(admin_usage_router)
+
+
+def _resolve_resource(request):
+    override = request.app.dependency_overrides.get(get_dynamo_resource)
+    return override() if override else get_dynamo_resource()
+
+
+@app.middleware("http")
+async def track_usage(request, call_next):
+    response = await call_next(request)
+    record_invocation(_resolve_resource(request))
+    return response
+```
+
+Note the ordering: the increment happens AFTER `call_next()` returns, so a
+request never sees its own increment in its own response (verified by a
+test — `GET /admin/v1/usage` right after one `GET /health` reports 1, not
+2). A one-request lag on an approximate ceiling-warning number is
+harmless; documented so it isn't mistaken for a bug later.
+
+- [ ] **Step 8: Write route-level tests and commit**
+
+```python
+# services/backend/tests/test_admin_usage.py
+from fastapi.testclient import TestClient
+
+from services.backend.core.dynamo import get_dynamo_resource
+from services.backend.core.tables import create_all_tables
+from services.backend.core.usage import get_usage_report
+from services.backend.main import app
+
+def _client(dynamo_resource):
+    create_all_tables(dynamo_resource)
+    app.dependency_overrides[get_dynamo_resource] = lambda: dynamo_resource
+    return TestClient(app)
+
+def test_usage_middleware_increments_on_every_request(dynamo_resource):
+    client = _client(dynamo_resource)
+    client.get("/health")
+    client.get("/health")
+    report = get_usage_report(dynamo_resource, date=None)
+    assert report.total_requests == 2
+```
+
+Run: `cd services/backend && python -m pytest tests/test_usage.py tests/test_admin_usage.py -v`
+Expected: PASS (6 tests)
 
 ```bash
-git add services/backend/core/usage.py services/backend/api/routes/admin_usage.py \
-        services/backend/main.py services/backend/tests/test_usage.py
+git add services/backend/core/usage.py services/backend/core/tables.py \
+        services/backend/api/routes/admin_usage.py services/backend/main.py \
+        services/backend/tests/test_usage.py services/backend/tests/test_admin_usage.py
 git commit -m "feat(backend): usage counters + free-tier ceiling warning"
 ```
 
 **Checkpoint (stage done when):**
-`cd services/backend && python -m pytest tests/test_usage.py -v` passes.
-Manually confirm `track_usage` middleware fires on every request by hitting
-`/health` twice in a test and checking `UsageCounters` incremented by 2.
+`cd services/backend && python -m pytest tests/ -v` passes locally (moto),
+including the automated middleware-fires-on-every-request test above (no
+manual verification needed — it's a real assertion, not a spot check).
 
 ---
 

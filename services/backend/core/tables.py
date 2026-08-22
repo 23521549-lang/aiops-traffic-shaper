@@ -262,3 +262,22 @@ class ModelsTable(_SimpleTable):
                 f"{self.MAX_BLOB_BYTES} — reduce n_estimators (see ADR-002)"
             )
         self.put(tenant_id=tenant_id, stage_version=stage_version, model_blob=blob, **metadata)
+
+
+class UsageCountersTable(_SimpleTable):
+    _table_name = "UsageCounters"
+    _key_names = ("date",)
+
+    def add_invocation(self, date: str, estimated_gb_seconds: float) -> None:
+        """Atomic ADD via the shared `update()` helper — NOT a raw
+        `resource.Table(...).update_item(...)` call. `estimated_gb_seconds`
+        is a float; without routing through `update()` (which applies
+        `_to_dynamo_safe`), this hits the exact 'Float types are not
+        supported' error Stage 2 already found and fixed once — found on
+        review before writing any Stage 5 code, since the first draft of
+        this method used update_item directly."""
+        self.update(
+            key={"date": date},
+            update_expression="ADD total_requests :one, estimated_gb_seconds :gbs",
+            expr_values={":one": 1, ":gbs": estimated_gb_seconds},
+        )
