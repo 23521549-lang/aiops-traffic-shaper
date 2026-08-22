@@ -1,5 +1,7 @@
 from services.backend.core.tables import create_all_tables
-from services.backend.ml.feature_engineering import record_batch, compute_features_for_ip
+from services.backend.ml.feature_engineering import (
+    collect_training_vectors, compute_features_for_ip, record_batch,
+)
 
 
 class _Log:
@@ -64,3 +66,28 @@ def test_split_burst_across_bucket_boundary_still_detected(dynamo_resource):
                                       now=1005.1)
     assert vector is not None
     assert vector.sample_size > 30
+
+
+def test_collect_training_vectors_across_ips_and_buckets(dynamo_resource):
+    create_all_tables(dynamo_resource)
+    record_batch(dynamo_resource, "t-1", [_Log("1.2.3.4")] * 5, bucket_seconds=5, now=1000.0)
+    record_batch(dynamo_resource, "t-1", [_Log("9.9.9.9")] * 4, bucket_seconds=5, now=2000.0)
+    record_batch(dynamo_resource, "t-2", [_Log("5.5.5.5")] * 10, bucket_seconds=5, now=1000.0)
+
+    vectors = collect_training_vectors(dynamo_resource, "t-1", bucket_seconds=5, min_requests_threshold=3)
+    # Two buckets across two different IPs for t-1 — t-2's data must not leak in.
+    assert len(vectors) == 2
+    for v in vectors:
+        assert len(v) == 7  # matches FEATURE_NAMES length
+
+
+def test_collect_training_vectors_filters_below_threshold(dynamo_resource):
+    create_all_tables(dynamo_resource)
+    record_batch(dynamo_resource, "t-1", [_Log("1.2.3.4")], bucket_seconds=5, now=1000.0)  # only 1 request
+    vectors = collect_training_vectors(dynamo_resource, "t-1", bucket_seconds=5, min_requests_threshold=3)
+    assert vectors == []
+
+
+def test_collect_training_vectors_empty_tenant(dynamo_resource):
+    create_all_tables(dynamo_resource)
+    assert collect_training_vectors(dynamo_resource, "no-such-tenant") == []

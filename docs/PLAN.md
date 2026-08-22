@@ -1596,29 +1596,81 @@ Stages 1-6 pass locally (moto + locally-signed JWTs, no real AWS/Cognito).
 
 **Goal:** A scheduled Lambda entry point that retrains each tenant's model
 from that tenant's accumulated `TelemetryEvents` buckets, using
-`services/backend/ml/training.py` from Stage 3, then promotes staging→production
-via the same validator logic ported from `ai_engine/ml/validator.py`.
+`services/backend/ml/training.py` from Stage 3.
 
 **Files:**
 - Create: `services/backend/retrain_handler.py` (separate Lambda entry
   point, triggered by an EventBridge scheduled rule, NOT the API handler)
-- Test: `services/backend/tests/test_retrain_handler.py`
+- Modify: `services/backend/core/tables.py` — `TelemetryEventsTable` gains
+  a `TenantIndex` GSI, `add_aggregate()`'s signature changes to
+  `(tenant_id, ip, bucket_start_ts, agg, ttl_seconds)` and now also
+  persists `tenant_id`/`ip` as plain attributes, `query_since()` added,
+  default `ttl_seconds` raised from 3600 to 90,000
+- Modify: `services/backend/ml/feature_engineering.py` — extracts the
+  shared `_vector_from_counts()` formula helper, adds
+  `collect_training_vectors()`
+- Test: `services/backend/tests/test_retrain_handler.py`, extended
+  `test_feature_engineering.py`, `test_dynamo_tables.py`
+
+**A real architectural gap found before writing any Stage 7 code, not
+anticipated on paper:** gathering a tenant's training data means reading
+every `TelemetryEvents` bucket across every IP for that tenant — exactly
+the query `TelemetryEventsTable.query_by_tenant()` was made to deliberately
+reject in Stage 2 (partition key is a `tenant_id#ip` composite, not
+queryable by tenant alone). Stage 7 had no data source to train from
+without fixing this. Fixed with a new `TenantIndex` GSI (HASH=`tenant_id`,
+RANGE=`bucket_start_ts`), which required also storing `tenant_id`/`ip` as
+plain attributes on every bucket item (previously they only existed
+embedded inside the `tenant_ip` string). Budgeted at 5 WCU / 2 RCU
+(mirrors the base table's own share, since a GSI is written on every base
+write) — new account-wide total: 20 WCU / 14 RCU, still under 25/25.
+
+**Second gap found the same way:** `docs/schema.md` always described this
+table as backing a ~24h shadow/training window, but Stage 2's actual
+default TTL was 3600s (1h) — it would have deleted almost all of a
+tenant's telemetry before the once-daily retrain ever ran. Raised the
+default to 90,000s (25h, a day plus margin).
+
+**Refactor made to avoid a train/inference drift bug, not just for
+style:** the 7 feature formulas (request_rate, error_ratio, ...) existed
+only inside `compute_features_for_ip()`'s weighted blend. Training needs
+the *same* formulas applied to *unweighted* historical buckets (each
+bucket is one independent sample — the boundary-evasion weighting existed
+to protect one live decision, not to describe past data). Extracted into
+`_vector_from_counts()`, used by both `compute_features_for_ip()` and the
+new `collect_training_vectors()` — duplicating this math would risk
+training and inference silently computing different things for the same
+field names, a correctness bug class specific to ML systems.
+
+**Deliberate simplification, flagged not hidden:** `retrain_all_tenants()`
+trains straight to `stage="production"` with no staging/validation gate.
+ADR-002's reuse table listed `ai_engine/ml/validator.py` (block-rate
+threshold + std regression checks against the previous production model)
+as reuse-candidate material, but porting it is real scope beyond this
+stage's own goal — tracked as a backlog item for a future stage, not
+silently dropped or forgotten.
 
 **Task-level scope:**
-- `retrain_all_tenants(resource) -> None` loops `TenantsTable` and calls
-  per-tenant train/validate/promote (ported from `ai_engine/ml/training.py`
-  + `ai_engine/ml/validator.py`, `n_estimators=50`).
+- `retrain_all_tenants(resource) -> dict[str, ModelMetadata | None]` loops
+  `TenantsTable.list_all()`, calls `collect_training_vectors()` +
+  `train_and_save(..., stage="production")` per tenant (`n_estimators=50`
+  per ADR-002), `None` for tenants below `MIN_TRAINING_SAMPLES`.
 - v1 is a serial loop — **explicitly acceptable for v1** given the small
-  expected tenant count; the 15-minute Lambda timeout means this must
-  switch to one invocation per tenant (EventBridge fan-out or Step
-  Functions) once retrain time × tenant count approaches ~10 minutes.
-  Add a log line emitting total elapsed time per run so this threshold is
-  observable, not guessed at.
+  expected tenant count; logs total elapsed time and warns past 600s
+  (~2/3 of Lambda's 15-minute timeout) so the fan-out threshold (one
+  invocation per tenant via EventBridge/Step Functions) is observable,
+  not guessed at.
+- `handler(event, context)` — the actual Lambda entry point. Documented,
+  not assumed: this is a SEPARATE Lambda function from `main.py`'s API
+  handler, so `ModelManager`'s warm-container cache (Stage 3) can't be
+  invalidated from here — no shared memory between separate Lambda
+  functions. A freshly promoted model reaches API traffic only once the
+  API Lambda's own warm containers recycle naturally.
 
 **Checkpoint (stage done when):**
-`cd services/backend && python -m pytest tests/test_retrain_handler.py -v`
-passes with a moto-backed multi-tenant fixture (≥2 tenants, confirms each
-gets its own `Models` item, not a shared one).
+`cd services/backend && python -m pytest tests/ -v` — all 62 tests from
+Stages 1-7 pass locally (moto), including a multi-tenant fixture
+confirming each tenant gets its own independently trained `Models` item.
 
 ---
 

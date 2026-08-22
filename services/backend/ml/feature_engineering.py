@@ -32,6 +32,38 @@ def _bucket_start(bucket_seconds: int, at: float) -> int:
     return int(at // bucket_seconds) * bucket_seconds
 
 
+def _vector_from_counts(
+    ip: str, bucket_seconds: int, min_requests_threshold: int,
+    request_count: float, error_count: float, post_count: float,
+    total_bytes: float, total_time: float,
+    distinct_uri_count: float, distinct_ua_count: float,
+) -> "FeatureVector | None":
+    """The one place the 7 feature formulas are computed — shared by
+    compute_features_for_ip() (real-time scoring, blended current+previous
+    bucket counts) and collect_training_vectors() (Stage 7, one independent
+    sample per historical bucket). Extracted deliberately: duplicating this
+    math in two places risks the training and inference paths silently
+    drifting apart, a real correctness bug class for an ML system, not
+    just a style preference."""
+    if request_count < min_requests_threshold:
+        return None
+    return FeatureVector(
+        remote_addr=ip,
+        request_rate=round(request_count / bucket_seconds, 6),
+        error_ratio=round(error_count / request_count, 6),
+        avg_bytes_sent=round(total_bytes / request_count, 6),
+        avg_request_time=round(total_time / request_count, 6),
+        unique_uri_ratio=round(min(distinct_uri_count / request_count, 1.0), 6),
+        # Approximation, not true Shannon entropy — see docs/PLAN.md Stage 2
+        # design note: true entropy doesn't merge additively across buckets,
+        # and storing a full frequency distribution reintroduces unbounded
+        # item growth. distinct_ua/total is a bounded diversity proxy.
+        user_agent_entropy=round(min(distinct_ua_count / request_count, 1.0), 6),
+        post_ratio=round(post_count / request_count, 6),
+        sample_size=int(request_count),
+    )
+
+
 def record_batch(resource, tenant_id: str, logs: list, bucket_seconds: int = 5,
                   now: float | None = None) -> set[str]:
     now = now if now is not None else time.time()
@@ -63,7 +95,7 @@ def record_batch(resource, tenant_id: str, logs: list, bucket_seconds: int = 5,
     for ip, agg in by_ip.items():
         agg["distinct_uri_count"] = len(agg.pop("_uris"))
         agg["distinct_ua_count"] = len(agg.pop("_uas"))
-        table.add_aggregate(f"{tenant_id}#{ip}", bucket, agg)
+        table.add_aggregate(tenant_id, ip, bucket, agg)
         touched.add(ip)
     return touched
 
@@ -94,25 +126,36 @@ def compute_features_for_ip(resource, tenant_id: str, ip: str, bucket_seconds: i
     def _w(field: str, cast=int) -> float:
         return cast(current.get(field, 0)) + prev_weight * cast(previous.get(field, 0))
 
-    total = _w("request_count")
-    if total < min_requests_threshold:
-        return None
-
-    distinct_uri = _w("distinct_uri_count")
-    distinct_ua = _w("distinct_ua_count")
-
-    return FeatureVector(
-        remote_addr=ip,
-        request_rate=round(total / bucket_seconds, 6),
-        error_ratio=round(_w("error_count") / total, 6),
-        avg_bytes_sent=round(_w("total_bytes") / total, 6),
-        avg_request_time=round(_w("total_time", float) / total, 6),
-        unique_uri_ratio=round(min(distinct_uri / total, 1.0), 6),
-        # Approximation, not true Shannon entropy — see docs/PLAN.md Stage 2
-        # design note: true entropy doesn't merge additively across buckets,
-        # and storing a full frequency distribution reintroduces unbounded
-        # item growth. distinct_ua/total is a bounded diversity proxy.
-        user_agent_entropy=round(min(distinct_ua / total, 1.0), 6),
-        post_ratio=round(_w("post_count") / total, 6),
-        sample_size=int(total),
+    return _vector_from_counts(
+        ip, bucket_seconds, min_requests_threshold,
+        request_count=_w("request_count"), error_count=_w("error_count"),
+        post_count=_w("post_count"), total_bytes=_w("total_bytes"),
+        total_time=_w("total_time", float),
+        distinct_uri_count=_w("distinct_uri_count"), distinct_ua_count=_w("distinct_ua_count"),
     )
+
+
+def collect_training_vectors(resource, tenant_id: str, bucket_seconds: int = 5,
+                              min_requests_threshold: int = 3, since_ts: int = 0) -> list[list[float]]:
+    """Gathers this tenant's accumulated telemetry buckets (via the
+    TenantIndex GSI, Stage 7) and turns each into one independent training
+    sample — unlike compute_features_for_ip()'s real-time blended window,
+    historical buckets don't need the boundary-evasion weighting (that
+    existed to stop an attacker gaming a single live decision, not to
+    describe training data)."""
+    items = TelemetryEventsTable(resource).query_since(tenant_id, since_ts)
+    vectors: list[list[float]] = []
+    for item in items:
+        vec = _vector_from_counts(
+            item.get("ip", ""), bucket_seconds, min_requests_threshold,
+            request_count=int(item.get("request_count", 0)),
+            error_count=int(item.get("error_count", 0)),
+            post_count=int(item.get("post_count", 0)),
+            total_bytes=int(item.get("total_bytes", 0)),
+            total_time=float(item.get("total_time", 0)),
+            distinct_uri_count=int(item.get("distinct_uri_count", 0)),
+            distinct_ua_count=int(item.get("distinct_ua_count", 0)),
+        )
+        if vec is not None:
+            vectors.append(vec.to_list())
+    return vectors

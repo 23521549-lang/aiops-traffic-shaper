@@ -24,7 +24,8 @@ def _to_dynamo_safe(value):
 # PROVISIONED billing mode. PAY_PER_REQUEST (on-demand) has NO free
 # allowance and bills from the first request — using it here would
 # silently break the project's core "0đ forever" constraint (ADR-002).
-# Budget below sums to 15 WCU / 12 RCU, leaving headroom under 25/25.
+# Budget below sums to 20 WCU / 14 RCU (Stage 7 added TelemetryEvents'
+# TenantIndex GSI), leaving headroom under 25/25.
 _TABLE_SPECS = [
     {"TableName": "Tenants", "KeySchema": [{"AttributeName": "tenant_id", "KeyType": "HASH"}],
      "AttributeDefinitions": [{"AttributeName": "tenant_id", "AttributeType": "S"}],
@@ -78,10 +79,26 @@ _TABLE_SPECS = [
         {"AttributeName": "bucket_start_ts", "KeyType": "RANGE"}],
      "AttributeDefinitions": [
         {"AttributeName": "tenant_ip", "AttributeType": "S"},
-        {"AttributeName": "bucket_start_ts", "AttributeType": "N"}],
+        {"AttributeName": "bucket_start_ts", "AttributeType": "N"},
+        {"AttributeName": "tenant_id", "AttributeType": "S"}],
      # Highest-write table by design (every unique IP per telemetry batch) —
      # gets the largest share of the WCU budget.
-     "ProvisionedThroughput": {"ReadCapacityUnits": 2, "WriteCapacityUnits": 5}},
+     "ProvisionedThroughput": {"ReadCapacityUnits": 2, "WriteCapacityUnits": 5},
+     "GlobalSecondaryIndexes": [{
+        "IndexName": "TenantIndex",
+        "KeySchema": [
+            {"AttributeName": "tenant_id", "KeyType": "HASH"},
+            {"AttributeName": "bucket_start_ts", "KeyType": "RANGE"}],
+        "Projection": {"ProjectionType": "ALL"},
+        # Added in Stage 7: gathering a tenant's training data means
+        # reading every bucket item across every IP for that tenant, which
+        # the base table's tenant_ip#ip composite key can't Query by
+        # tenant alone (see TelemetryEventsTable.query_by_tenant's
+        # deliberate NotImplementedError, Stage 2). GSI writes mirror
+        # every base-table write, so this roughly matches the base
+        # table's own WCU share.
+        "ProvisionedThroughput": {"ReadCapacityUnits": 2, "WriteCapacityUnits": 5},
+     }]},
     {"TableName": "UsageCounters", "KeySchema": [{"AttributeName": "date", "KeyType": "HASH"}],
      "AttributeDefinitions": [{"AttributeName": "date", "AttributeType": "S"}],
      "ProvisionedThroughput": {"ReadCapacityUnits": 1, "WriteCapacityUnits": 2}},
@@ -222,21 +239,34 @@ class TelemetryEventsTable(_SimpleTable):
     _table_name = "TelemetryEvents"
     _key_names = ("tenant_ip", "bucket_start_ts")
 
-    def add_aggregate(self, tenant_ip: str, bucket_start_ts: int, agg: dict,
-                       ttl_seconds: int = 3600) -> None:
+    def add_aggregate(self, tenant_id: str, ip: str, bucket_start_ts: int, agg: dict,
+                       ttl_seconds: int = 90_000) -> None:
         """Single atomic write of an ALREADY-AGGREGATED batch summary for
         one (tenant, ip, bucket) — never called per log line. `agg` keys:
         request_count, error_count, post_count, total_bytes, total_time,
         distinct_uri_count, distinct_ua_count — all plain numbers, so the
         item stays a fixed handful of bytes regardless of traffic volume
-        (no lists, nothing that grows with request count)."""
+        (no lists, nothing that grows with request count).
+
+        `ttl_seconds` default changed from 3600 (1h) to 90,000 (25h) in
+        Stage 7: docs/schema.md always said this table backs a ~24h
+        shadow/training window, but the original 1h TTL would have
+        deleted almost all of a tenant's telemetry before the daily
+        retrain ever ran — found while designing the retrain job's data
+        source, before writing it.
+
+        Also writes `tenant_id`/`ip` as their own plain attributes (not
+        just embedded in the `tenant_ip` composite key) — needed for the
+        `TenantIndex` GSI added in Stage 7, so a tenant's training data
+        can be queried without parsing the composite key string."""
+        tenant_ip = f"{tenant_id}#{ip}"
         self.update(
             key={"tenant_ip": tenant_ip, "bucket_start_ts": bucket_start_ts},
             update_expression=(
                 "ADD request_count :rc, error_count :ec, post_count :pc, "
                 "total_bytes :tb, total_time :tt, "
                 "distinct_uri_count :du, distinct_ua_count :da "
-                "SET #ttl = :ttl"
+                "SET #ttl = :ttl, tenant_id = :tid, ip = :ip"
             ),
             expr_names={"#ttl": "ttl"},
             expr_values={
@@ -245,11 +275,26 @@ class TelemetryEventsTable(_SimpleTable):
                 ":tt": agg["total_time"], ":du": agg["distinct_uri_count"],
                 ":da": agg["distinct_ua_count"],
                 ":ttl": bucket_start_ts + ttl_seconds,
+                ":tid": tenant_id, ":ip": ip,
             },
         )
 
     def get_bucket(self, tenant_ip: str, bucket_start_ts: int) -> dict | None:
         return self.get(tenant_ip=tenant_ip, bucket_start_ts=bucket_start_ts)
+
+    def query_since(self, tenant_id: str, since_ts: int = 0) -> list[dict]:
+        """All bucket items for a tenant (every IP) at or after `since_ts`,
+        via the TenantIndex GSI — used by the daily retrain job (Stage 7)
+        to gather that tenant's training data. Unlike query_by_tenant()
+        (deliberately unimplemented on this table, Stage 2), this queries
+        a real index built for exactly this cross-IP, per-tenant access
+        pattern, not the base table's composite key."""
+        from boto3.dynamodb.conditions import Key
+        resp = self._table.query(
+            IndexName="TenantIndex",
+            KeyConditionExpression=Key("tenant_id").eq(tenant_id) & Key("bucket_start_ts").gte(since_ts),
+        )
+        return resp.get("Items", [])
 
     def get_buckets_batch(self, tenant_ip: str, bucket_starts: list[int]) -> dict[int, dict]:
         """Fetch multiple buckets for the same tenant_ip in one DynamoDB
