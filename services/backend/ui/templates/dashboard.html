@@ -1,0 +1,76 @@
+{% extends "app_shell.html" %}
+{% set role = "tenant" %}
+{% set active = "mitigations" %}
+{% block title %}Dashboard — AI Traffic Shaper{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_subtitle %}Tenant: {{ tenant_id }}{% endblock %}
+{% block page_content %}
+
+<div class="card" id="mitigations">
+  <h2>Active mitigations</h2>
+  <div class="card-sub">IPs currently rate-limited or blocked for your traffic, most recent first.</div>
+  {% if mitigations %}
+  <table>
+    <thead><tr><th>IP</th><th>Tier</th><th>Score</th><th>Reason</th><th>Expires</th></tr></thead>
+    <tbody>
+      {% for m in mitigations %}
+      <tr>
+        <td><code>{{ m.ip }}</code></td>
+        <td>{% if m.tier == 2 %}<span class="badge badge-danger">Hard block</span>
+            {% else %}<span class="badge badge-warning">Rate limit</span>{% endif %}</td>
+        <td>{{ "%.3f"|format(m.score) }}</td>
+        <td>{{ m.reason }}</td>
+        <td>{{ m.expires_at_display }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">&#10003;</div>
+    No active mitigations right now — your traffic looks clean.
+  </div>
+  {% endif %}
+</div>
+
+<div class="card" id="whitelist">
+  <h2>Whitelist</h2>
+  <div class="card-sub">IPs here are never rate-limited or blocked, and excluded from model training.</div>
+
+  <form class="form-row" style="margin-bottom: 16px;"
+        hx-post="/dashboard/ui/whitelist" hx-target="#whitelist-table">
+    <div class="field">
+      <label for="wl-ip">IP address</label>
+      <input type="text" id="wl-ip" name="ip" placeholder="203.0.113.4" required>
+    </div>
+    <div class="field">
+      <label for="wl-reason">Reason (optional)</label>
+      <input type="text" id="wl-reason" name="reason" placeholder="office IP">
+    </div>
+    <button type="submit" class="btn btn-primary">Add to whitelist</button>
+  </form>
+
+  <div id="whitelist-table">
+    {% include "_whitelist_table.html" %}
+  </div>
+</div>
+
+<div class="card" id="model">
+  <h2>Model status</h2>
+  {% if model.model_ready %}
+  <div class="card-grid">
+    <div class="stat"><div class="stat-value">{{ model.version }}</div><div class="stat-label">Version</div></div>
+    <div class="stat"><div class="stat-value">{{ model.training_samples }}</div><div class="stat-label">Training samples</div></div>
+    <div class="stat"><div class="stat-value">{{ "%.3f"|format(model.score_mean) }}</div><div class="stat-label">Mean score</div></div>
+    <div class="stat"><div class="stat-value">{{ "%.3f"|format(model.score_std) }}</div><div class="stat-label">Score std dev</div></div>
+  </div>
+  <p class="card-sub" style="margin-top: 14px; margin-bottom: 0;">Trained at {{ model.trained_at }}</p>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">&#9203;</div>
+    Still in shadow mode — collecting a baseline before your first model is trained.
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

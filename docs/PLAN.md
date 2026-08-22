@@ -1774,21 +1774,87 @@ test added alongside the two bug fixes above).
 **Goal:** Serve the two human-facing UIs (PRD US-6, US-7) as HTML/JS
 directly from the Lambda Function URL, per ADR-002's UI decision.
 
+**Stack decision, made with the developer at this stage's start:** the
+developer had no strong opinion and asked for a researched, well-designed
+default rather than a guess. Presented two no-build-step options (Jinja2 +
+plain fetch() JS, vs Jinja2 + htmx); the developer instead asked for
+genuinely good UI/UX and full, real coverage of every existing capability,
+deferring the technical pick. Chose **Jinja2 (FastAPI's built-in template
+support) + a small custom attribute-driven JS helper**, not the real htmx
+library — this offline dev environment cannot fetch and verify the actual
+htmx.js, and reproducing a well-tested third-party library from memory
+risked shipping something that silently isn't what it claims to be.
+`services/backend/ui/static/interactions.js` (~70 lines, no dependency, no
+build step) implements only the small `hx-get`/`hx-post`/`hx-delete`/
+`hx-target`/`hx-trigger`/`hx-confirm` subset the two pages actually use.
+
+**A real gap found and fixed while designing this stage, not anticipated
+on paper:** `dashboard_auth`/`admin_auth` (Stage 6) only ever read a
+Bearer token from the `Authorization` header — correct for JSON API
+clients, but a plain HTML page navigation (typing a URL, clicking a link,
+a native form GET/POST) cannot attach a custom header, only JS/fetch can.
+Without a fix, server-rendered pages could never authenticate via normal
+browser navigation. Fixed in `services/backend/api/cognito_auth.py`:
+`dashboard_auth`/`admin_auth` now accept an `id_token` cookie as a
+fallback when no `Authorization` header is present — both paths still
+funnel into the exact same `_decode_and_verify`, so verification itself
+didn't change, only where the token is read from.
+
+**"Không vượt quá sự kiểm soát" / "phủ hết toàn bộ dự án" (the
+developer's stated bar):** the dashboard renders ONLY by calling
+`dashboard_auth`-gated logic (tenant-scoped by construction, tested
+explicitly — `test_dashboard_shows_own_tenant_mitigations_only` asserts
+another tenant's IP never appears); the Control Platform surfaces every
+`/admin/v1/*` capability that exists — tenants (+ suspend), agents (status
+filter via the `LastSeenIndex` GSI), and the usage/ceiling-warning banner
+— nothing invented beyond what the backend actually does, and nothing
+left out that it does.
+
 **Files:**
-- Create: `services/backend/ui/dashboard.py` (renders tenant-scoped views
-  over `/dashboard/v1/*` data)
-- Create: `services/backend/ui/control_platform.py` (renders
-  cross-tenant/admin views over `/admin/v1/*` data)
+- `services/backend/ui/templates/` — `base.html` (design system: CSS
+  custom properties for color/spacing, no external fonts/CDN — a
+  self-contained system-font stack), `app_shell.html` (sidebar+topbar
+  layout, shared by both UIs), `login.html`, `dashboard.html`,
+  `control_platform.html`, plus `_whitelist_table.html`/
+  `_tenants_table.html`/`_agents_table.html` partials returned directly by
+  the `hx-*`-driven endpoints for in-place updates without a full reload.
+- `services/backend/ui/templates_env.py` — the shared `Jinja2Templates` instance.
+- `services/backend/ui/auth_pages.py` — `/ui/login` (GET renders the form,
+  POST verifies the pasted token and sets the `id_token` cookie, routing
+  to `/dashboard/ui` or `/admin/ui` based on the token's claims),
+  `/ui/logout`, and the static route serving `interactions.js`.
+- `services/backend/ui/dashboard.py` — `/dashboard/ui` (full page) and the
+  `hx-post`/`hx-delete` whitelist endpoints, all reusing
+  `api/routes/dashboard.py`'s existing functions directly (calling a
+  `Depends(...)`-decorated function with explicit keyword args works the
+  same as FastAPI resolving it) rather than re-querying DynamoDB a second way.
+- `services/backend/ui/control_platform.py` — `/admin/ui` (full page),
+  `/admin/ui/agents` (status-filter partial), `/admin/ui/tenants/{id}/suspend`
+  — same reuse pattern against `api/routes/admin.py`.
+- `services/backend/main.py` — registers the three new routers, plus an
+  `HTTPException` handler scoped to `/dashboard/ui`/`/admin/ui` paths only:
+  a 401/403 there redirects to `/ui/login` (or, for the JS helper's AJAX
+  calls, returns an `X-UI-Redirect` header) instead of the JSON API's
+  default error body — a human looking at a web page should never see a
+  raw `{"detail": ...}` blob. Every other route (`/agent/v1/*`,
+  `/dashboard/v1/*`, `/admin/v1/*`) is untouched by this handler.
+- Test: `test_ui_auth_pages.py`, `test_ui_dashboard.py`,
+  `test_ui_control_platform.py`, plus 2 new cookie-fallback tests in
+  `test_cognito_auth.py` — 25 new tests, 116/116 total across
+  `services/backend` + `services/agent`.
 
-**Task-level scope:** Deferred to Phase 3 start-of-stage — depends on every
-API endpoint from Stages 4-6 existing and stable first. No frontend
-framework has been chosen yet (ADR-002 left this open deliberately); that
-choice should be made with the developer as this stage begins, the same
-way the backend stack was chosen in this Phase 2 session, not guessed here.
+**Known v1 gap, flagged not hidden:** login is "paste your Cognito ID
+token" (same shortcut as the CLI's `--token` flag) — a real Cognito
+Hosted UI OAuth redirect flow is future work, not built in this stage.
 
-**Checkpoint (stage done when):** A logged-in tenant can see their own
-active mitigations and edit their whitelist end-to-end; a logged-in admin
-can see all tenants and today's usage-ceiling status end-to-end.
+**Checkpoint (stage done when):**
+`cd services/backend && python -m pytest tests/ -v` — 116/116 pass
+(combined with `services/agent`). A logged-in tenant can see their own
+active mitigations and edit their whitelist end-to-end (verified: another
+tenant's data never appears); a logged-in admin can see all tenants,
+filter agents by status, suspend a tenant, and see today's usage-ceiling
+status end-to-end — all exercised by real `TestClient` requests against
+real Jinja2-rendered HTML, not just the underlying JSON API.
 
 ---
 
@@ -1807,10 +1873,13 @@ can see all tenants and today's usage-ceiling status end-to-end.
   aggregation under the 25 WCU/RCU ceiling) and Stage 5 (usage-ceiling
   warning) both come before the dashboard/UI polish work, per the
   developer's explicit priority for this session.
-- **Known open decision, not silently resolved:** Stage 8's `enforcer.py`
-  mechanism is left explicitly open rather than guessed — it depends on
-  what kind of system a typical agent will sit in front of, which hasn't
-  been discussed yet.
+- **Known open decisions, resolved when their stage started, not
+  guessed ahead of time:** Stage 8's enforcer mechanism (resolved as a
+  pluggable nginx+iptables adapter architecture, CrowdSec-inspired) and
+  Stage 9's UI stack (resolved as Jinja2 + a small custom JS helper) were
+  both left open in this plan until the developer weighed in at the start
+  of their respective stage, per the interaction contract for genuinely
+  open architecture questions.
 - **Hardening pass (2026-08-21), found and fixed before first approval:**
   reviewing this plan against its own 0đ constraint surfaced four real
   weaknesses, all fixed in the stages above, not just noted: (1) Stage 1's

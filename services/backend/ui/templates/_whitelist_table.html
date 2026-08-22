@@ -1,0 +1,25 @@
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+{% if whitelist %}
+<table>
+  <thead><tr><th>IP</th><th></th></tr></thead>
+  <tbody>
+    {% for ip in whitelist %}
+    <tr>
+      <td><code>{{ ip }}</code></td>
+      <td style="text-align: right;">
+        <button class="btn btn-danger btn-sm"
+                hx-delete="/dashboard/ui/whitelist/{{ ip }}"
+                hx-target="#whitelist-table" hx-swap="innerHTML"
+                hx-confirm="Remove {{ ip }} from the whitelist?">
+          Remove
+        </button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">No whitelisted IPs yet.</div>
+{% endif %}

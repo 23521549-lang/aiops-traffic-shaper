@@ -1,0 +1,28 @@
+{% if tenants %}
+<table>
+  <thead><tr><th>Tenant</th><th>Name</th><th>Status</th><th>Created</th><th></th></tr></thead>
+  <tbody>
+    {% for t in tenants %}
+    <tr>
+      <td><code>{{ t.tenant_id }}</code></td>
+      <td>{{ t.name }}</td>
+      <td>{% if t.status == "suspended" %}<span class="badge badge-danger">Suspended</span>
+          {% else %}<span class="badge badge-success">Active</span>{% endif %}</td>
+      <td>{{ t.created_at }}</td>
+      <td style="text-align: right;">
+        {% if t.status != "suspended" %}
+        <button class="btn btn-danger btn-sm"
+                hx-post="/admin/ui/tenants/{{ t.tenant_id }}/suspend"
+                hx-target="#tenants-table" hx-swap="innerHTML"
+                hx-confirm="Suspend {{ t.tenant_id }}? Its agents will stop being served.">
+          Suspend
+        </button>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">No tenants registered yet.</div>
+{% endif %}

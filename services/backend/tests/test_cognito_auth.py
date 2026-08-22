@@ -11,6 +11,23 @@ def test_dashboard_auth_extracts_tenant_id(cognito_test_keys):
     assert tenant_id == "t-1"
 
 
+def test_dashboard_auth_accepts_cookie_when_no_header(cognito_test_keys):
+    # Stage 9: plain browser navigation can't attach a custom Authorization
+    # header, only JS/fetch can — the server-rendered UI relies on this
+    # cookie fallback to work at all.
+    token = sign_test_token(cognito_test_keys["private_pem"], {"custom:tenant_id": "t-1"})
+    tenant_id = dashboard_auth(authorization=None, id_token=token, jwks=cognito_test_keys["jwks"])
+    assert tenant_id == "t-1"
+
+
+def test_dashboard_auth_header_takes_precedence_over_cookie(cognito_test_keys):
+    header_token = sign_test_token(cognito_test_keys["private_pem"], {"custom:tenant_id": "t-1"})
+    cookie_token = sign_test_token(cognito_test_keys["private_pem"], {"custom:tenant_id": "t-2"})
+    tenant_id = dashboard_auth(authorization=f"Bearer {header_token}", id_token=cookie_token,
+                                jwks=cognito_test_keys["jwks"])
+    assert tenant_id == "t-1"
+
+
 def test_dashboard_auth_missing_header_is_401(cognito_test_keys):
     with pytest.raises(HTTPException) as exc:
         dashboard_auth(authorization=None, jwks=cognito_test_keys["jwks"])

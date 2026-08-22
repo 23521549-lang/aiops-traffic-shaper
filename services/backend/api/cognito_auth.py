@@ -2,7 +2,7 @@ import json
 import urllib.request
 from functools import lru_cache
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Cookie, Depends, Header, HTTPException
 from jose import jwt
 
 from services.backend.core.config import settings
@@ -32,10 +32,20 @@ def get_jwks() -> dict:
     return _fetch_jwks(_jwks_url())
 
 
-def _extract_bearer(authorization: str | None) -> str:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or malformed Authorization header")
-    return authorization[len("Bearer "):]
+def _extract_token(authorization: str | None, id_token_cookie: str | None) -> str:
+    """Header first (JSON API clients — the agent CLI, curl, etc.), falling
+    back to a cookie (Stage 9's browser UI). A normal HTML page navigation
+    (typing a URL, clicking a link, a plain form GET/POST) can't attach a
+    custom Authorization header — only JS/fetch can — so the server-
+    rendered dashboard/control-platform pages need cookie-based auth to
+    work at all with plain browser navigation. Both paths funnel into the
+    exact same `_decode_and_verify`, so verification itself is identical
+    either way."""
+    if authorization and authorization.startswith("Bearer "):
+        return authorization[len("Bearer "):]
+    if id_token_cookie:
+        return id_token_cookie
+    raise HTTPException(status_code=401, detail="Missing credentials")
 
 
 def _decode_and_verify(id_token: str, jwks: dict) -> dict:
@@ -61,8 +71,9 @@ def _decode_and_verify(id_token: str, jwks: dict) -> dict:
 
 
 def dashboard_auth(authorization: str | None = Header(default=None),
+                    id_token: str | None = Cookie(default=None),
                     jwks: dict = Depends(get_jwks)) -> str:
-    claims = _decode_and_verify(_extract_bearer(authorization), jwks)
+    claims = _decode_and_verify(_extract_token(authorization, id_token), jwks)
     tenant_id = claims.get("custom:tenant_id")
     if not tenant_id:
         raise HTTPException(status_code=401, detail="Token missing tenant_id claim")
@@ -70,8 +81,9 @@ def dashboard_auth(authorization: str | None = Header(default=None),
 
 
 def admin_auth(authorization: str | None = Header(default=None),
+               id_token: str | None = Cookie(default=None),
                jwks: dict = Depends(get_jwks)) -> None:
-    claims = _decode_and_verify(_extract_bearer(authorization), jwks)
+    claims = _decode_and_verify(_extract_token(authorization, id_token), jwks)
     groups = claims.get("cognito:groups", [])
     if "admin" not in groups:
         raise HTTPException(status_code=403, detail="Admin group membership required")

@@ -120,6 +120,16 @@ as server-rendered HTML/JS directly from Lambda Function URLs. No separate
 frontend framework/build pipeline decided yet; kept as a `docs/PLAN.md`
 open item for Phase 3 rather than guessed here.
 
+**Resolved in Stage 8 (backend routing) / Stage 9 (the pages
+themselves):** Jinja2 templates + a small custom (~70 line) attribute-
+driven JS helper, not the real htmx library — this offline environment
+can't fetch/verify the actual htmx.js, and faking a well-known third-party
+library from memory risked shipping something that silently isn't it.
+Building this surfaced a real gap: `dashboard_auth`/`admin_auth` (Stage 6)
+only read a Bearer header, which a plain HTML page navigation can never
+attach — fixed with a cookie fallback into the same verification path.
+See `docs/PLAN.md` Stage 9 for the full design.
+
 ## Hardening pass (2026-08-21, same session)
 
 Before this ADR + `docs/PLAN.md` were presented for approval, the plan was
