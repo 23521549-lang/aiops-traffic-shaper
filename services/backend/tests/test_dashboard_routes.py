@@ -2,9 +2,7 @@ from fastapi.testclient import TestClient
 
 from services.backend.api.cognito_auth import get_jwks
 from services.backend.core.dynamo import get_dynamo_resource
-from services.backend.core.tables import (
-    MitigationStateTable, ModelsTable, WhitelistTable, create_all_tables,
-)
+from services.backend.core.tables import MitigationStateTable, ModelsTable, create_all_tables
 from services.backend.main import app
 from services.backend.tests.conftest import sign_test_token
 
