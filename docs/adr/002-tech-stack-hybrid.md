@@ -102,6 +102,16 @@ centralized in the Lambda backend, reusing `feature_engineering.py`
 unchanged — this keeps the agent free of the sklearn dependency entirely,
 so it stays genuinely lightweight and easy to distribute.
 
+**Local enforcement mechanism (resolved in Stage 8, not guessed here):**
+a pluggable adapter architecture, not one fixed mechanism — inspired by
+CrowdSec's "bouncer" model (the enforcement-side successor to fail2ban's
+single-hook design) but going further: multiple adapters (nginx, iptables)
+can be auto-detected and run simultaneously on one agent, rather than
+picking exactly one mechanism at install time. See `docs/PLAN.md` Stage 8
+for the full design and the real bugs (a hardcoded `expires_at=0` and an
+`agent_auth` that never actually hashed the incoming key) found while
+building it.
+
 ### UI decision (explicit, not silent)
 
 The product has two human-facing UIs — Dashboard (end user, tenant-scoped)

@@ -1680,42 +1680,92 @@ confirming each tenant gets its own independently trained `Models` item.
 all (PRD US-3, US-5) — a sklearn-free process the tenant runs next to their
 own service, and a CLI to register it.
 
-**Files:**
-- Create: `services/agent/requirements.txt` (no scikit-learn/pandas/numpy —
-  agent stays lightweight per ADR-002's "Agent design" section)
-- Create: `services/agent/collector.py` (captures request metadata,
-  batches, POSTs to `/agent/v1/telemetry`)
-- Create: `services/agent/enforcer.py` (applies returned `MitigationState`
-  decisions locally — reuses the *concept*, not the code, from the
-  discarded `worker_orchestrator/orchestrator/configmap_patcher.py`; no
-  Kubernetes here, just a local rate-limit/block mechanism appropriate to
-  whatever the tenant is running in front of)
-- Create: `services/agent/cli.py` (Click-based; `POST /agent/v1/register`
-  against the backend, stores the returned `api_key` locally)
-- Test: `services/agent/tests/test_collector.py`, `test_cli.py`
+**Enforcer design — resolved with the developer before writing code, and
+made stronger than the two hard-coded options originally sketched here.**
+Asked which single mechanism to use (nginx config rewrite vs. iptables vs.
+agent-as-proxy); the developer pushed back that a single rigid mechanism
+isn't good enough and asked for research into what comparable tools do
+and a genuinely better design, not just a pick from those three.
 
-**Task-level scope:**
-- `cli.py` command `agent register --backend-url <url>` calls
-  `/agent/v1/register` (Stage 4/6 must add this endpoint — not yet built
-  in Stage 4, add it here as the CLI's dependency), writes `~/.aiops-agent/config.json`
-  with `tenant_id`/`agent_id`/`api_key`.
-- `collector.py` batches every N seconds or M events (whichever first,
-  mirrors the agent-is-thin design — no ML, just forwarding), POSTs to
-  `/agent/v1/telemetry` with `X-Agent-Key: <tenant_id>.<api_key>`.
-- `enforcer.py` reads the `decisions` field of the telemetry response and
-  applies it locally — concrete mechanism (e.g. an in-process reverse
-  proxy that rejects listed IPs, vs. writing a config file for the
-  tenant's own reverse proxy to reload) is an open question for whoever
-  starts this stage to resolve with the developer before writing code —
-  flagged here rather than guessed, since it depends on what kind of
-  system agents will typically sit in front of (not yet known).
+Prior art surveyed: **fail2ban** (tails logs, on threshold runs one
+configured "action" — one mechanism per install) and its modern successor
+**CrowdSec** (separates detection from enforcement via pluggable
+"bouncers" — nginx-bouncer, iptables-bouncer, Cloudflare-bouncer, etc. —
+so the same detection engine can drive different local enforcement
+depending on what's available, and multiple bouncers can run at once).
+CrowdSec's bouncer-plugin architecture is the relevant improvement over
+fail2ban's single-hook design; adapted here as:
+
+- `services/agent/enforcer/base.py` — an `EnforcementAdapter` ABC
+  (`is_available()`, `block(ip, tier, expires_at)`, `unblock(ip)`).
+- `services/agent/enforcer/nginx_adapter.py` — tier 2 (HARD_BLOCK) writes
+  `deny <ip>;` lines to one include file; tier 1 (RATE_LIMIT) writes a
+  `geo $binary_remote_addr $agent_rate_limited { ... }` map to a second
+  include file — the standard nginx pattern for a live-updatable per-IP
+  soft limit (the tenant's own `nginx.conf` is expected to define a
+  `limit_req_zone` keyed on `$agent_rate_limited`). Reloads nginx after
+  every change via an injectable command runner (never shells out for
+  real in tests).
+- `services/agent/enforcer/iptables_adapter.py` — OS-level `iptables ...
+  DROP`, works regardless of what app/proxy stack the tenant runs. Only
+  supports tier 2: a proportional soft rate-limit isn't cleanly
+  expressible with plain iptables (would need the less-portable
+  `hashlimit` module) — `block()` returns `False` for tier 1 rather than
+  pretending to support it.
+- `services/agent/enforcer/__init__.py::detect_adapters()` — auto-detects
+  which adapters can actually run in the current environment and keeps
+  ALL of them, not exactly one. This is the actual improvement over both
+  fail2ban (one hook) and a naive three-way choice (still one mechanism,
+  just a different one): nginx AND iptables can both be active
+  simultaneously (defense in depth), with no per-install configuration
+  required — the agent works out of the box across more environments.
+- `services/agent/enforcer/__init__.py::DecisionStore` — tracks active
+  decisions and their `expires_at`, sweeping and calling `unblock()` once
+  a TTL passes. Neither `deny` nor an iptables DROP rule expires on its
+  own; something has to actively remove it later.
+
+**Real bugs found and fixed while building this, not anticipated on
+paper:**
+1. `MitigationStateTable` decisions had `expires_at=0` hardcoded since
+   Stage 4 — an agent enforcer has no TTL to schedule an unblock from
+   without a real value. Fixed in `api/routes/agent.py`: tier-dependent
+   TTLs (`RATE_LIMIT` 300s, `HARD_BLOCK` 3600s), `expires_at = now + ttl`.
+2. `agent_auth` (Stage 4) compared the raw `X-Agent-Key` value directly
+   against the stored `api_key_hash` — `hash_api_key()` existed but was
+   never called. Every test up to Stage 7 passed only because they
+   hand-set `api_key_hash` to the same literal string sent as the "key",
+   masking that a real registered agent's actual raw key could never
+   equal its own hash. Caught by building `/agent/v1/register` and
+   testing the real register→authenticate flow end-to-end for the first
+   time, not by testing either piece in isolation.
+
+**Files:**
+- `services/agent/requirements.txt` — `click` only, no scikit-learn/
+  pandas/numpy/requests. HTTP calls use stdlib `urllib.request`
+  (`services/agent/http_client.py`) rather than adding a dependency —
+  genuinely dependency-light, not just "no ML libraries."
+- `services/agent/config.py` — reads/writes `~/.aiops-agent/config.json`
+  (0600 permissions, best-effort — it holds the raw `api_key`).
+- `services/agent/collector.py` — `Collector`/`LogRecord`: batches by size
+  OR time interval (whichever first), POSTs to `/agent/v1/telemetry` with
+  `X-Agent-Key: <tenant_id>.<api_key>`. No ML, just forwarding — keeps the
+  agent genuinely thin per ADR-002.
+- `services/agent/cli.py` — Click; `agent register --backend-url <url>
+  --token <cognito-id-token> --label <name>` calls the new
+  `POST /agent/v1/register` (built in this stage, in
+  `services/backend/api/routes/agent.py`, Cognito-`dashboard_auth`-gated)
+  and saves the response to config. **Known v1 gap, flagged not hidden:**
+  `--token` expects a Cognito ID token pasted from the dashboard login —
+  a full CLI OAuth device-code flow is out of scope for this stage.
+- Test: `services/agent/tests/test_{config,http_client,collector,enforcer,cli}.py`
+  — 29 tests, all passing on first run against locally-injected fakes (no
+  real nginx/iptables/network calls in any test).
 
 **Checkpoint (stage done when):**
-`cd services/agent && python -m pytest tests/ -v` passes for `collector.py`
-(mock HTTP backend) and `cli.py` (mock backend + tmp config dir). The
-`enforcer.py` mechanism decision above must be resolved with the developer
-— via `/sdlc use 2 ...` support mode or continuing Phase 2 — before this
-stage's checkpoint counts as fully done.
+`cd services/agent && python -m pytest tests/ -v` — 29/29 pass.
+`cd services/backend && python -m pytest tests/ -v` — 93/93 pass
+(includes the register→authenticate end-to-end test and the TTL-expiry
+test added alongside the two bug fixes above).
 
 ---
 

@@ -1,0 +1,4 @@
+click==8.1.7
+
+# dev/test only
+pytest==8.2.0
