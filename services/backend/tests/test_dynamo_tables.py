@@ -53,3 +53,33 @@ def test_telemetry_events_query_by_tenant_raises_not_implemented(dynamo_resource
     table = TelemetryEventsTable(dynamo_resource)
     with pytest.raises(NotImplementedError):
         table.query_by_tenant("t-1")
+
+
+def test_agents_query_by_status_uses_gsi(dynamo_resource):
+    create_all_tables(dynamo_resource)
+    table = AgentsTable(dynamo_resource)
+    table.put(tenant_id="t-1", agent_id="a-1", status="active", last_seen_at="2026-08-21T00:00:00Z")
+    table.put(tenant_id="t-1", agent_id="a-2", status="stale", last_seen_at="2026-08-20T00:00:00Z")
+    table.put(tenant_id="t-2", agent_id="a-3", status="stale", last_seen_at="2026-08-19T00:00:00Z")
+
+    stale = table.query_by_status("stale")
+    assert {r["agent_id"] for r in stale} == {"a-2", "a-3"}
+
+
+def test_tenants_suspend_existing_tenant(dynamo_resource):
+    create_all_tables(dynamo_resource)
+    table = TenantsTable(dynamo_resource)
+    table.put(tenant_id="t-1", name="Acme", contact_email="a@acme.test",
+              created_at="2026-08-21T00:00:00Z", status="active")
+    assert table.suspend("t-1") is True
+    assert table.get(tenant_id="t-1")["status"] == "suspended"
+
+
+def test_tenants_suspend_missing_tenant_returns_false_not_create(dynamo_resource):
+    # DynamoDB's UpdateItem creates the item if the key doesn't exist by
+    # default — without a ConditionExpression, suspending a bad tenant_id
+    # would silently create a half-populated record instead of failing.
+    create_all_tables(dynamo_resource)
+    table = TenantsTable(dynamo_resource)
+    assert table.suspend("no-such-tenant") is False
+    assert table.get(tenant_id="no-such-tenant") is None

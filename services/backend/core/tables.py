@@ -119,7 +119,8 @@ class _SimpleTable:
         self._table.delete_item(Key={k: key[k] for k in self._key_names})
 
     def update(self, key: dict, update_expression: str,
-               expr_names: dict | None = None, expr_values: dict | None = None) -> None:
+               expr_names: dict | None = None, expr_values: dict | None = None,
+               condition_expression: str | None = None) -> None:
         """Shared wrapper for update_item calls. Unlike put(), a bare
         `self._table.update_item(...)` call does NOT go through
         _to_dynamo_safe — found during review: TelemetryEventsTable's
@@ -135,6 +136,8 @@ class _SimpleTable:
             kwargs["ExpressionAttributeNames"] = expr_names
         if expr_values:
             kwargs["ExpressionAttributeValues"] = _to_dynamo_safe(expr_values)
+        if condition_expression:
+            kwargs["ConditionExpression"] = condition_expression
         self._table.update_item(**kwargs)
 
     def query_by_tenant(self, tenant_id: str) -> list[dict]:
@@ -157,10 +160,52 @@ class TenantsTable(_SimpleTable):
     _table_name = "Tenants"
     _key_names = ("tenant_id",)
 
+    def suspend(self, tenant_id: str) -> bool:
+        """Returns False (not True/raise) if the tenant doesn't exist —
+        callers turn that into a 404. Uses a ConditionExpression rather
+        than a plain update_item: DynamoDB's UpdateItem CREATES the item
+        if the key doesn't already exist, so an unconditional version
+        would silently create a new tenant record containing only
+        status='suspended' when given a bad tenant_id, instead of failing."""
+        try:
+            self.update(
+                key={"tenant_id": tenant_id},
+                update_expression="SET #s = :s",
+                expr_names={"#s": "status"},
+                expr_values={":s": "suspended"},
+                condition_expression="attribute_exists(tenant_id)",
+            )
+            return True
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                return False
+            raise
+
+    def list_all(self) -> list[dict]:
+        """A full table Scan — the only option for "every tenant" since
+        Tenants has no sort key or GSI to Query across. Acceptable here:
+        an admin-only, cross-tenant listing on a table sized in tenants
+        (dozens to low hundreds for this project's scale), not per-request
+        hot-path traffic like Agents (which got a real GSI instead,
+        query_by_status(), because it needed one)."""
+        return self._table.scan().get("Items", [])
+
 
 class AgentsTable(_SimpleTable):
     _table_name = "Agents"
     _key_names = ("tenant_id", "agent_id")
+
+    def query_by_status(self, status: str) -> list[dict]:
+        """Queries the LastSeenIndex GSI (provisioned in Stage 1) —
+        cross-tenant, unlike query_by_tenant(). Matches schema.md's stated
+        purpose for this GSI: letting the Control Platform list e.g. all
+        'stale' agents across every tenant without a full table scan."""
+        from boto3.dynamodb.conditions import Key
+        resp = self._table.query(
+            IndexName="LastSeenIndex",
+            KeyConditionExpression=Key("status").eq(status),
+        )
+        return resp.get("Items", [])
 
 
 class WhitelistTable(_SimpleTable):

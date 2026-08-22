@@ -1531,38 +1531,64 @@ manual verification needed — it's a real assertion, not a spot check).
 `docs/api-contract.md`, gated by Cognito JWT.
 
 **Files:**
+- Create: `services/backend/core/config.py` (pydantic-settings — Cognito
+  user pool id/region/app client id, all with defaults so import never
+  fails without a `.env`)
 - Create: `services/backend/api/cognito_auth.py`
 - Create: `services/backend/api/routes/dashboard.py`
 - Create: `services/backend/api/routes/admin.py`
-- Test: `services/backend/tests/test_dashboard_routes.py`
-- Test: `services/backend/tests/test_admin_routes.py`
+- Create: `services/backend/schemas/whitelist.py`, `model_status.py`, `admin.py`
+- Modify: `services/backend/core/tables.py` — `TenantsTable.suspend()`,
+  `TenantsTable.list_all()`, `AgentsTable.query_by_status()`; `update()`
+  gains an optional `condition_expression` param
+- Modify: `services/backend/api/routes/admin_usage.py`, `main.py` — wire
+  in `admin_auth`/new routers
+- Test: `services/backend/tests/test_cognito_auth.py`,
+  `test_dashboard_routes.py`, `test_admin_routes.py`
 
-**Interfaces:**
-- Produces: `dashboard_auth(id_token: str) -> str` (returns `tenant_id`
-  from the JWT's custom claim), `admin_auth(id_token: str) -> None` (raises
-  403 if the `cognito:groups` claim doesn't contain `admin`) in
-  `api/cognito_auth.py`. Local tests use a fake JWT decoder (`python-jose`
-  with a test key) — do not require a real Cognito user pool to run tests.
-- Consumes: `WhitelistTable`, `MitigationStateTable`, `TenantsTable`,
-  `AgentsTable` (Stage 1), `get_usage_report` (Stage 5).
+**Design decision — stronger than what this stage originally sketched:**
+the plan's note said tests could use "a fake JWT decoder" for
+`dashboard_auth`/`admin_auth`. Implemented instead with a REAL RSA
+keypair generated per test (`cognito_test_keys` fixture in `conftest.py`)
+and a REAL signed JWT (`sign_test_token`), verified through the exact same
+`jwt.decode(...)` call production uses — only the JWKS-fetching function
+(`get_jwks`, the one piece that talks to real Cognito) is swapped via
+`app.dependency_overrides`. Tests cover a tampered signature and a
+wrong-signing-key token, both correctly rejected — a "fake decoder" that
+skips real verification couldn't catch either of those.
 
-**Task-level scope** (same TDD rhythm as Stages 1-5: write the failing
-`TestClient` test against each endpoint in `docs/api-contract.md`'s
-Dashboard/Control-Platform tables first, then implement):
-- `GET/POST/DELETE /dashboard/v1/whitelist`, `GET /dashboard/v1/mitigations`,
-  `GET /dashboard/v1/model/status` — each mirrors an old `ai_engine`
-  endpoint 1:1 in behavior, only the storage/auth layer changed (reuse the
-  request/response shapes already in `docs/api-contract.md`'s Schemas
-  section verbatim).
-- `GET /admin/v1/tenants`, `GET /admin/v1/agents` (query via `AgentsTable`'s
-  `LastSeenIndex` GSI — already provisioned in Stage 1's `_TABLE_SPECS`,
-  budgeted into the account-wide 25/25 free capacity from the start since
-  GSI throughput bills separately from its base table),
-  `POST /admin/v1/tenants/{tenant_id}/suspend`.
+**Bugs/inconsistencies found and fixed while implementing (not anticipated on paper):**
+1. `docs/api-contract.md`'s `WhitelistRequest` has a `reason` field that
+   `docs/schema.md`'s `Whitelist` table never defined (only `added_at`/
+   `added_by`) — a doc inconsistency between two Phase 2 documents.
+   Resolved by storing `reason` as an extra DynamoDB attribute (no fixed
+   schema beyond keys) rather than silently dropping it.
+2. `TenantsTable.suspend()`: DynamoDB's `UpdateItem` creates the item if
+   the key doesn't exist by default. An unconditional version would
+   silently create a half-populated tenant record (`status="suspended"`
+   and nothing else) when given a bad `tenant_id`, instead of 404ing.
+   Fixed with `ConditionExpression="attribute_exists(tenant_id)"` — needed
+   extending `_SimpleTable.update()` with an optional
+   `condition_expression` param.
+3. `GET /admin/v1/agents`: the GSI's partition key IS `status`, so there
+   is no single query for "every agent regardless of status" — only
+   `query_by_status(status)`. Defaulted the endpoint to `status="stale"`,
+   matching `docs/schema.md`'s own stated purpose for this GSI ("list
+   stale/dead agents across all tenants without a table scan"), rather
+   than pretending a general "list all agents" endpoint works the same way.
+4. `GET /admin/v1/tenants` needed a genuine `Scan` (`TenantsTable.list_all()`)
+   — `Tenants` has no sort key or GSI to `Query` across. Accepted
+   deliberately: an admin-only, low-cardinality table (tenant count), not
+   a hot path — unlike `Agents`, which got a real GSI because it needed one.
+5. Retrofitted `admin_auth` onto Stage 5's `/admin/v1/usage`, which shipped
+   unauthenticated with an explicit "Stage 6 closes this" note — closed here.
+6. `ModelStatus.model_ready` triggered a Pydantic v2 warning (`model_`
+   is a protected namespace). Fixed with `model_config = ConfigDict(protected_namespaces=())`
+   rather than renaming a field name fixed by `docs/api-contract.md`.
 
 **Checkpoint (stage done when):**
-`cd services/backend && python -m pytest tests/ -v` — all tests from
-Stages 1-6 pass locally.
+`cd services/backend && python -m pytest tests/ -v` — all 56 tests from
+Stages 1-6 pass locally (moto + locally-signed JWTs, no real AWS/Cognito).
 
 ---
 

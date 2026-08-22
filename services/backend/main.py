@@ -1,14 +1,18 @@
 from fastapi import FastAPI
 from mangum import Mangum
 
+from services.backend.api.routes.admin import router as admin_router
 from services.backend.api.routes.admin_usage import router as admin_usage_router
 from services.backend.api.routes.agent import router as agent_router
+from services.backend.api.routes.dashboard import router as dashboard_router
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.usage import record_invocation
 
 app = FastAPI()
 app.include_router(agent_router)
 app.include_router(admin_usage_router)
+app.include_router(dashboard_router)
+app.include_router(admin_router)
 
 
 def _resolve_resource(request):

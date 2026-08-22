@@ -1,29 +1,43 @@
 from fastapi.testclient import TestClient
 
+from services.backend.api.cognito_auth import get_jwks
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.tables import create_all_tables
 from services.backend.core.usage import get_usage_report
 from services.backend.main import app
+from services.backend.tests.conftest import sign_test_token
 
 
-def _client(dynamo_resource):
+def _client(dynamo_resource, cognito_test_keys):
     create_all_tables(dynamo_resource)
     app.dependency_overrides[get_dynamo_resource] = lambda: dynamo_resource
+    app.dependency_overrides[get_jwks] = lambda: cognito_test_keys["jwks"]
     return TestClient(app)
 
 
-def test_usage_middleware_increments_on_every_request(dynamo_resource):
-    client = _client(dynamo_resource)
+def _admin_headers(cognito_test_keys):
+    token = sign_test_token(cognito_test_keys["private_pem"], {"cognito:groups": ["admin"]})
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_usage_middleware_increments_on_every_request(dynamo_resource, cognito_test_keys):
+    client = _client(dynamo_resource, cognito_test_keys)
     client.get("/health")
     client.get("/health")
     report = get_usage_report(dynamo_resource, date=None)
     assert report.total_requests == 2
 
 
-def test_admin_usage_endpoint_reflects_traffic(dynamo_resource):
-    client = _client(dynamo_resource)
-    client.get("/health")
+def test_admin_usage_endpoint_requires_admin_auth(dynamo_resource, cognito_test_keys):
+    client = _client(dynamo_resource, cognito_test_keys)
     resp = client.get("/admin/v1/usage")
+    assert resp.status_code == 401
+
+
+def test_admin_usage_endpoint_reflects_traffic(dynamo_resource, cognito_test_keys):
+    client = _client(dynamo_resource, cognito_test_keys)
+    client.get("/health")
+    resp = client.get("/admin/v1/usage", headers=_admin_headers(cognito_test_keys))
     assert resp.status_code == 200
     body = resp.json()
     # The middleware increments AFTER call_next() returns (Step: wire into

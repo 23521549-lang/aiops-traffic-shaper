@@ -1,0 +1,30 @@
+from fastapi import APIRouter, Depends, HTTPException
+
+from services.backend.api.cognito_auth import admin_auth
+from services.backend.core.dynamo import get_dynamo_resource
+from services.backend.core.tables import AgentsTable, TenantsTable
+from services.backend.schemas.admin import AgentSummary, Tenant
+
+router = APIRouter()
+
+
+@router.get("/admin/v1/tenants", response_model=list[Tenant], dependencies=[Depends(admin_auth)])
+def list_tenants(resource=Depends(get_dynamo_resource)) -> list[Tenant]:
+    return [Tenant(**item) for item in TenantsTable(resource).list_all()]
+
+
+@router.get("/admin/v1/agents", response_model=list[AgentSummary], dependencies=[Depends(admin_auth)])
+def list_agents(status: str = "stale", resource=Depends(get_dynamo_resource)) -> list[AgentSummary]:
+    # Cross-tenant listing via AgentsTable.query_by_status(), which uses
+    # the LastSeenIndex GSI — schema.md's own stated purpose for that GSI
+    # is finding e.g. stale/dead agents across every tenant, hence the
+    # "stale" default rather than trying to list "all" agents (which the
+    # GSI can't do in one query since its partition key IS status).
+    return [AgentSummary(**item) for item in AgentsTable(resource).query_by_status(status)]
+
+
+@router.post("/admin/v1/tenants/{tenant_id}/suspend", dependencies=[Depends(admin_auth)])
+def suspend_tenant(tenant_id: str, resource=Depends(get_dynamo_resource)) -> dict:
+    if not TenantsTable(resource).suspend(tenant_id):
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return {"message": f"tenant {tenant_id} suspended"}
