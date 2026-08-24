@@ -1,16 +1,23 @@
-name: Build and Deploy
+# SUPERSEDED ARCHITECTURE - MANUAL TRIGGER ONLY.
+#
+# This pipeline builds and deploys the ORIGINAL single-tenant model:
+# services/ai_engine + services/worker_orchestrator, as container images on a
+# self-managed Kubernetes cluster on EC2. ADR-002 (2026-08-21) replaced that
+# whole model with the hybrid one (Lambda + DynamoDB + a thin agent), and the
+# cost constraint driving that pivot is an infrastructure bill of ~0.
+#
+# The automatic `push: main` trigger was REMOVED on 2026-08-24. It matched
+# `services/**`, so merging the hybrid branch into main would have fired this
+# workflow: building and pushing the old images to ECR, then trying to deploy
+# them onto a cluster that does not exist. Left runnable via workflow_dispatch
+# so nothing is lost while the fate of terraform/ and k8s/ is still open, but
+# it must never run by accident again.
+#
+# The hybrid model's CI lives in ci.yml.
+
+name: Build and Deploy (superseded model - manual only)
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'services/**'
-      - 'k8s/**'
-      - 'scripts/**'
-      - 'config/**'
-      - 'tests/**'
-      - '.github/workflows/deploy.yml'
   workflow_dispatch:
     inputs:
       image_tag:
