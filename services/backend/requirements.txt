@@ -1,0 +1,22 @@
+fastapi==0.134.0
+mangum==0.17.0
+boto3==1.34.144
+pydantic==2.7.1
+pydantic-settings==2.2.1
+scikit-learn==1.5.0
+numpy==1.26.4
+click==8.3.3
+# PyJWT, not python-jose - see docs/adr/003-jwt-library.md
+PyJWT==2.13.0
+cryptography==50.0.0
+jinja2==3.1.6
+python-multipart==0.0.31
+
+# dev/test only
+# starlette 1.x TestClient needs this; without it the suite cannot even
+# be COLLECTED on a clean install - found by rebuilding the venv from
+# this file for the first time (Phase 5)
+httpx2==2.12.0
+moto[dynamodb]==5.0.9
+pytest==9.0.3
+pytest-asyncio==1.4.0

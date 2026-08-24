@@ -1,0 +1,58 @@
+{% extends "app_shell.html" %}
+{% set role = "admin" %}
+{% set active = "tenants" %}
+{% block title %}Control Platform — AI Traffic Shaper{% endblock %}
+{% block page_title %}Control Platform{% endblock %}
+{% block page_subtitle %}Publisher view — every tenant{% endblock %}
+{% block page_content %}
+
+{% if usage.ceiling_warning %}
+<div class="alert alert-warning">
+  &#9888; Usage is approaching today's Always-Free ceiling — see the Usage card below before this risks a real AWS bill.
+</div>
+{% endif %}
+
+<div class="card" id="tenants">
+  <h2>Tenants</h2>
+  <div class="card-sub">Every registered tenant. Suspending one stops its agents from being served.</div>
+  <div id="tenants-table">
+    {% include "_tenants_table.html" %}
+  </div>
+</div>
+
+<div class="card" id="agents">
+  <h2>Agents</h2>
+  <div class="card-sub">Cross-tenant agent health, via the LastSeenIndex GSI.</div>
+  <form class="form-row" style="margin-bottom: 14px;"
+        hx-get="/admin/ui/agents" hx-target="#agents-table" hx-swap="innerHTML" hx-trigger="change">
+    <div class="field">
+      <label for="agent-status">Status</label>
+      <select id="agent-status" name="status">
+        <option value="stale" {% if agent_status == "stale" %}selected{% endif %}>Stale</option>
+        <option value="active" {% if agent_status == "active" %}selected{% endif %}>Active</option>
+        <option value="revoked" {% if agent_status == "revoked" %}selected{% endif %}>Revoked</option>
+      </select>
+    </div>
+  </form>
+  <div id="agents-table">
+    {% include "_agents_table.html" %}
+  </div>
+</div>
+
+<div class="card" id="usage">
+  <h2>Usage &amp; free-tier ceiling</h2>
+  <div class="card-sub">Today ({{ usage.date }}), against AWS's Always-Free monthly allowances.</div>
+  <div class="card-grid">
+    <div class="stat"><div class="stat-value">{{ usage.total_requests }}</div><div class="stat-label">Requests today</div></div>
+    <div class="stat"><div class="stat-value">{{ "%.2f"|format(usage.estimated_gb_seconds) }}</div><div class="stat-label">GB-seconds (est.)</div></div>
+    <div class="stat">
+      <div class="stat-value">
+        {% if usage.ceiling_warning %}<span class="badge badge-warning">Near ceiling</span>
+        {% else %}<span class="badge badge-success">Healthy</span>{% endif %}
+      </div>
+      <div class="stat-label">Status</div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

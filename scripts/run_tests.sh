@@ -1,120 +1,39 @@
 #!/bin/bash
-set -uo pipefail
+# Local test run for the hybrid model (ADR-002): services/backend + services/agent.
+#
+# Rewritten 2026-08-24 (Phase 6). The previous version tested the superseded
+# ai_engine / worker_orchestrator services against a live Redis; those services
+# were removed with the rest of the old model.
+#
+# Runs exactly what .github/workflows/ci.yml runs, so "green locally" and
+# "green in CI" mean the same thing. Builds the venv from requirements.txt and
+# nothing else — Phase 5 found requirements.txt was missing httpx2 precisely
+# because no clean install had ever been attempted.
+set -e
 
-SRC_DIR="/mnt/d/code/aiops-traffic-shaper"
-DEST_DIR="$HOME/aiops-traffic-shaper"
+VENV="${VENV:-$HOME/aiops-venv-clean}"
+cd "$(dirname "$0")/.."
 
-cleanup() {
-    local exit_code=$?
-    echo ""
-    echo "===================================================="
-    echo "DỌN DẸP: xoá thư mục tạm dùng để test"
-    echo "===================================================="
-    cd "$SRC_DIR" 2>/dev/null || cd "$HOME" 2>/dev/null || true
-    if [ -d "$DEST_DIR" ]; then
-        SIZE=$(du -sh "$DEST_DIR" 2>/dev/null | cut -f1)
-        rm -rf "$DEST_DIR"
-        echo "Đã xoá $DEST_DIR (giải phóng khoảng ${SIZE:-?})"
-    else
-        echo "Không có gì để xoá ($DEST_DIR không tồn tại)."
-    fi
-    exit "$exit_code"
-}
-trap cleanup EXIT
+log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
-echo "===================================================="
-echo "BƯỚC 1: Kiểm tra Redis local"
-echo "===================================================="
-if redis-cli ping > /dev/null 2>&1; then
-    echo "Redis đang chạy (PONG nhận được)"
-else
-    echo "Redis chưa chạy, đang khởi động..."
-    sudo service redis-server start
-    sleep 1
-    if redis-cli ping > /dev/null 2>&1; then
-        echo "Redis đã khởi động thành công"
-    else
-        echo "LỖI: Không khởi động được Redis. Kiểm tra 'sudo apt-get install redis-server' đã chạy chưa."
-        exit 1
-    fi
+if [ ! -d "$VENV" ]; then
+    log "Creating venv at $VENV"
+    python3 -m venv "$VENV"
 fi
+# shellcheck disable=SC1091
+source "$VENV/bin/activate"
 
-echo ""
-echo "===================================================="
-echo "BƯỚC 2: Copy project sang ổ Linux gốc (~/) để tránh /mnt/d chậm"
-echo "===================================================="
-if [ -d "$DEST_DIR" ]; then
-    echo "Đã tồn tại $DEST_DIR, đang xoá bản cũ để copy lại bản mới nhất..."
-    rm -rf "$DEST_DIR"
-fi
-cp -r "$SRC_DIR" "$DEST_DIR"
-cd "$DEST_DIR" || { echo "LỖI: không cd được vào $DEST_DIR"; exit 1; }
-echo "Đã copy xong, đang làm việc tại: $(pwd)"
+log "Installing from services/backend/requirements.txt"
+pip install -q --upgrade pip
+pip install -q -r services/backend/requirements.txt
+pip install -q ruff==0.6.9 pytest-cov==7.1.0
 
-echo ""
-echo "===================================================="
-echo "BƯỚC 3: Tạo venv và cài dependencies (có thể mất 30-60s)"
-echo "===================================================="
-rm -rf .venv
-python3 -m venv .venv
-./.venv/bin/pip install -q --upgrade pip
-./.venv/bin/pip install -q \
-    -r services/ai_engine/requirements.txt \
-    -r services/worker_orchestrator/requirements.txt \
-    pytest pytest-asyncio anyio trio
-echo "Cài dependencies xong."
+log "Lint"
+ruff check services/backend services/agent
 
-echo ""
-echo "===================================================="
-echo "BƯỚC 4a: Chạy pytest cho AI Engine"
-echo "===================================================="
-PYTHONPATH=. INTERNAL_SECRET=test-secret-for-ci REDIS_HOST=localhost \
-    ./.venv/bin/python -m pytest tests/ai-engine/ -v
-AI_ENGINE_RESULT=$?
+log "Tests + coverage gate (80%)"
+PYTHONPATH=. pytest services/backend/tests/ services/agent/tests/ \
+    --cov=services/backend --cov=services/agent \
+    --cov-report=term --cov-fail-under=80 "$@"
 
-echo ""
-echo "===================================================="
-echo "BƯỚC 4b: Chạy pytest cho Worker Orchestrator"
-echo "===================================================="
-PYTHONPATH=. INTERNAL_SECRET=test-secret-for-ci REDIS_HOST=localhost \
-    ./.venv/bin/python -m pytest tests/worker-orchestrator/ -v
-WORKER_RESULT=$?
-
-echo ""
-echo "===================================================="
-echo "BƯỚC 4c: Chạy pytest cho Integration (local E2E, cả 2 service)"
-echo "===================================================="
-PYTHONPATH=. INTERNAL_SECRET=test-secret-for-ci REDIS_HOST=localhost \
-    ./.venv/bin/python -m pytest tests/integration/ -v
-INTEGRATION_RESULT=$?
-
-echo ""
-echo "===================================================="
-echo "TỔNG KẾT"
-echo "===================================================="
-if [ $AI_ENGINE_RESULT -eq 0 ]; then
-    echo "AI Engine:          PASS"
-else
-    echo "AI Engine:          FAIL (exit code $AI_ENGINE_RESULT)"
-fi
-
-if [ $WORKER_RESULT -eq 0 ]; then
-    echo "Worker Orchestrator: PASS"
-else
-    echo "Worker Orchestrator: FAIL (exit code $WORKER_RESULT)"
-fi
-
-if [ $INTEGRATION_RESULT -eq 0 ]; then
-    echo "Integration (E2E):   PASS"
-else
-    echo "Integration (E2E):   FAIL (exit code $INTEGRATION_RESULT)"
-fi
-
-echo ""
-echo "(Thư mục tạm sẽ được tự dọn dẹp ngay sau dòng này. Code chính vẫn nằm ở: $SRC_DIR)"
-
-if [ $AI_ENGINE_RESULT -eq 0 ] && [ $WORKER_RESULT -eq 0 ] && [ $INTEGRATION_RESULT -eq 0 ]; then
-    exit 0
-else
-    exit 1
-fi
+log "Done"

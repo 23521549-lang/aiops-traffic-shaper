@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="app-shell">
+  <div class="sidebar">
+    <div class="brand"><span class="brand-dot"></span> AI Traffic Shaper</div>
+
+    {% if role == "tenant" %}
+    <div class="nav-group-label">Dashboard</div>
+    <a class="nav-link {% if active == 'mitigations' %}active{% endif %}" href="/dashboard/ui">Active mitigations</a>
+    <a class="nav-link {% if active == 'whitelist' %}active{% endif %}" href="/dashboard/ui#whitelist">Whitelist</a>
+    <a class="nav-link {% if active == 'model' %}active{% endif %}" href="/dashboard/ui#model">Model status</a>
+    {% elif role == "admin" %}
+    <div class="nav-group-label">Control Platform</div>
+    <a class="nav-link {% if active == 'tenants' %}active{% endif %}" href="/admin/ui">Tenants</a>
+    <a class="nav-link {% if active == 'agents' %}active{% endif %}" href="/admin/ui#agents">Agents</a>
+    <a class="nav-link {% if active == 'usage' %}active{% endif %}" href="/admin/ui#usage">Usage &amp; free-tier</a>
+    {% endif %}
+
+    <div class="sidebar-footer">
+      <a class="nav-link" href="/ui/logout">Log out</a>
+    </div>
+  </div>
+  <div class="main">
+    <div class="topbar">
+      <h1>{% block page_title %}{% endblock %}</h1>
+      <div style="color: var(--text-muted); font-size: 13px;">{% block page_subtitle %}{% endblock %}</div>
+    </div>
+    <div class="content">
+      {% block page_content %}{% endblock %}
+    </div>
+  </div>
+</div>
+{% endblock %}

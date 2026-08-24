@@ -1,123 +1,77 @@
-# Security Report
+# Security Report — hybrid multi-tenant model
 
-## Code review of Phase 3 changes (Phase 4, 2026-08-21)
+- **Date:** 2026-08-24 · **Phase:** 4 (Security & Review), strict mode
+- **Scope:** branch `feature/hybrid-backend` — `services/backend/` and
+  `services/agent/`, i.e. every line written in the Phase 3 redo
+- **Replaces** the 2026-08-21 report entirely. That one audited the old
+  single-tenant K8s model; its assumptions do not carry over. It remains in
+  git history (commit `ad73703`).
+- **Tooling:** `vibesec` skill (routed via `.sdlc/skills-resolved.json`),
+  manual review of the full diff, `pip-audit`, `detect-secrets`,
+  `pip-licenses`, `ruff`.
 
-Reviewed the full diff introduced in Phase 3 (whitelist-suppression check,
-generalized+debounced `ConfigMapPatcher`, Tier 1 dynamic rate-limit wiring,
-`pydantic-settings` config fix) twice independently — once directly, once
-via a separate subagent with no access to the first pass's reasoning — for
-injection, authN/authZ bypass, secrets exposure, and RBAC over-permissioning.
+## Findings
 
-**Result: no findings at ≥7/10 confidence.** Specifically traced:
-- Every IP value that reaches `ConfigMapPatcher.add_rule()` (which builds
-  the Nginx rule line via `rule_template.format(ip=ip)`) originates from
-  `MitigationRequest.target_ip`, validated by `ipaddress.ip_address()` in
-  `services/worker_orchestrator/schemas/mitigation.py` before it can reach
-  the handler body — no template/injection path found.
-- `remove_rule()` (used by the unblock/cleanup paths) never formats the
-  rule template at all, only does a dict-key lookup — no injection surface
-  there either, including via the pre-existing unvalidated `ip: str` path
-  param on `DELETE /blocklist/{ip}` (unchanged by this diff).
-- `k8s/worker-orchestrator/rbac.yaml`'s `resourceNames: ["nginx-blocklist",
-  "nginx-ratelimit"]` scoping was already present before this diff (not
-  broadened) — the new ConfigMap the patcher targets was already
-  anticipated in RBAC.
-- The whitelist-suppression check reads the same `whitelist:ips` Redis key
-  already gated by `X-Internal-Token` for writes — no new way to reach it.
-- The `extra="ignore"` pydantic-settings fix only affects unknown env vars;
-  `internal_secret` has no default, so a missing/misnamed value still
-  fails fast rather than silently falling back to something insecure.
+| # | Severity | Finding | Location | Status |
+|---|---|---|---|---|
+| H1 | High | `admin_auth` accepted a Cognito **access token** and tokens minted for any app client in the pool: `token_use` was never checked, and `verify_aud` was switched off whenever `cognito_app_client_id` was unset — which is its default | `api/cognito_auth.py` | **Fixed** |
+| H2 | High | Verification algorithm was read from the JWKS entry rather than pinned, on a library with known algorithm-confusion CVEs | `api/cognito_auth.py` | **Fixed** |
+| H3 | High | Suspending a tenant did nothing. `agent_auth` checked only the *agent's* status; nothing read the *tenant's*. A suspended tenant kept ingesting telemetry, kept receiving mitigation decisions, and its dashboard JWT stayed valid | `api/dependencies.py`, `api/routes/admin.py` | **Fixed** |
+| H4 | High | The agent trusted the backend blindly: `MitigationState.ip` was an unvalidated `str`, and `NginxAdapter` wrote it into `/etc/nginx/conf.d/` then reloaded nginx — a newline injects arbitrary nginx directives on the customer's machine. `IptablesAdapter` had validated from the start; nginx had not | `schemas/mitigation.py`, `agent/enforcer/nginx_adapter.py` | **Fixed** |
+| M5 | Medium | 18 known CVEs across 6 declared dependencies, incl. `python-multipart` (DoS, reachable pre-auth at `/ui/login`) and the JWT library itself | `*/requirements.txt` | **Fixed** |
+| M6 | Medium | No security headers at all — no CSP, X-Frame-Options, nosniff, HSTS or Referrer-Policy | `main.py` | **Fixed** |
+| M7 | Medium | Cookie-authenticated state-changing UI endpoints had no CSRF defence beyond `SameSite=Lax` — no token, no Origin check | `ui/csrf.py` (new), `ui/*.py` | **Fixed** |
+| M8 | Medium | `track_usage` wrote to DynamoDB on **every** request including rejected ones, letting anonymous traffic burn the Always-Free quota the product depends on | `main.py` | **Mitigated** |
+| L9 | Low | `detail=f"Invalid token: {e}"` returned raw library exception text to the caller | `api/cognito_auth.py` | **Fixed** |
 
-Excluded from scope per standard review criteria: the debounce window's
-theoretical add/remove race (availability edge case, no attacker-granted
-access, and overlaps with rate-limiting/DOS exclusions), and the
-`$binary_remote_addr`-vs-`X-Forwarded-For` caveat already documented in
-`docs/architecture.md` (DOS/rate-limiting-adjacent, out of scope for this
-pass).
+### How each fix was verified
+Every finding got a failing test **first**, run against the unpatched code, and
+the test names state the vulnerability rather than the mechanism. Auth tests
+sign real RS256 tokens with a real locally generated keypair and verify through
+the same `jwt.decode()` call production uses — a stubbed verifier would have
+hidden H1 entirely. Suite: **142 passed**, `ruff` clean.
 
-## Dependency + secret scan (Phase 3 / PLAN.md Stage 4 prep)
+## Checks that passed with no finding
 
-Scope: dependency vulnerability scan + secret history check, done ahead of
-this formal review.
+- **Tenant isolation (JSON API).** Structurally sound: every `/dashboard/v1/*`
+  route derives `tenant_id` from the JWT claim and passes it as the DynamoDB
+  partition key. No route on the tenant surface accepts a tenant identifier
+  from a path, query or body — there is no IDOR surface to probe. The one
+  cross-tenant surface (`/admin/v1/*`) is behind `admin_auth`.
+- **Secrets.** `.env` has never been committed (`git log --all -- .env` is
+  empty) and is in `.gitignore`. History scan over all commits found only the
+  placeholder `GRAFANA_ADMIN_PASSWORD=change-me-grafana-password` in
+  `.env.example`. Agent API keys are `secrets.token_urlsafe(32)` (256-bit),
+  stored only as SHA-256, and returned exactly once at registration.
+- **Licences.** All dependencies MIT / BSD / Apache-2.0. The project is
+  open-source (`closed_source: false`), so no copyleft conflict arises.
+- **XSS.** Jinja2 autoescaping is on for all `.html` templates; the only
+  `innerHTML` write in `interactions.js` consumes server-rendered, escaped
+  markup.
 
-## Dependency vulnerability scan
+## Accepted / deferred risks
 
-Run via `pip-audit` (WSL, Python 3.12, against the exact pinned
-`requirements.txt` for each service) on 2026-08-21.
+| Risk | Why it stands | Owner decision |
+|---|---|---|
+| No AWS-native rate limiting on the public Lambda Function URL | API Gateway was dropped for cost (ADR-002). M8 removes the *unauthenticated* amplification, but a caller with valid credentials can still spend quota | Carried forward from ADR-002 |
+| No Cognito Hosted-UI OAuth flow — CLI and web UI both paste an ID token by hand | Known v1 gap from Stage 8/9, unchanged here | Deferred to a later round |
+| Retrain writes straight to `production` with no staging/validation gate | Port of `ai_engine/ml/validator.py` is scope beyond Stage 7 | Backlog, recorded in Stage 7 |
 
-### services/ai_engine/requirements.txt
+## Open issue that must close before Phase 5
 
-| Package | Installed | Advisory | Fixed in |
-|---|---|---|---|
-| scikit-learn | 1.4.2 | PYSEC-2024-110 | 1.5.0 |
-| starlette (transitive, via fastapi==0.111.0) | 0.37.2 | PYSEC-2026-161 | 1.0.1 |
-| starlette | 0.37.2 | PYSEC-2026-248 | 1.3.0 |
-| starlette | 0.37.2 | PYSEC-2026-249 | 1.3.1 |
-| starlette | 0.37.2 | PYSEC-2026-1943 | 0.40.0 |
-| starlette | 0.37.2 | PYSEC-2026-1941 | 0.47.2 |
-| starlette | 0.37.2 | PYSEC-2026-2281 | 1.1.0 |
-| starlette | 0.37.2 | PYSEC-2026-2280 | 1.1.0 |
+**The local venv does not match `requirements.txt`.** It runs
+`fastapi 0.111 / starlette 0.37` while the declared set pins
+`fastapi==0.134.0` — the Phase 3 dependency remediation updated the file but
+never reinstalled the environment. So the 142 green tests ran against a stack
+that is **not** the stack that will deploy. `pip-audit -r` on the declared set
+is clean, but that is a static check. Phase 5 must rebuild the venv from
+`requirements.txt` and re-run the full suite before its own results mean
+anything.
 
-### services/worker_orchestrator/requirements.txt
+## Tooling note (honest)
 
-Same starlette advisories as above (transitive via `fastapi==0.111.0`,
-which every service pins). No `kubernetes`/`redis`/`apscheduler`/
-`prometheus-client` findings.
-
-### Remediation status: APPLIED 2026-08-21
-
-- **scikit-learn 1.4.2 → 1.5.0** in `services/ai_engine/requirements.txt`
-  (the minimum version that fixes PYSEC-2024-110, not the latest available
-  — chosen to minimize behavioral-drift risk from the bump).
-- **fastapi 0.111.0 → 0.134.0** in both services' `requirements.txt`, which
-  resolves `starlette` 0.37.2 → 1.6.0 — comfortably above every "fixed in"
-  threshold from the advisories above. Checked with a smaller bump first
-  (fastapi 0.115–0.120 range only reaches starlette 0.48.0, still short of
-  the 1.0.1/1.1.0/1.3.x fixes) before settling on 0.134.0 as a middle
-  ground between "smallest possible diff" and "latest available"
-  (0.141.1 at time of writing).
-- **pydantic / pydantic-settings left unpinned-change** (2.7.1 / 2.2.1) —
-  confirmed compatible with fastapi 0.134.0, no forced bump needed.
-
-**Verification:** fresh WSL venv per service with the new pins,
-`pip-audit` re-run against the actual `requirements.txt` files — **no
-known vulnerabilities found** for either service. Full test suite
-(`bash scripts/run_tests.sh`) re-run afterward: 96 (ai-engine) + 41
-(worker-orchestrator) = 137 passed, no regressions from the bump.
-
-## Secret history check (broad pattern scan, Phase 4)
-
-`git log -p --all` scanned for `(api_key|secret|password|token)\s*[:=]\s*<value>`
-patterns across every commit, not just the 3 known filenames below. Single
-match: `token: fake-token` in the CI workflow's dummy kubeconfig
-(`.github/workflows/deploy.yml`) — a deliberate placeholder for tests, not
-a real credential. No other matches.
-
-## Secret history check (specific filenames)
-
-```
-git log --all --full-history -- .env        → no results (never committed)
-git log --all --full-history -- "*.pem"      → no results (never committed)
-git log --all --full-history -- terraform.tfvars → no results (never committed)
-```
-
-Confirmed clean: `.env`, private key files, and `terraform.tfvars` have
-never entered git history. `.gitignore` correctly excludes all three
-patterns, and the real local copies of these files were verified present
-on disk (used during earlier live-cluster work per Phase 2 findings) but
-outside version control the entire time.
-
-## Dependency license audit (Phase 4, 2026-08-21)
-
-Ran `pip-licenses` against every installed dependency (direct + transitive)
-across both services' virtualenvs. **No GPL/AGPL/LGPL (copyleft) licenses
-found** — everything is MIT, BSD (2/3-clause), Apache-2.0, MPL-2.0, ISC,
-PSF-2.0, or Unlicense. This means whichever license the project eventually
-picks (LICENSE decision still deferred, see below) will not conflict with
-any dependency's terms — no copyleft obligations to reconcile.
-
-## LICENSE
-
-Deferred per user decision 2026-08-20 (see `docs/PLAN.md` Stage 4) —
-explicitly non-blocking for this report or Stage 5. Dependency license
-audit above confirms this choice is unconstrained by dependency licensing.
+`gitleaks` — the tool this project's own gate text prefers — was not installed
+and installing an external binary was out of scope for this pass. The secret
+scan used `detect-secrets` (pip) plus a `git log -p --all` pattern sweep
+instead. The result is credible for this repo's size but is not a gitleaks run,
+and should not be recorded as one.

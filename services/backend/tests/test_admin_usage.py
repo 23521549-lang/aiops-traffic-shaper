@@ -1,0 +1,55 @@
+from fastapi.testclient import TestClient
+
+from services.backend.api.cognito_auth import get_jwks
+from services.backend.core.dynamo import get_dynamo_resource
+from services.backend.core.tables import create_all_tables
+from services.backend.core.usage import get_usage_report
+from services.backend.main import app
+from services.backend.tests.conftest import sign_test_token
+
+
+def _client(dynamo_resource, cognito_test_keys):
+    create_all_tables(dynamo_resource)
+    app.dependency_overrides[get_dynamo_resource] = lambda: dynamo_resource
+    app.dependency_overrides[get_jwks] = lambda: cognito_test_keys["jwks"]
+    return TestClient(app)
+
+
+def _admin_headers(cognito_test_keys):
+    token = sign_test_token(cognito_test_keys["private_pem"], {"cognito:groups": ["admin"]})
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_usage_middleware_counts_authenticated_work(dynamo_resource, cognito_test_keys):
+    """Phase 4 / M8 restated this test. It used to assert metering on EVERY
+    request and used /health to prove it — which is exactly the hole: an
+    anonymous caller could spend the account's Always-Free write quota just by
+    hammering an unauthenticated endpoint. Metering now follows authenticated
+    work, so this asserts the property that actually matters."""
+    client = _client(dynamo_resource, cognito_test_keys)
+    client.get("/admin/v1/usage", headers=_admin_headers(cognito_test_keys))
+    client.get("/admin/v1/usage", headers=_admin_headers(cognito_test_keys))
+    report = get_usage_report(dynamo_resource, date=None)
+    assert report.total_requests == 2
+
+
+def test_admin_usage_endpoint_requires_admin_auth(dynamo_resource, cognito_test_keys):
+    client = _client(dynamo_resource, cognito_test_keys)
+    resp = client.get("/admin/v1/usage")
+    assert resp.status_code == 401
+
+
+def test_admin_usage_endpoint_reflects_traffic(dynamo_resource, cognito_test_keys):
+    client = _client(dynamo_resource, cognito_test_keys)
+    client.get("/admin/v1/usage", headers=_admin_headers(cognito_test_keys))
+    resp = client.get("/admin/v1/usage", headers=_admin_headers(cognito_test_keys))
+    assert resp.status_code == 200
+    body = resp.json()
+    # The middleware increments AFTER call_next() returns (Step: wire into
+    # main.py), so a request's own count isn't visible in its own response
+    # — this call sees only the prior /health request's increment (1), not
+    # itself. A one-request lag on an approximate ceiling-warning report is
+    # harmless; verified here so it's a documented behavior, not a
+    # surprise.
+    assert body["total_requests"] == 1
+    assert "ceiling_warning" in body

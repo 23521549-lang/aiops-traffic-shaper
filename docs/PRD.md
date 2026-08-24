@@ -105,7 +105,7 @@ vận hành hạ tầng ML.
 - [ ] Dữ liệu/telemetry của các tenant được cô lập với nhau (không rò rỉ chéo)
 - [ ] Backend chạy được trong ngân sách hạ tầng mục tiêu ≈ 0đ (ngưỡng cụ thể:
       Phase 2 định nghĩa theo giải pháp hạ tầng)
-- [ ] Có cơ chế giới hạn/điều tiết khi tổng tải vượt ngưỡng free-tier, tránh
+- [x] Có cơ chế giới hạn/điều tiết khi tổng tải vượt ngưỡng free-tier, tránh
       phát sinh chi phí ngoài kế hoạch
 
 ### US-5: CLI cài đặt & cấu hình agent [Must]

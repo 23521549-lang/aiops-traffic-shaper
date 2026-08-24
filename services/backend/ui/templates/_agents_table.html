@@ -1,0 +1,22 @@
+{% if agents %}
+<table>
+  <thead><tr><th>Tenant</th><th>Agent</th><th>Version</th><th>Status</th><th>Last seen</th></tr></thead>
+  <tbody>
+    {% for a in agents %}
+    <tr>
+      <td><code>{{ a.tenant_id }}</code></td>
+      <td><code>{{ a.agent_id }}</code></td>
+      <td>{{ a.agent_version or "—" }}</td>
+      <td>
+        {% if a.status == "stale" %}<span class="badge badge-warning">Stale</span>
+        {% elif a.status == "revoked" %}<span class="badge badge-danger">Revoked</span>
+        {% else %}<span class="badge badge-success">Active</span>{% endif %}
+      </td>
+      <td>{{ a.last_seen_at }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">No agents with this status.</div>
+{% endif %}

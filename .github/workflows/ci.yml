@@ -1,0 +1,76 @@
+# CI for the hybrid model (ADR-002): services/backend + services/agent.
+#
+# Added 2026-08-24, Phase 6. Until now the repository's ONLY workflow was
+# deploy.yml, which tests and deploys the superseded single-tenant model — so
+# the 151-test hybrid suite built across Phases 3–5 had no CI enforcement at
+# all, while a merge to main would have deployed the old architecture.
+#
+# Everything here mirrors a gate row the project already holds itself to, so
+# CI failing and a gate failing mean the same thing:
+#   ruff        -> Phase 3 gate, "formatter + linter clean"
+#   pytest      -> Phase 3 "suite passes" + Phase 5 "no regression"
+#   --cov-fail-under=80 -> Phase 5 "coverage meets target" (coverage_target
+#                          in .sdlc/project-state.json; keep the two in sync)
+#   pip-audit   -> Phase 4 "dependency audit clean"
+
+name: CI (hybrid model)
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+    paths:
+      - 'services/backend/**'
+      - 'services/agent/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    paths:
+      - 'services/backend/**'
+      - 'services/agent/**'
+      - '.github/workflows/ci.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Lint, test, audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        # From the declared file only — never an ad-hoc list. Phase 5 found
+        # requirements.txt was missing httpx2 precisely because no clean
+        # install had ever been attempted; this step keeps that honest.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r services/backend/requirements.txt
+          pip install ruff==0.6.9 pytest-cov==7.1.0
+
+      - name: Lint
+        run: ruff check services/backend services/agent
+
+      - name: Test with coverage
+        env:
+          PYTHONPATH: .
+        run: |
+          pytest services/backend/tests/ services/agent/tests/ \
+            --cov=services/backend --cov=services/agent \
+            --cov-report=term --cov-fail-under=80
+
+      - name: Dependency audit
+        # Blocking on purpose: Phase 4's gate requires a clean audit, so CI
+        # must not go green on a vulnerable dependency set. A newly disclosed
+        # upstream CVE will therefore break this job on an unrelated PR — that
+        # is the intended trade-off. Relax to `continue-on-error: true` only
+        # with a deliberate decision recorded in docs/security-report.md.
+        run: |
+          pip install pip-audit==2.7.3
+          pip-audit -r services/backend/requirements.txt
+          pip-audit -r services/agent/requirements.txt

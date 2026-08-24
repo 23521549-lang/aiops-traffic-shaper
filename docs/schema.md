@@ -94,10 +94,18 @@ fixed-bucket-boundary evasion gap).
 |---|---|---|---|
 | PK | `tenant_ip` | S | `"{tenant_id}#{ip}"` |
 | SK | `bucket_start_ts` | N | epoch seconds, floored to the bucket size (default 5s) |
+| | `tenant_id`, `ip` | S, S | plain attributes, not just embedded in `tenant_ip` — added in Stage 7 so the `TenantIndex` GSI below can query by tenant without parsing the composite key |
 | | `request_count`, `error_count`, `post_count` | N | atomic `ADD` per batch |
 | | `total_bytes`, `total_time` | N | atomic `ADD` per batch, sums for averaging |
 | | `distinct_uri_count`, `distinct_ua_count` | N | computed once per batch in Lambda memory, then `ADD`ed — bounded size regardless of traffic volume, unlike a stored list |
-| | `ttl` | N | native DynamoDB TTL, e.g. 1h — bounds storage growth automatically |
+| | `ttl` | N | native DynamoDB TTL, **90,000s (25h)** — raised from an initial 1h default in Stage 7: this table backs the ~24h shadow/training window described above, and 1h was deleting almost all of a tenant's data before the daily retrain ever ran |
+
+GSI `TenantIndex` (PK `tenant_id`, SK `bucket_start_ts`) — added in Stage 7
+so the daily retrain job (`docs/PLAN.md`) can gather one tenant's training
+data across every IP and bucket. `query_by_tenant()` on this table still
+deliberately raises `NotImplementedError` (Stage 2) since the *base
+table's* key can't do this — use `query_since(tenant_id, since_ts)`
+instead, which queries this GSI.
 
 ### `UsageCounters`
 Exists specifically to protect the 0đ constraint — the Control Platform

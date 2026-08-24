@@ -102,6 +102,16 @@ centralized in the Lambda backend, reusing `feature_engineering.py`
 unchanged — this keeps the agent free of the sklearn dependency entirely,
 so it stays genuinely lightweight and easy to distribute.
 
+**Local enforcement mechanism (resolved in Stage 8, not guessed here):**
+a pluggable adapter architecture, not one fixed mechanism — inspired by
+CrowdSec's "bouncer" model (the enforcement-side successor to fail2ban's
+single-hook design) but going further: multiple adapters (nginx, iptables)
+can be auto-detected and run simultaneously on one agent, rather than
+picking exactly one mechanism at install time. See `docs/PLAN.md` Stage 8
+for the full design and the real bugs (a hardcoded `expires_at=0` and an
+`agent_auth` that never actually hashed the incoming key) found while
+building it.
+
 ### UI decision (explicit, not silent)
 
 The product has two human-facing UIs — Dashboard (end user, tenant-scoped)
@@ -109,6 +119,16 @@ and Control Platform (publisher, cross-tenant) — both **build**, both served
 as server-rendered HTML/JS directly from Lambda Function URLs. No separate
 frontend framework/build pipeline decided yet; kept as a `docs/PLAN.md`
 open item for Phase 3 rather than guessed here.
+
+**Resolved in Stage 8 (backend routing) / Stage 9 (the pages
+themselves):** Jinja2 templates + a small custom (~70 line) attribute-
+driven JS helper, not the real htmx library — this offline environment
+can't fetch/verify the actual htmx.js, and faking a well-known third-party
+library from memory risked shipping something that silently isn't it.
+Building this surfaced a real gap: `dashboard_auth`/`admin_auth` (Stage 6)
+only read a Bearer header, which a plain HTML page navigation can never
+attach — fixed with a cookie fallback into the same verification path.
+See `docs/PLAN.md` Stage 9 for the full design.
 
 ## Hardening pass (2026-08-21, same session)
 
