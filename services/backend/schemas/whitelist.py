@@ -10,7 +10,7 @@ class WhitelistRequest(BaseModel):
     @field_validator("ip")
     @classmethod
     def validate_ip(cls, v: str) -> str:
-        ipaddress.ip_address(v)  # raises ValueError -> FastAPI 422, matches the old ai_engine contract
+        ipaddress.ip_address(v)  # raises ValueError -> FastAPI 422, matches the superseded ai_engine contract (removed Phase 6)
         return v
 
 

@@ -48,7 +48,8 @@ def load_model(resource, tenant_id: str, stage: str = "production") -> Isolation
         # A corrupted blob or a joblib/sklearn version mismatch between the
         # training Lambda and the serving Lambda must fall back to shadow
         # mode (return None), not crash the whole telemetry request with an
-        # unhandled 500 — restores the behavior the old ai_engine/ml/registry.py
+        # unhandled 500 — restores the behavior of the superseded ai_engine/ml/registry.py
+        # (removed in Phase 6; see git history and ADR-002)
         # had and this port initially dropped.
         logger.error("Failed to deserialize model: tenant=%s stage=%s: %s",
                      tenant_id, stage, e)

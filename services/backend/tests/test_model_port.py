@@ -8,7 +8,8 @@ from services.backend.ml.model import classify_score, AnomalyTier, ModelManager
 
 def test_classify_score_thresholds_match_old_service():
     # TIER1_THRESHOLD = -0.1, TIER2_THRESHOLD = -0.3 — unchanged from
-    # ai_engine/ml/model.py, must not silently drift during the port
+    # the superseded ai_engine/ml/model.py (removed Phase 6, in git
+    # history); these thresholds must not silently drift from it
     assert classify_score(0.5) == AnomalyTier.NORMAL
     assert classify_score(-0.15) == AnomalyTier.RATE_LIMIT
     assert classify_score(-0.35) == AnomalyTier.HARD_BLOCK
