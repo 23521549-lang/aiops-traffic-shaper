@@ -6,7 +6,9 @@ log_info()  { echo "$LOG_PREFIX [INFO]  $*"; }
 log_error() { echo "$LOG_PREFIX [ERROR] $*" >&2; }
 log_step()  { echo "$LOG_PREFIX [STEP]  -------- $* --------"; }
 
-TARGET_URL="${1:-http://localhost:30080}"
+# Target = the customer web server the agent sits in front of, not a
+# NodePort: the Kubernetes model this script was written for is gone.
+TARGET_URL="${1:-http://localhost:8080}"
 ATTACK_TYPE="${2:-all}"
 
 if ! command -v curl > /dev/null 2>&1; then
@@ -138,7 +140,8 @@ Expected detections in Grafana:
   slowloris          → avg_request_time spike
 
 Check:
-  kubectl logs -f deployment/ai-engine -n aiops
+  tail -f /var/log/aiops-agent.log        # agent decisions
+  # or open the tenant dashboard at <function-url>/dashboard/ui
   Grafana: http://<worker-ip>:30300
 ------------------------------------------------------------------------
 SUMMARY

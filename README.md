@@ -1,167 +1,177 @@
-# AI-Driven FinOps & Traffic Shaper
+# AI Traffic Shaper
 
-An automated, closed-loop AIOps platform that detects and mitigates
-cost-inflating network anomalies (DDoS, scrapers, botnets) in real time
-using a 3-layer protection architecture with unsupervised ML at its core.
-Deployed on a self-managed Kubernetes cluster with full CI/CD automation.
+A free, multi-tenant service that detects and mitigates cost-inflating traffic
+(DDoS, scrapers, credential stuffing) using unsupervised ML — **without asking
+the customer to run any ML infrastructure**.
 
-## System Status
+Customers install a thin agent on their own machine. It forwards request
+metadata to a shared backend, receives mitigation decisions back, and enforces
+them locally through whatever it finds available (nginx, iptables, or both at
+once). All ML lives in the backend, which runs entirely inside AWS's
+Always-Free tier — the hard constraint that shaped every decision in
+[ADR-002](docs/adr/002-tech-stack-hybrid.md).
 
-Deployed and verified stable on AWS ap-southeast-1 (1 master + 3 workers).
-All services running: Redis, nginx-proxy (with reloader and fluent-bit
-sidecars), ai-engine, worker-orchestrator, Prometheus, Grafana, and the
-ip-reputation-updater CronJob.
+## Status — read this first
 
-Resolved operational issues are documented in docs/runbook.md under
-"Known Issues and Fixes".
+**Never deployed. Verified locally only.**
 
-## 3-Layer Protection Architecture
+The backend and agent are complete and tested — 158 tests, 98% line coverage,
+a clean dependency audit — but every test runs against `moto` (an in-process
+DynamoDB simulator) and locally signed JWTs. No Lambda, no Cognito user pool,
+and no live DynamoDB table has ever run. Provisioning the real infrastructure
+is Phase 7 and has not started; `terraform/` currently holds only the two
+modules that will survive into it (see [terraform/README.md](terraform/README.md)).
+
+An earlier version of this README claimed the system was "deployed and verified
+stable on AWS". That was never true, and it described a different architecture
+besides — one replaced by ADR-002 in August 2026.
+
+## How it works
 
 ```mermaid
-flowchart TD
-    A[Internet Traffic] --> B["Layer 1: Nginx Rate Limiting<br/>immediate, no ML, 0ms latency"]
-    B --> C["Layer 2: IsolationForest ML<br/>behavioral detection, ~3s latency"]
-    C --> D["Layer 3: IP Reputation Blocklist<br/>known bad actors, O(1) lookup"]
-    D --> E["Mitigation: Tier 1 rate-limit<br/>or Tier 2 hard block (auto-expiry TTL)"]
+flowchart LR
+    U[End-user traffic] --> N[Customer's nginx]
+    N -->|access logs| A[Agent<br/>thin client]
+    A -->|POST /agent/v1/telemetry<br/>batched metadata| B[Backend<br/>AWS Lambda]
+    B --> D[(DynamoDB<br/>7 tables)]
+    B -->|IsolationForest<br/>per tenant| B
+    B -->|mitigation decisions| A
+    A -->|deny / rate-limit| N
 ```
 
-End-to-end detection latency: under 3 seconds.
+1. The agent batches request metadata — never request bodies — and posts it to
+   the backend, authenticated with a per-agent API key.
+2. The backend aggregates it into one item per *(tenant, IP, 5-second bucket)*
+   and computes 7 behavioural features per source IP.
+3. A per-tenant IsolationForest scores each feature vector. Score below −0.1
+   means **Tier 1, rate limit** (300s); below −0.3 means **Tier 2, hard block**
+   (3600s). Above that, nothing happens.
+4. Decisions return in the same HTTP response. The agent applies them through
+   every enforcement adapter available and removes them itself when the TTL
+   expires — nothing else ever will.
+5. Every night, EventBridge triggers a retrain per tenant. A new model reaches
+   production only through a validation gate that rejects models which would
+   block too much normal traffic, or whose score spread has destabilised.
 
-## Key Technical Highlights
+### The 7 features
 
-### MLOps Pipeline
+`request_rate` · `error_ratio` · `avg_bytes_sent` · `avg_request_time` ·
+`unique_uri_ratio` · `user_agent_entropy` · `post_ratio`
 
-- Unsupervised anomaly detection using Isolation Forest on 7 configurable
-  behavioral features per source IP (Feature Registry pattern)
-- 24-hour shadow mode collects baseline traffic before enabling mitigation
-- Daily automated retraining with 80/20 train/validation split
-- Model validation before promotion: block rate threshold + std regression check
-- Feedback loop: whitelisted IPs automatically excluded from training data
-- Feature drift detection using standard deviation from training baseline
-- Weekly model archival with version history
+Computed with a sliding-window counter (current bucket plus a weighted
+previous bucket) so a burst split across a bucket boundary is still caught.
 
-### Infrastructure
+## The cost model is the design
 
-- Self-managed Kubernetes cluster via Terraform on AWS EC2
-  (1 master + 3 workers, ap-southeast-1)
-- Terraform remote state on S3 + DynamoDB locking
-- GitHub Actions OIDC — no static AWS credentials stored
-- Kubernetes RBAC scoped to minimum required permissions
-- Nginx hot-reload via inotify sidecar — no Docker socket exposure
-- FluentBit runs as a sidecar container in the nginx-proxy pod, sharing
-  the log volume directly instead of a cluster-wide DaemonSet
-- Network Policies restrict inter-pod communication
-- PersistentVolumeClaims for model, Prometheus, and Grafana storage
-- AWS SSM Parameter Store for automated K8s cluster join, cleared at the
-  start of each master init to avoid stale join commands on re-deploy
+The backend must cost ~0 forever, which rules out anything on AWS's 12-month
+free tier. That constraint produced the architecture's most distinctive
+property: **write cost does not grow with attack volume.**
 
-### Backend & Reliability
+| Measured | DynamoDB writes |
+|---|---|
+| 20 log lines from 10 IPs | 11 |
+| 200 log lines from 10 IPs | 11 |
 
-- FastAPI with full async architecture (anyio thread pool for ML inference)
-- Circuit breaker on AI Engine to Worker Orchestrator HTTP calls
-  (5 failure threshold, 30s recovery timeout)
-- Pydantic v2 models for all request/response validation
-- Redis Sorted Sets for O(log N) sliding window (TTL-based auto-cleanup)
-- Redis Stream with MAXLEN for bounded shadow training data storage
-- Two-tier progressive mitigation with automatic TTL-based unblock
+Telemetry is aggregated per IP per time bucket with atomic `ADD` operations,
+so a flood costs the same as a trickle from the same attackers — exactly when
+a naive per-log-line design would spike the bill. The numbers above come from
+`services/backend/tests/test_perf_budget.py`, which counts real DynamoDB API
+calls and fails if that property ever regresses.
 
-### Security
+Everything else follows the same rule: Lambda Function URLs instead of API
+Gateway, the model stored as a gzipped blob in a DynamoDB item instead of S3,
+server-rendered HTML instead of static hosting.
 
-- GitHub Actions OIDC (no long-lived AWS credentials)
-- X-Internal-Token authentication on all internal service calls
-- Kubernetes Network Policies (deny-by-default between services)
-- Docker containers run as non-root user (UID 1000)
-- Grafana admin password separate from internal service token
-- FluentBit RBAC scoped to namespace level only
-- Terraform state encrypted at rest in S3
-- CI/CD health-check output withholds internal pod IPs, ClusterIPs, and
-  NodePort mappings from public Actions logs
+## Repository layout
 
-## Feature Registry
+```
+services/backend/     AWS Lambda: FastAPI via Mangum
+  api/                agent, dashboard and admin routes + auth
+  core/               DynamoDB access layer, usage metering, config
+  ml/                 features, model registry, training, validation gate
+  ui/                 server-rendered dashboard + control platform
+  retrain_handler.py  EventBridge entry point (separate Lambda)
+services/agent/       thin client installed by the customer
+  collector.py        batches log records, forwards them
+  enforcer/           pluggable adapters: nginx, iptables
+  cli.py              register / status
+terraform/            only what survives into Phase 7
+config/nginx/         example customer nginx config
+scripts/              test runner, traffic simulators
+docs/                 PRD, PLAN, architecture, MLOps design, runbook, ADRs
+```
 
-| Feature | Signal Detected | Enabled |
-|---|---|---|
-| request_rate | Volumetric DDoS, flood | true |
-| error_ratio | Scanner, brute force | true |
-| avg_bytes_sent | Scraping, exfiltration | true |
-| avg_request_time | Slowloris, exhaustion | true |
-| unique_uri_ratio | Path scanner, crawler | true |
-| user_agent_entropy | Botnet rotating UA | true |
-| post_ratio | Credential stuffing | true |
-
-Add new features by adding to FEATURE_REGISTRY in feature_config.py.
-No other code changes required.
-
-## Prometheus Metrics
-
-| Metric | Type | Description |
-|---|---|---|
-| ai_anomalies_detected_total | Counter | By reason and tier |
-| nginx_blocked_ips_total | Gauge | Active hard-block count |
-| nginx_rate_limited_ips_total | Gauge | Active rate-limit count |
-| estimated_cloud_cost_saved_usd | Counter | Cost savings |
-| shadow_mode_active | Gauge | 1=shadow, 0=live |
-| feature_drift_score | Gauge | Per-feature drift |
-| model_anomaly_score_mean | Gauge | Rolling score mean |
-| inference_duration_seconds | Histogram | ML latency |
-
-## Project Structure
-aiops-traffic-shaper/
-├── terraform/              IaC: VPC, EC2, ECR, S3 backend, OIDC
-├── k8s/                    Kubernetes manifests
-├── services/
-│   ├── ai-engine/          FastAPI + Isolation Forest + Feature Registry
-│   └── worker-orchestrator/ Mitigation + ConfigMap patcher
-├── config/                 Nginx (rate limiting) + FluentBit
-├── scripts/                Automation scripts
-├── tests/                  Unit test cases
-├── docs/                   Architecture + MLOps design + Runbook
-└── .github/workflows/      CI/CD with OIDC auth
-
-## Quick Start
+## Running the tests
 
 ```bash
-# 1. Clone and setup
-git clone <repo-url>
-cd aiops-traffic-shaper
-cp .env.example .env
-# Fill in .env values
-
-# 2. Setup AWS backend (one time)
-bash scripts/setup-backend.sh
-
-# 3. Provision infrastructure
-cd terraform && terraform apply
-
-# 4. Build and push images
-bash scripts/build-and-push.sh v1.0.0
-
-# 5. Deploy
-export INTERNAL_SECRET=$(openssl rand -hex 32)
-export GRAFANA_ADMIN_PASSWORD=$(openssl rand -hex 16)
-bash scripts/deploy.sh v1.0.0
-
-# 6. Test detection
-bash scripts/load-test.sh http://<worker-ip>:30080
-bash scripts/simulate-attack.sh http://<worker-ip>:30080 all
+bash scripts/run_tests.sh
 ```
+
+Builds a venv from `services/backend/requirements.txt`, then runs exactly what
+CI runs: `ruff`, the full suite, and a coverage gate at 80%. Nothing else is
+needed — no AWS account, no Redis, no cluster.
+
+> Until Phase 5 this did not work from a clean checkout: `requirements.txt` was
+> missing `httpx2` and the suite could not even be collected. If you hit
+> something similar, that is a bug in the declared dependencies, not in your
+> setup — please report it.
+
+**Running the full application locally is not currently supported.** The app
+needs real DynamoDB and a real Cognito pool; the temporary mock harness that
+made the UI viewable offline was removed. Restoring a supported local-run path
+is open work.
+
+## Security posture
+
+Audited in Phase 4 ([docs/security-report.md](docs/security-report.md)); nine
+findings, four of them High, all fixed with a failing test written first.
+
+- Cognito ID tokens only — `token_use`, `aud` and `iss` all verified, RS256
+  pinned, and authentication fails closed when the pool is unconfigured.
+- Tenant isolation is enforced at the data layer: every route derives
+  `tenant_id` from the token and uses it as the DynamoDB partition key. No
+  route on the tenant surface accepts a tenant identifier from the caller.
+- Suspending a tenant actually stops it — agent keys are revoked and
+  re-registration is refused.
+- The agent does not trust the backend: any value bound for an nginx config is
+  validated as an IP address on both ends.
+- CSRF double-submit tokens on the cookie-authenticated UI; a full set of
+  security headers; unauthenticated traffic is not metered, so it cannot burn
+  the free-tier quota.
 
 ## Documentation
 
-- [Architecture Design](docs/architecture.md)
-- [MLOps Design](docs/mlops-design.md)
-- [Operations Runbook](docs/runbook.md)
-
-## Technology Stack
-
-| Layer | Technology |
+| Document | What it covers |
 |---|---|
-| Proxy | Nginx 1.25 (rate limiting built-in) |
-| Log Forwarding | FluentBit 3.0 (sidecar in nginx-proxy pod) |
-| ML Framework | scikit-learn (Isolation Forest) |
-| API Framework | FastAPI + Pydantic v2 |
-| State Store | Redis 7 |
-| Orchestration | Kubernetes 1.29 (kubeadm) |
-| Infrastructure | Terraform + AWS EC2 + ECR + S3 |
-| Observability | Prometheus + Grafana (7 alerts) |
-| CI/CD | GitHub Actions + OIDC |
+| [docs/PRD.md](docs/PRD.md) | Product requirements and user stories |
+| [docs/PLAN.md](docs/PLAN.md) | Implementation plan, 9 stages |
+| [docs/architecture.md](docs/architecture.md) | System design and request flows |
+| [docs/mlops-design.md](docs/mlops-design.md) | Model lifecycle, features, validation gate |
+| [docs/runbook.md](docs/runbook.md) | Operating and troubleshooting |
+| [docs/schema.md](docs/schema.md) | DynamoDB tables and access patterns |
+| [docs/api-contract.md](docs/api-contract.md) | HTTP contract |
+| [docs/adr/](docs/adr/) | Architecture decisions, with the reasoning |
+| [docs/security-report.md](docs/security-report.md) · [docs/test-report.md](docs/test-report.md) | Audit and verification results |
+
+## Technology
+
+| Layer | Choice | Why |
+|---|---|---|
+| Compute | AWS Lambda + Mangum | Always Free, no 12-month cutoff |
+| Ingress | Lambda Function URLs | API Gateway is 12-month free only |
+| Storage | DynamoDB, provisioned 25 WCU / 25 RCU | Always Free ceiling |
+| ML | scikit-learn IsolationForest, 50 estimators | Fits DynamoDB's 400KB item limit gzipped |
+| Retraining | EventBridge scheduled rule | No charge for invoking Lambda |
+| Auth | Cognito (users) + hashed API keys (agents) | |
+| UI | Jinja2, server-rendered from Lambda | Avoids S3 static hosting |
+| Agent | Python stdlib + `click` | Genuinely thin: no ML, no SDK |
+
+## Known gaps
+
+- Never run on real AWS (PRD US-9).
+- No Cognito Hosted UI: both the CLI and the web UI take a pasted ID token.
+- Free-tier **throttling** does not exist (PRD US-4 AC3). Usage is measured and
+  a ceiling warning is surfaced, but nothing limits traffic when it is crossed.
+- No rate limiting at the edge — a consequence of dropping API Gateway for
+  cost, accepted in ADR-002.
+- No supported way to run the application locally (see above).

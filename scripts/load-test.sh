@@ -7,7 +7,9 @@ log_error() { echo "$LOG_PREFIX [ERROR] $*" >&2; }
 log_step()  { echo "$LOG_PREFIX [STEP]  -------- $* --------"; }
 log_warn()  { echo "$LOG_PREFIX [WARN]  $*"; }
 
-TARGET_URL="${1:-http://localhost:30080}"
+# Target = the customer web server the agent sits in front of, not a
+# NodePort: the Kubernetes model this script was written for is gone.
+TARGET_URL="${1:-http://localhost:8080}"
 DURATION="${LOAD_TEST_DURATION:-300}"
 CONNECTIONS="${LOAD_TEST_CONNECTIONS:-10}"
 THREADS="${LOAD_TEST_THREADS:-2}"
@@ -38,7 +40,7 @@ done
 
 if [ "$PREFLIGHT_OK" -ne 1 ]; then
     log_error "Khong ket noi duoc toi $TARGET_URL sau 3 lan thu."
-    log_error "Kiem tra: da deploy len K8s chua? Da chay 'kubectl port-forward' hoac dung dia chi NodePort chua?"
+    log_error "Kiem tra: web server dich co dang chay khong, va agent da duoc dang ky chua (services/agent/cli.py status)?"
     log_error "Load test chi dung duoc SAU KHI da deploy.sh xong va nginx dang chay."
     exit 1
 fi

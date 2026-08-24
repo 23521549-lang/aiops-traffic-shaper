@@ -1,164 +1,171 @@
-# System Architecture: AI-Driven FinOps & Traffic Shaper
+# System Architecture — AI Traffic Shaper (hybrid model)
 
-## Overview
+> Rewritten 2026-08-24 for the architecture chosen in
+> [ADR-002](adr/002-tech-stack-hybrid.md). The previous version described the
+> original single-tenant model (self-managed Kubernetes on EC2, Redis,
+> Prometheus); it is in git history and no longer reflects anything that runs.
 
-An automated, closed-loop AIOps platform that ingests live Nginx access logs,
-extracts rolling time-series features per source IP, applies unsupervised ML
-to detect cost-inflating anomalies, and executes zero-downtime mitigations
-directly at the proxy layer — all within a 5-second end-to-end latency budget.
+## The shape of the system, and why
 
-## Component Diagram
+Two parties, and the split between them is the whole design:
+
+- **The customer** installs a thin agent next to their own web server. They
+  never run ML, never provision infrastructure, never see another customer.
+- **The publisher** runs one shared backend for every customer, and pays for
+  it. The bill must stay at approximately zero, forever.
+
+That second constraint is not a preference — it is the reason this
+architecture exists at all. Every component below was chosen because it sits
+inside AWS's *Always Free* tier rather than the 12-month free tier.
 
 ```mermaid
-flowchart TD
-    A[Internet Traffic] --> B["Nginx Proxy Pod<br/>container: nginx<br/>container: reloader<br/>container: fluent-bit"]
-    B -->|access.log JSON, shared emptyDir| C[FluentBit sidecar]
-    C -->|"HTTP POST /api/v1/telemetry<br/>X-Internal-Token"| D[AI Engine - FastAPI]
-    D -->|sliding window| E[Redis StatefulSet]
-    E -->|feature vectors| F[Isolation Forest]
-    F -->|anomaly score| G[Worker Orchestrator]
-    D --> G
-    G -->|patch ConfigMap nginx-blocklist| B
-    D -->|/metrics| H[Prometheus]
-    G -->|/metrics| H
-    H --> I[Grafana Dashboard]
+flowchart TB
+    subgraph Customer["Customer's own machine"]
+        NG[nginx] -->|access log| CO[Collector]
+        CO --> EN[Enforcer<br/>nginx + iptables adapters]
+        EN -->|deny / rate-limit| NG
+    end
+
+    subgraph AWS["Publisher's AWS account - Always Free only"]
+        FU[Lambda Function URL] --> API[API Lambda<br/>FastAPI via Mangum]
+        API --> DDB[(DynamoDB<br/>7 tables)]
+        EB[EventBridge<br/>daily rule] --> RT[Retrain Lambda]
+        RT --> DDB
+        COG[Cognito] -.->|verify JWT| API
+    end
+
+    CO -->|POST /agent/v1/telemetry| FU
+    FU -->|decisions| EN
+    API --> UI[Dashboard + Control Platform<br/>server-rendered HTML]
 ```
 
-## Five-Tier Architecture
+## Components
 
-### Tier 1 — Ingestion (Nginx + FluentBit sidecar)
+### Agent — `services/agent/`
 
-Nginx emits structured JSON access logs to an emptyDir volume shared within
-the pod. FluentBit runs as a second sidecar container in the same
-nginx-proxy pod, tailing the log file and forwarding batches to the AI
-Engine via authenticated HTTP POST every 1 second. A db tracking file
-ensures FluentBit survives restarts without re-reading historical logs.
+Deliberately thin: no scikit-learn, no AWS SDK, no HTTP library. Only `click`
+for the CLI and Python's own `urllib`.
 
-FluentBit runs inside the nginx-proxy pod rather than as a cluster-wide
-DaemonSet because nginx-proxy runs a single replica. A DaemonSet pod on a
-different node cannot see another pod's emptyDir volume, since emptyDir is
-scoped per-pod rather than per-node. Colocating both containers in the same
-pod is the correct way to share that volume with a single-replica
-Deployment.
-
-### Tier 2 — Intelligence (FastAPI + Isolation Forest)
-
-The AI Engine receives log batches, stores per-IP records in Redis Sorted Sets
-(scored by Unix timestamp), and computes a 7-feature vector for each IP with
-at least 3 requests in the 5-second sliding window. Feature computation and
-ML inference run in an anyio thread pool to avoid blocking the ASGI event loop.
-
-### Tier 3 — Mitigation (Worker Orchestrator)
-
-On receiving an anomaly signal, the Worker Orchestrator validates the internal
-token, checks the whitelist, and applies a graduated response. Both tiers now
-carry real enforcement, symmetric with each other:
-
-- **Tier 1 (rate_limit):** the IP is added to the `nginx-ratelimit` ConfigMap
-  (`<ip> 1;` lines), consumed by a Nginx `geo`/`map` block that keys a
-  dedicated `limit_req_zone` (`ml_tier1`) off that list — so only ML-flagged
-  IPs get the stricter dynamic limit, everyone else is unaffected by that
-  zone. This is distinct from `strict_limit`, the pre-existing *static*,
-  path-based limit applied to `/login`, `/api/auth`, `/admin` regardless of
-  which IPs are hitting them.
-- **Tier 2 (hard_block):** the IP is added to the `nginx-blocklist` ConfigMap
-  (`deny <ip>;` lines), as before.
-
-Both ConfigMaps are patched by the same generalized `ConfigMapPatcher`
-(`services/worker_orchestrator/orchestrator/configmap_patcher.py`),
-parameterized by rule format — one instance per ConfigMap. Changes are
-debounced (default 3s) so a burst of per-IP mitigations during an actual
-attack coalesces into one ConfigMap patch + one Nginx reload instead of one
-per IP. All block/rate-limit rules carry a Redis TTL and are automatically
-removed from both ConfigMaps by an APScheduler cleanup job every 60 seconds.
-Nginx is reloaded via a sidecar container watching both ConfigMap mounts
-(`/etc/nginx/blocklist.d`, `/etc/nginx/ratelimit`) with inotify — no Docker
-socket required.
-
-**Caveat:** the `geo $strict_ip` / `limit_req_zone` keys on
-`$binary_remote_addr`, which is only the real client IP when traffic hits
-this pod directly (NodePort). If a load balancer or additional reverse proxy
-is ever placed in front of nginx-proxy, this must switch to a validated
-`X-Forwarded-For` value instead, or every request will appear to come from
-the LB's IP and Tier 1 rate limiting will misfire (either limiting nothing,
-or limiting every client at once).
-
-### Tier 4 — State (Redis)
-
-Redis is the single source of truth for all runtime state. It stores sliding
-window data, whitelist entries, active mitigation keys with TTLs, shadow mode
-training streams, and model metadata. Using Redis instead of in-memory state
-ensures consistency across container restarts and potential horizontal scaling.
-
-### Tier 5 — Observability (Prometheus + Grafana)
-
-Both services expose a /metrics endpoint scraped by Prometheus every 15
-seconds. Grafana provides dashboards for traffic anomalies, active blocks,
-cost savings, model health, and feature drift.
-
-## Security Model
-
-| Layer | Mechanism |
+| Module | Responsibility |
 |---|---|
-| VM Firewall | Only ports 22, 80, 443, 30300 exposed (restrict to your IP where possible) |
-| K8s Network Policy | Redis: ai-engine + worker only. Worker: ai-engine only. AI Engine: nginx-proxy pod only |
-| Internal Auth | X-Internal-Token header on all API calls, validated via FastAPI Security dependency |
-| RBAC | worker-orchestrator ServiceAccount, Role scoped to patch ConfigMap nginx-blocklist only |
-| No Docker Socket | Nginx reload via inotify + sidecar pattern |
+| `collector.py` | Batches request metadata (100 records or 5 seconds) and posts it |
+| `enforcer/base.py` | The `EnforcementAdapter` interface |
+| `enforcer/nginx_adapter.py` | Writes `deny` lines and a `geo` map into `conf.d`, reloads nginx |
+| `enforcer/iptables_adapter.py` | OS-level DROP rules; hard block only |
+| `enforcer/__init__.py` | Adapter auto-detection and `DecisionStore` (TTL sweeping) |
+| `cli.py` | `register` and `status` |
 
-## Data Flow (end-to-end)
+**Pluggable enforcement is the deliberate improvement.** fail2ban binds you to
+one action chosen at install time; CrowdSec introduced pluggable "bouncers"
+but still one decision path. Here, `detect_adapters()` keeps *every* adapter
+that reports itself available, so nginx and iptables can enforce the same hard
+block simultaneously — defence in depth, and it works across more environments
+with no per-install configuration.
 
-| Step | Component | Action | Latency |
-|---|---|---|---|
-| 1 | Nginx | Write JSON log record | ~1ms |
-| 2 | FluentBit sidecar | Tail and POST to AI Engine | ~1s |
-| 3 | AI Engine | Store to Redis Sorted Set | ~5ms |
-| 4 | AI Engine | Query 5s window, compute 7 features | ~10ms |
-| 5 | AI Engine | Isolation Forest inference | ~20ms |
-| 6 | AI Engine | POST mitigate to Worker | ~5ms |
-| 7 | Worker | Patch ConfigMap blocklist | ~50ms |
-| 8 | K8s | Update ConfigMap volume mount | ~1-2s |
-| 9 | Nginx sidecar | inotify detect + reload | ~500ms |
+Two properties matter as much as the mechanism:
 
-Total: under 3s. Budget: 5s.
+- **The agent does not trust the backend.** Any value destined for an nginx
+  config is validated as an IP address before it touches disk. A crafted string
+  containing a newline would otherwise inject arbitrary nginx directives onto
+  the customer's own machine.
+- **The agent owns expiry.** Neither an nginx `deny` line nor an iptables rule
+  expires on its own. `DecisionStore.sweep_expired()` removes them when their
+  TTL passes; if the backend is unreachable, existing blocks stand and local
+  expiry keeps working.
 
-## Key Design Decisions
+### Backend — `services/backend/`
 
-### Why Isolation Forest
+One FastAPI app behind Mangum, exposed through a Lambda Function URL. A second,
+independent Lambda handles retraining.
 
-Isolation Forest isolates anomalies rather than profiling normality. This fits
-production networks where attack signatures change dynamically and labelled
-malicious data is unavailable. The unsupervised approach means the model adapts
-to legitimate traffic patterns automatically through weekly retraining.
+| Package | Responsibility |
+|---|---|
+| `api/routes/agent.py` | `register`, `telemetry`, `decisions` — agent-facing |
+| `api/routes/dashboard.py` | Tenant-scoped: mitigations, whitelist, model status |
+| `api/routes/admin.py`, `admin_usage.py` | Cross-tenant: tenants, agents, usage |
+| `api/cognito_auth.py` | JWT verification for humans |
+| `api/dependencies.py` | API-key auth for agents |
+| `core/tables.py` | DynamoDB access layer; `create_all_tables()` applies schema |
+| `core/usage.py` | Free-tier metering |
+| `ml/` | Features, registry, training, validation — see [mlops-design.md](mlops-design.md) |
+| `ui/` | Jinja2 pages plus a ~70-line attribute-driven JS helper |
+| `retrain_handler.py` | EventBridge entry point, a separate Lambda |
 
-### Why Redis Sorted Sets for Sliding Windows
+The two Lambdas share no memory. The API Lambda caches a loaded model per
+tenant across warm invocations; the retrain Lambda cannot invalidate that
+cache, so a freshly promoted model reaches live traffic when warm containers
+recycle naturally. That is a documented consequence, not an oversight.
 
-Sorted Sets with Unix timestamps as scores allow O(log N) insertion and O(log N)
-range queries. ZRANGEBYSCORE with a 5-second window efficiently retrieves only
-relevant records. ZREMRANGEBYSCORE prunes stale records on every read. Key TTLs
-handle cleanup for IPs that stop sending traffic.
+## Request flows
 
-### Why Signal File Instead of Docker Socket
+### Telemetry — the hot path
 
-Mounting /var/run/docker.sock grants full Docker daemon control to any process
-in the container. The inotify-based sidecar pattern achieves the same reload
-behaviour with zero privilege escalation risk.
+```mermaid
+sequenceDiagram
+    participant A as Agent
+    participant L as API Lambda
+    participant D as DynamoDB
+    A->>L: POST /agent/v1/telemetry (X-Agent-Key)
+    L->>D: look up tenant status, then agent key hash
+    L->>D: one atomic ADD per (tenant, IP, bucket)
+    L->>D: read whitelist
+    L->>L: compute features, score with cached model
+    L->>D: persist any mitigation decision
+    L-->>A: decisions[] with real TTLs
+```
 
-### Why FluentBit as a Sidecar Instead of a DaemonSet
+Auth checks the **tenant** before the agent: a suspended tenant is refused no
+matter how healthy its agent records look.
 
-A DaemonSet places one FluentBit pod per node, which is appropriate when
-every node runs the workload being logged. Here, nginx-proxy runs a single
-replica on one node at a time, and Kubernetes emptyDir volumes are scoped
-per-pod rather than per-node — two pods on the same node still get separate,
-isolated emptyDir storage. A cluster-wide DaemonSet therefore could not read
-nginx's log file even when scheduled onto the same node. Running FluentBit
-as a second container inside the nginx-proxy pod lets both containers mount
-the exact same emptyDir volume, which is the correct fix for a single-replica
-log source.
+### Human access
 
-### Why Not Kafka in v1
+Two surfaces, one auth path. `/dashboard/*` is tenant-scoped;
+`/admin/*` requires Cognito group `admin`. Both accept a Bearer header (for
+API clients) or an `id_token` cookie (for browser navigation, which cannot
+attach custom headers) and funnel into the same verification. State-changing
+UI requests additionally carry a CSRF double-submit token; the JSON API does
+not, because a cross-site form cannot set an `Authorization` header anyway.
 
-FluentBit's built-in disk buffer handles backpressure for moderate traffic
-spikes. The FluentBit output plugin is the only component that needs changing
-to introduce Kafka — the AI Engine interface remains identical. This keeps v1
-operationally simple while preserving a clear upgrade path.
+## Data model
+
+Seven DynamoDB tables, provisioned within a combined 25 WCU / 25 RCU. Full
+detail in [schema.md](schema.md); the shape that matters here:
+
+| Table | Key | Note |
+|---|---|---|
+| `Tenants` | `tenant_id` | Suspension is enforced, not decorative |
+| `Agents` | `tenant_id` + `agent_id` | GSI `LastSeenIndex` on `status` for cross-tenant health |
+| `TelemetryEvents` | `{tenant}#{ip}` + `bucket_start_ts` | Aggregates, TTL 25h; GSI `TenantIndex` for retraining |
+| `MitigationState` | `tenant_id` + `ip` | Active decisions with expiry |
+| `Whitelist` | `tenant_id` + `ip` | Excluded from mitigation *and* from training |
+| `Models` | `tenant_id` + `stage_version` | Gzipped joblib blob in the item |
+| `UsageCounters` | `date` | Free-tier ceiling tracking |
+
+**Tenant isolation is structural.** Every tenant-facing query uses `tenant_id`
+as the partition key, taken from the verified token — never from a path, query
+or body parameter. There is no request shape that could ask for another
+tenant's data.
+
+## Cost as a first-class constraint
+
+`TelemetryEvents` stores one aggregate item per *(tenant, IP, bucket)*, updated
+with atomic numeric `ADD`. An earlier draft stored one item per log line plus
+growing lists of URIs and user agents; both were rejected before sign-off
+because write cost would scale with request volume — spiking precisely during
+an attack.
+
+Measured: 20 log lines from 10 IPs costs 11 writes; **200 log lines from the
+same 10 IPs also costs 11**. `test_perf_budget.py` asserts this permanently.
+
+Metering counts authenticated work only. Unauthenticated requests, health
+checks and the login page write nothing, so anonymous traffic cannot spend the
+free-tier quota — a mitigation, not a cure, since the Function URL still has no
+edge rate limiting.
+
+## What this architecture does not have yet
+
+- **Any deployed infrastructure.** No Terraform describes the Lambdas, tables,
+  EventBridge rule or Cognito pool. Tables are created by `create_all_tables()`
+  from application code. Phase 7 work.
+- **Throttling.** Usage is measured; nothing limits it at the ceiling.
+- **Edge rate limiting.** Dropped with API Gateway, accepted in ADR-002.
