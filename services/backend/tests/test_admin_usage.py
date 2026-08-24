@@ -20,10 +20,15 @@ def _admin_headers(cognito_test_keys):
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_usage_middleware_increments_on_every_request(dynamo_resource, cognito_test_keys):
+def test_usage_middleware_counts_authenticated_work(dynamo_resource, cognito_test_keys):
+    """Phase 4 / M8 restated this test. It used to assert metering on EVERY
+    request and used /health to prove it — which is exactly the hole: an
+    anonymous caller could spend the account's Always-Free write quota just by
+    hammering an unauthenticated endpoint. Metering now follows authenticated
+    work, so this asserts the property that actually matters."""
     client = _client(dynamo_resource, cognito_test_keys)
-    client.get("/health")
-    client.get("/health")
+    client.get("/admin/v1/usage", headers=_admin_headers(cognito_test_keys))
+    client.get("/admin/v1/usage", headers=_admin_headers(cognito_test_keys))
     report = get_usage_report(dynamo_resource, date=None)
     assert report.total_requests == 2
 
@@ -36,7 +41,7 @@ def test_admin_usage_endpoint_requires_admin_auth(dynamo_resource, cognito_test_
 
 def test_admin_usage_endpoint_reflects_traffic(dynamo_resource, cognito_test_keys):
     client = _client(dynamo_resource, cognito_test_keys)
-    client.get("/health")
+    client.get("/admin/v1/usage", headers=_admin_headers(cognito_test_keys))
     resp = client.get("/admin/v1/usage", headers=_admin_headers(cognito_test_keys))
     assert resp.status_code == 200
     body = resp.json()

@@ -66,3 +66,23 @@ def test_suspend_missing_tenant_is_404(dynamo_resource, cognito_test_keys):
     client = _client(dynamo_resource, cognito_test_keys)
     resp = client.post("/admin/v1/tenants/no-such/suspend", headers=_admin_headers(cognito_test_keys))
     assert resp.status_code == 404
+
+
+def test_suspend_revokes_existing_agent_keys(dynamo_resource, cognito_test_keys):
+    """H3: an issued agent API key outlives the suspension unless it is
+    explicitly revoked — "deactivating an account invalidates its API keys"."""
+    client = _client(dynamo_resource, cognito_test_keys)
+    TenantsTable(dynamo_resource).put(tenant_id="t-1", name="Acme", status="active",
+                                       created_at="2026-08-21T00:00:00Z")
+    AgentsTable(dynamo_resource).put(
+        tenant_id="t-1", agent_id="a-1", registered_at="2026-08-21T00:00:00Z",
+        last_seen_at="2026-08-21T00:00:00Z", agent_version="0.1.0",
+        api_key_hash="whatever", status="active",
+    )
+    token = sign_test_token(cognito_test_keys["private_pem"], {"cognito:groups": ["admin"]})
+    resp = client.post("/admin/v1/tenants/t-1/suspend",
+                       headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200
+    agents = AgentsTable(dynamo_resource).query_by_tenant("t-1")
+    assert [a["status"] for a in agents] == ["revoked"]
+

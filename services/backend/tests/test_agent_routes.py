@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from services.backend.api.cognito_auth import get_jwks
 from services.backend.api.dependencies import hash_api_key
 from services.backend.core.dynamo import get_dynamo_resource
-from services.backend.core.tables import AgentsTable, create_all_tables
+from services.backend.core.tables import AgentsTable, TenantsTable, create_all_tables
 from services.backend.main import app
 from services.backend.ml.model import ModelManager
 from services.backend.tests.conftest import sign_test_token
@@ -20,8 +20,14 @@ from services.backend.tests.conftest import sign_test_token
 _TEST_RAW_KEY = "testkeyhash"
 
 
-def _client(dynamo_resource):
+def _client(dynamo_resource, tenant_status="active"):
     create_all_tables(dynamo_resource)
+    # Phase 4 / H3: agent_auth now requires the OWNING TENANT to be active,
+    # not just the agent — so every agent fixture needs a real tenant row.
+    TenantsTable(dynamo_resource).put(
+        tenant_id="t-1", name="Acme", status=tenant_status,
+        created_at="2026-08-21T00:00:00Z",
+    )
     AgentsTable(dynamo_resource).put(
         tenant_id="t-1", agent_id="a-1", registered_at="2026-08-21T00:00:00Z",
         last_seen_at="2026-08-21T00:00:00Z", agent_version="0.1.0",
@@ -37,6 +43,11 @@ def _client(dynamo_resource):
 
 def test_register_agent_returns_usable_key(dynamo_resource, cognito_test_keys):
     create_all_tables(dynamo_resource)
+    # Phase 4 / H3: registration now requires the owning tenant to exist and
+    # be active — this test used to register an agent for a tenant that had no
+    # Tenants row at all, which the platform should never have accepted.
+    TenantsTable(dynamo_resource).put(tenant_id="t-1", name="Acme", status="active",
+                                       created_at="2026-08-21T00:00:00Z")
     app.dependency_overrides[get_dynamo_resource] = lambda: dynamo_resource
     app.dependency_overrides[get_jwks] = lambda: cognito_test_keys["jwks"]
     client = TestClient(app)
@@ -171,3 +182,28 @@ def test_decisions_endpoint_returns_active_mitigations(dynamo_resource):
     assert len(body) == 1
     assert body[0]["ip"] == "5.5.5.5"
     assert body[0]["tier"] == 2
+
+
+# --- Phase 4 finding H3: tenant suspension must actually suspend ---------
+
+def test_agent_auth_rejects_suspended_tenant(dynamo_resource):
+    """H3: the Control Platform UI states outright that suspending a tenant
+    stops its agents being served. Before this, `agent_auth` only ever checked
+    the AGENT's own status — a suspended tenant kept ingesting telemetry and
+    kept receiving mitigation decisions. The single admin enforcement lever in
+    the product did nothing."""
+    client = _client(dynamo_resource, tenant_status="suspended")
+    resp = client.post("/agent/v1/telemetry", json={"logs": []},
+                       headers={"X-Agent-Key": f"t-1.{_TEST_RAW_KEY}"})
+    assert resp.status_code == 403
+
+
+def test_suspended_tenant_cannot_register_a_fresh_agent(dynamo_resource, cognito_test_keys):
+    """H3, bypass path: revoking existing keys alone is not enough if the
+    tenant's still-valid dashboard JWT can just mint a brand-new agent."""
+    client = _client(dynamo_resource, tenant_status="suspended")
+    app.dependency_overrides[get_jwks] = lambda: cognito_test_keys["jwks"]
+    token = sign_test_token(cognito_test_keys["private_pem"], {"custom:tenant_id": "t-1"})
+    resp = client.post("/agent/v1/register", json={"agent_label": "sneaky"},
+                       headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 403

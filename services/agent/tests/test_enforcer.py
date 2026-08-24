@@ -167,3 +167,58 @@ def test_decision_store_sweep_unblocks_expired_only():
     assert expired == ["1.1.1.1"]
     assert unblocked == ["1.1.1.1"]
     assert store.active_ips() == ["2.2.2.2"]
+
+
+# --- Phase 4 finding H4: the agent must not trust the backend -----------
+
+def test_nginx_adapter_rejects_non_ip_and_writes_nothing(tmp_path):
+    """H4: block() wrote its `ip` argument straight into an nginx config file
+    and then reloaded nginx. The value comes from the backend's decision list,
+    so a crafted string containing a newline injects arbitrary nginx
+    directives onto the customer's own machine. IptablesAdapter already
+    validated; NginxAdapter did not."""
+    import pytest
+    reloads = []
+
+    def fake_run(cmd, **kw):
+        reloads.append(cmd)
+        return _FakeResult(0)
+
+    adapter = NginxAdapter(config_dir=tmp_path, run_command=fake_run)
+    payload = "1.2.3.4;\n}\nserver { listen 8080; root /; }\n#"
+    with pytest.raises(ValueError):
+        adapter.block(payload, tier=2, expires_at=0)
+    assert not (tmp_path / "aiops-agent-deny.conf").exists()
+    assert reloads == []  # nginx was never reloaded with a poisoned config
+
+
+def test_nginx_adapter_rejects_non_ip_on_unblock(tmp_path):
+    import pytest
+    adapter = NginxAdapter(config_dir=tmp_path, run_command=_fake_run_ok)
+    with pytest.raises(ValueError):
+        adapter.unblock("1.2.3.4\ndeny all;")
+
+
+def test_nginx_adapter_ignores_a_poisoned_existing_config_line(tmp_path):
+    """Defense in depth: if a deny file already contains a junk entry (written
+    by an older agent build, or by hand), rewriting the file must drop it
+    rather than faithfully preserving it."""
+    (tmp_path / "aiops-agent-deny.conf").write_text("deny 1.1.1.1;\ndeny notanip;\n")
+    adapter = NginxAdapter(config_dir=tmp_path, run_command=_fake_run_ok)
+    adapter.block("2.2.2.2", tier=2, expires_at=0)
+    content = (tmp_path / "aiops-agent-deny.conf").read_text()
+    assert "1.1.1.1" in content and "2.2.2.2" in content
+    assert "notanip" not in content
+
+
+def test_decision_store_survives_a_malicious_decision(tmp_path):
+    """End to end: a poisoned decision from the backend must not take the
+    whole enforcement loop down, and must not reach the config file."""
+    adapter = NginxAdapter(config_dir=tmp_path, run_command=_fake_run_ok)
+    store = DecisionStore()
+    store.apply([{"ip": "1.2.3.4\ndeny all;", "tier": 2, "expires_at": 9999999999},
+                 {"ip": "5.6.7.8", "tier": 2, "expires_at": 9999999999}], [adapter])
+    content = (tmp_path / "aiops-agent-deny.conf").read_text()
+    assert "5.6.7.8" in content     # the legitimate decision still applied
+    assert "deny all" not in content.replace("deny all;\n", "XX") or "5.6.7.8" in content
+    assert "1.2.3.4" not in content

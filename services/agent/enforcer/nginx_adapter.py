@@ -1,3 +1,4 @@
+import ipaddress
 import subprocess
 from pathlib import Path
 
@@ -15,6 +16,19 @@ DEFAULT_CONFIG_DIR = Path("/etc/nginx/conf.d")
 _BLOCK_FILENAME = "aiops-agent-deny.conf"
 _RATELIMIT_FILENAME = "aiops-agent-geo.conf"
 _GEO_VAR = "$agent_rate_limited"
+
+
+def _require_ip(value: str) -> None:
+    """Raises ValueError on anything that is not a bare IP address."""
+    ipaddress.ip_address(value)
+
+
+def _valid_ip(value: str) -> bool:
+    try:
+        ipaddress.ip_address(value)
+        return True
+    except ValueError:
+        return False
 
 
 class NginxAdapter(EnforcementAdapter):
@@ -35,9 +49,11 @@ class NginxAdapter(EnforcementAdapter):
         if not self._block_file.exists():
             return set()
         return {
-            line.split()[1].rstrip(";")
+            ip
             for line in self._block_file.read_text().splitlines()
             if line.startswith("deny ")
+            for ip in [line.split()[1].rstrip(";")]
+            if _valid_ip(ip)  # H4: never faithfully re-emit a junk entry
         }
 
     def _ratelimited_ips(self) -> set[str]:
@@ -47,7 +63,9 @@ class NginxAdapter(EnforcementAdapter):
         for line in self._ratelimit_file.read_text().splitlines():
             line = line.strip()
             if line and not line.startswith(("geo", "default", "}")):
-                ips.add(line.split()[0])
+                candidate = line.split()[0]
+                if _valid_ip(candidate):  # H4
+                    ips.add(candidate)
         return ips
 
     def _write_block_file(self, ips: set[str]) -> None:
@@ -60,6 +78,11 @@ class NginxAdapter(EnforcementAdapter):
         )
 
     def block(self, ip: str, tier: int, expires_at: int) -> bool:
+        # Phase 4 / H4: the agent does NOT trust the backend. This value is
+        # interpolated into an nginx config that is then reloaded, so anything
+        # that is not literally an IP address is refused before it touches
+        # disk — matching IptablesAdapter, which validated from the start.
+        _require_ip(ip)
         self._config_dir.mkdir(parents=True, exist_ok=True)
         if tier == 2:
             self._write_block_file(self._blocked_ips() | {ip})
@@ -68,6 +91,7 @@ class NginxAdapter(EnforcementAdapter):
         return self._reload()
 
     def unblock(self, ip: str) -> bool:
+        _require_ip(ip)
         changed = False
         if ip in self._blocked_ips():
             self._write_block_file(self._blocked_ips() - {ip})

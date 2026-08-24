@@ -224,6 +224,23 @@ class AgentsTable(_SimpleTable):
         )
         return resp.get("Items", [])
 
+    def revoke_all_for_tenant(self, tenant_id: str) -> int:
+        """Phase 4 / H3: suspending a tenant must invalidate the API keys
+        already issued to its agents, not just stop future ones. Returns how
+        many agents were revoked. A revoked agent fails agent_auth's
+        status=="active" check, so its key is dead immediately — no waiting
+        for a token to expire (agent keys never expire on their own)."""
+        revoked = 0
+        for agent in self.query_by_tenant(tenant_id):
+            self.update(
+                key={"tenant_id": tenant_id, "agent_id": agent["agent_id"]},
+                update_expression="SET #s = :s",
+                expr_names={"#s": "status"},
+                expr_values={":s": "revoked"},
+            )
+            revoked += 1
+        return revoked
+
 
 class WhitelistTable(_SimpleTable):
     _table_name = "Whitelist"

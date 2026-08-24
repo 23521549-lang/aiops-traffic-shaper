@@ -27,4 +27,8 @@ def list_agents(status: str = "stale", resource=Depends(get_dynamo_resource)) ->
 def suspend_tenant(tenant_id: str, resource=Depends(get_dynamo_resource)) -> dict:
     if not TenantsTable(resource).suspend(tenant_id):
         raise HTTPException(status_code=404, detail="Tenant not found")
-    return {"message": f"tenant {tenant_id} suspended"}
+    # Phase 4 / H3: suspension used to flip one attribute nobody read. It now
+    # also revokes every API key already issued to this tenant's agents —
+    # otherwise those keys keep working, since agent keys have no expiry.
+    revoked = AgentsTable(resource).revoke_all_for_tenant(tenant_id)
+    return {"message": f"tenant {tenant_id} suspended", "agents_revoked": revoked}

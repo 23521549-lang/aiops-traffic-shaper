@@ -10,6 +10,7 @@ from services.backend.api.routes.dashboard import (
 )
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.schemas.whitelist import WhitelistRequest
+from services.backend.ui.csrf import verify_csrf
 from services.backend.ui.templates_env import templates
 
 router = APIRouter()
@@ -40,7 +41,8 @@ def dashboard_page(request: Request, tenant_id: str = Depends(dashboard_auth),
     })
 
 
-@router.post("/dashboard/ui/whitelist", response_class=HTMLResponse)
+@router.post("/dashboard/ui/whitelist", response_class=HTMLResponse,
+             dependencies=[Depends(verify_csrf)])
 def add_whitelist_ui(request: Request, ip: str = Form(...), reason: str = Form(""),
                       tenant_id: str = Depends(dashboard_auth), resource=Depends(get_dynamo_resource)):
     error = None
@@ -54,7 +56,8 @@ def add_whitelist_ui(request: Request, ip: str = Form(...), reason: str = Form("
     })
 
 
-@router.delete("/dashboard/ui/whitelist/{ip}", response_class=HTMLResponse)
+@router.delete("/dashboard/ui/whitelist/{ip}", response_class=HTMLResponse,
+               dependencies=[Depends(verify_csrf)])
 def remove_whitelist_ui(request: Request, ip: str, tenant_id: str = Depends(dashboard_auth),
                          resource=Depends(get_dynamo_resource)):
     remove_whitelist(ip, tenant_id=tenant_id, resource=resource)

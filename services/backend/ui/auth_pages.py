@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from services.backend.api.cognito_auth import _decode_and_verify, get_jwks
+from services.backend.ui.csrf import CSRF_COOKIE_NAME, new_csrf_token
 from services.backend.ui.templates_env import templates
 
 router = APIRouter()
@@ -46,6 +47,12 @@ def login_submit(request: Request, id_token: str = Form(...), jwks: dict = Depen
     # enforce TLS) — tests use an https:// TestClient base_url so this
     # cookie still round-trips locally without weakening it for real use.
     response.set_cookie("id_token", id_token, httponly=True, samesite="lax", secure=True, max_age=3600)
+    # M7: deliberately NOT httponly — the page's own script has to read this
+    # to echo it back in the X-CSRF-Token header. That is safe precisely
+    # because it is not a credential: it proves the request came from our own
+    # page, while id_token (which IS the credential) stays httpOnly.
+    response.set_cookie(CSRF_COOKIE_NAME, new_csrf_token(), httponly=False,
+                        samesite="lax", secure=True, max_age=3600)
     return response
 
 
@@ -53,4 +60,5 @@ def login_submit(request: Request, id_token: str = Form(...), jwks: dict = Depen
 def logout():
     response = RedirectResponse(url="/ui/login", status_code=302)
     response.delete_cookie("id_token")
+    response.delete_cookie(CSRF_COOKIE_NAME)
     return response

@@ -92,3 +92,16 @@ def test_model_status_with_model(dynamo_resource, cognito_test_keys):
     body = resp.json()
     assert body["model_ready"] is True
     assert body["version"] == "v1"
+
+
+def test_mitigation_state_rejects_a_non_ip_value():
+    """Phase 4 / H4, backend half: MitigationState.ip was a bare `str`, so the
+    backend would happily persist and serve a value the agent then writes into
+    an nginx config. WhitelistRequest already validated its IP; this did not."""
+    import pytest
+    from pydantic import ValidationError
+
+    from services.backend.schemas.mitigation import MitigationState
+    with pytest.raises(ValidationError):
+        MitigationState(ip="1.2.3.4\ndeny all;", tier=2, score=-0.5,
+                        reason="behavioral_anomaly", expires_at=0)

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
 
 from services.backend.api.cognito_auth import dashboard_auth
-from services.backend.api.dependencies import agent_auth, hash_api_key
+from services.backend.api.dependencies import agent_auth, assert_tenant_active, hash_api_key
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.tables import AgentsTable, MitigationStateTable, WhitelistTable
 from services.backend.ml.feature_engineering import compute_features_for_ip, record_batch
@@ -25,6 +25,10 @@ def register_agent(
     # agent has no credentials yet at this point, that's the whole point of this endpoint
     resource=Depends(get_dynamo_resource),
 ) -> AgentRegisterResponse:
+    # H3 bypass path: the tenant's dashboard JWT stays valid until it expires,
+    # so without this a just-suspended tenant could simply mint a fresh agent.
+    assert_tenant_active(resource, tenant_id)
+
     agent_id = uuid.uuid4().hex
     raw_api_key = secrets.token_urlsafe(32)
     now = datetime.now(timezone.utc).isoformat()

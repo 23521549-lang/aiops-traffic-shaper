@@ -17,6 +17,12 @@ def _client(dynamo_resource, cognito_test_keys):
     return client
 
 
+def _csrf(client) -> dict:
+    """Phase 4 / M7: state-changing UI requests carry the double-submit token
+    the browser's own script sends."""
+    return {"X-CSRF-Token": client.cookies["csrf_token"]}
+
+
 def test_control_platform_shows_all_tenants(dynamo_resource, cognito_test_keys):
     client = _client(dynamo_resource, cognito_test_keys)
     TenantsTable(dynamo_resource).put(tenant_id="t-1", name="Acme", status="active",
@@ -42,7 +48,7 @@ def test_suspend_tenant_via_ui(dynamo_resource, cognito_test_keys):
     client = _client(dynamo_resource, cognito_test_keys)
     TenantsTable(dynamo_resource).put(tenant_id="t-1", name="Acme", status="active",
                                        created_at="2026-08-21T00:00:00Z")
-    resp = client.post("/admin/ui/tenants/t-1/suspend")
+    resp = client.post("/admin/ui/tenants/t-1/suspend", headers=_csrf(client))
     assert resp.status_code == 200
     assert "Suspended" in resp.text
     assert TenantsTable(dynamo_resource).get(tenant_id="t-1")["status"] == "suspended"

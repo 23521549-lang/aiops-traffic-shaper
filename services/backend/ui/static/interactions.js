@@ -34,6 +34,13 @@
       var fetchUrl = url;
       var body = null;
       var headers = { "X-UI-AJAX": "1" };
+      // M7: double-submit — echo the CSRF cookie back in a header. A
+      // cross-site form can make the browser send the cookie, but cannot set
+      // this header, which is what makes the pair meaningful.
+      var csrf = document.cookie.split("; ")
+        .filter(function (c) { return c.indexOf("csrf_token=") === 0; })
+        .map(function (c) { return c.slice("csrf_token=".length); })[0];
+      if (csrf) headers["X-CSRF-Token"] = csrf;
 
       if (el.tagName === "FORM") {
         var params = new URLSearchParams(new FormData(el));
