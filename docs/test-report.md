@@ -1,160 +1,143 @@
-# Test Report
+# Test Report — hybrid multi-tenant model
 
-Coverage snapshot from Phase 3 / PLAN.md Stage 5, plus the Phase 5 (Testing
-& QA) E2E and performance pass. PLAN.md Stage 6 (E2E against a *live AWS
-cluster*) remains deferred — no AWS/kubectl access in this environment —
-so Phase 5's E2E work here is a **local substitute**: real Redis, real
-trained ML model, real HTTP between both real service apps, only the
-Kubernetes ConfigMap boundary mocked. See "End-to-end tests" below.
+- **Date:** 2026-08-24 · **Phase:** 5 (Testing & QA), strict mode
+- **Scope:** branch `feature/hybrid-backend` — `services/backend/`, `services/agent/`
+- **Replaces** the 2026-08-21 report, which tested the old single-tenant K8s
+  model (preserved in git history at `aa0391d`).
+- **Routing:** phase 5 ran **degraded** — `webapp-testing` (Playwright) is not
+  installed, so E2E uses the project's own pytest + real-ASGI harness, the
+  pattern Stage 9 already proved here.
 
-## How to run
+## Headline
 
-```bash
-bash scripts/run_tests.sh
+**151 passed · 98% line coverage · target was 80%**
+
+Run on a **clean venv built from `requirements.txt`**, not the developer's
+working environment. That distinction matters more than the numbers.
+
+## The environment finding that came first
+
+Phase 4 handed over a blocker: the local venv did not match `requirements.txt`
+(it ran `fastapi 0.111 / starlette 0.37` while the file declared
+`fastapi 0.134`). Every green run previously reported, back through Phase 3,
+was measured on a stack that would never be deployed.
+
+Rebuilding from the declared file exposed a real defect immediately:
+
+```
+RuntimeError: The starlette.testclient module requires the httpx2 package
 ```
 
-Runs both suites against the pinned dependency versions (Python 3.12,
-matching the Docker images and CI) with a real local Redis. On Windows,
-run via WSL — Python 3.13 (native Windows here) has no prebuilt wheels for
-the pinned numpy/scikit-learn versions.
+`requirements.txt` was **incomplete** — starlette 1.x needs `httpx2` for its
+TestClient and nothing declared it. On a clean machine the suite could not even
+be *collected*. Fixed by pinning `httpx2==2.12.0`. The declared set now
+installs, runs, and audits clean.
 
-For a coverage report, add `pytest-cov` (not in `requirements.txt`, only
-needed for local coverage runs) and run per-service:
+This is the class of problem the Phase 6 gate ("README verified from a clean
+clone") exists to catch — found one phase early.
 
-```bash
-pip install pytest-cov
-pytest tests/ai-engine/ --cov=services.ai_engine --cov-report=term-missing
-pytest tests/worker-orchestrator/ --cov=services.worker_orchestrator --cov-report=term-missing
-```
+## Coverage
 
-(Run each service's directory separately — `tests/ai-engine/test_api.py`
-and `tests/worker-orchestrator/test_api.py` share a basename and collide if
-collected together in one invocation without `__init__.py` files.)
+| | |
+|---|---|
+| Statements | 2477 |
+| Missed | 57 |
+| **Line coverage** | **98%** |
+| Target (project state) | 80% |
 
-## Results (2026-08-21)
+38 files sit at 100%. The residue is defensive branches — `except OSError`
+paths, the real-AWS-only JWKS fetch, adapter failure logging. This is the first
+coverage measurement in the project's history; nothing was tuned to reach the
+number, it is a by-product of the TDD discipline held since Stage 1.
 
-| Suite | Tests | Status |
-|---|---|---|
-| AI Engine | 96 | all passing |
-| Worker Orchestrator | 41 | all passing |
-| Integration (local E2E) | 2 | all passing |
-| **Total** | **139** | |
+## E2E — Must-story acceptance criteria
 
-(Up from 77 at the Phase 2 handoff — Stage 1 added 2, Stage 2 added 16 across
-`test_mitigation.py`/`test_api.py`/new `test_cleanup.py`, Stage 5 added 42
-across 5 new unit test files, Phase 5 added 2 local E2E tests.)
+`services/backend/tests/test_e2e_agent_backend.py` drives the **agent's own
+code** (Collector, CLI, DecisionStore, NginxAdapter) against the **real
+backend** (real ASGI app, real routes, real auth, real DynamoDB via moto, real
+ModelManager). The single mocked boundary is `nginx -s reload`, which needs
+root and a live nginx.
 
-## End-to-end tests (Phase 5)
+| Story | Acceptance criterion | Case | Result |
+|---|---|---|---|
+| US-3 | agent sends telemetry, receives decisions | full loop: batch → score → decision → `deny <ip>;` on disk → TTL sweep unblocks | pass |
+| US-3 | agent works independently when the backend is unreachable | dead backend: existing blocks stand, local expiry still runs, agent does not crash | pass |
+| US-4 | tenant telemetry is isolated | two tenants, two agents: each sees only its own decisions on the agent API | pass |
+| US-4 | (Phase 4 control) suspension takes effect | agent working a moment ago is refused on its next call, keys revoked | pass |
+| US-5 | one command registers an agent | CLI `register` → real backend → issued key authenticates a real telemetry post | pass |
+| US-5 | CLI reports failure clearly | bad token → non-zero exit, clear message, no half-written config | pass |
 
-`tests/integration/test_detection_to_mitigation_e2e.py` — the real
-detection→mitigation pipeline, run locally as a substitute for PLAN.md
-Stage 6 (deferred, needs live AWS/kubectl access this environment doesn't
-have). What's genuinely real in this test, not mocked:
+**Honest caveat:** all six passed on their first run. They are
+*characterization* tests — they lock in behaviour that was already correct,
+unlike the Phase 4 tests which went red first and drove a fix. Worth having as
+regression guards, but they discovered nothing.
 
-- A real local Redis (sliding window, mitigation state).
-- A real `IsolationForest`, freshly trained on synthetic "normal" traffic
-  and promoted to production via the real `registry` module.
-- A real HTTP call from AI Engine to Worker Orchestrator — routed via
-  `httpx.ASGITransport` instead of a real socket (no `worker-orchestrator`
-  DNS entry exists here), but the actual ASGI request/response cycle,
-  routing, and business logic on both sides is real.
-- Both apps' real FastAPI lifespans (startup/shutdown), run on one asyncio
-  event loop so their Redis connections don't cross loop boundaries.
+## Performance — measured against the cost model, not a latency SLA
 
-Only the Kubernetes ConfigMap boundary is mocked (`_patcher`/
-`_ratelimit_patcher`) — no live cluster available.
+The PRD sets no latency SLA and defers the concrete threshold to Phase 2;
+ADR-002 sets it as the DynamoDB Always-Free envelope, **25 WCU / 25 RCU**. The
+performance question for this system is therefore how many DynamoDB operations
+a request costs, and whether that grows under attack.
 
-Two scenarios, matching the two Must-behaviors this system exists for:
-1. **DDoS burst is detected and mitigated** — 50 rapid identical requests
-   from one IP trigger a real anomaly score, a real HTTP mitigate call, and
-   land as `blocked`/`rate_limited` in real Redis (whichever tier the
-   score actually crosses — unit tests in `test_model.py` already pin down
-   exact tier thresholds, this test just proves the pipeline reacts).
-2. **Normal traffic is not mitigated** — 5 slow, varied requests from a
-   different IP produce a normal score; no mitigation call is made, Redis
-   state stays clean.
+`services/backend/tests/test_perf_budget.py` counts real DynamoDB API calls
+through botocore's event system:
 
-A real, if minor, cross-service issue surfaced while building this test:
-AI Engine and Worker Orchestrator each define Prometheus metrics with
-identical names (`nginx_blocked_ips_total`, `nginx_rate_limited_ips_total`,
-`estimated_cloud_cost_saved_usd`) — harmless when they run in separate
-processes (production), but importing both apps into one Python process
-raises "Duplicated timeseries in CollectorRegistry". Worked around in the
-test file (unregisters AI Engine's copies before importing Worker's app);
-not fixed in the services themselves, since it's not a bug in production
-topology — just a naming overlap worth a namespace prefix (e.g.
-`ai_engine_*` / `worker_*`) if this ever becomes a real headache.
+| Measurement | Result |
+|---|---|
+| 20 log lines / 10 IPs | **11 writes** |
+| 200 log lines / 10 IPs | **11 writes** |
+| Writes by distinct IPs | 1 IP → 2 · 5 IPs → 6 · 10 IPs → 11 |
+| Telemetry latency (50 lines / 5 IPs, n=10) | median **32 ms**, max 41 ms |
 
-## Performance (Phase 5, 2026-08-21)
+**Write cost is flat in log volume and scales only with distinct IPs** — Stage
+2's entire design goal, now measured rather than asserted. Cost must not spike
+during an attack, which is precisely when line count explodes. The assertions
+are permanent regression guards: if anyone "simplifies" `record_batch` back to
+per-line writes, the cost model breaks here first.
 
-`docs/architecture.md`'s "under 3s end-to-end, 5s budget" refers to the
-*whole pipeline* including FluentBit's ~1s batching interval and Kubernetes
-ConfigMap propagation (~1-2s, inotify + nginx reload) — neither measurable
-without a live cluster (Stage 6). What **is** measurable here is whether
-the application logic itself is anywhere near that budget. Measured with
-real code (WSL, Python 3.12):
+One test in this file initially **passed vacuously** (`0 == 0`) because the op
+counter was attached to the wrong boto3 session and counted nothing. Fixed, and
+a `light > 0` guard added so it can never pass on an inert counter again.
 
-| Operation | Latency | Budget (from architecture.md) |
-|---|---|---|
-| `_compute_features` (30-record window) | 0.018 ms | ~10 ms |
-| `IsolationForest.decision_function` (batch of 100) | 1.86 ms | ~20 ms |
-| `IsolationForest.decision_function` (1 vector) | 1.06 ms | ~20 ms |
-| Full `/telemetry` round trip (real Redis + real ML + real HTTP call to Worker Orchestrator + Worker's own Redis write) | 7.54 ms | — |
+## Leak check
 
-The application layer uses roughly **0.25% of the 3-second budget** — the
-real bottleneck, if the 3s target is ever missed in production, will be
-FluentBit's batching interval or ConfigMap/Nginx reload propagation, not
-this code. Worth re-measuring on the live cluster during Stage 6 to
-confirm the infra-layer numbers match the architecture doc's estimates.
+| Check | Result |
+|---|---|
+| Secrets in logs | none — no logger call touches `api_key`, token, password or `X-Agent-Key` |
+| Real credentials in fixtures | none — no AWS/Stripe/GitHub/PEM-shaped material |
+| PII in logs | **present by design, and worth a decision** — see below |
 
-## Leak check (Phase 5)
+The agent logs end-user IP addresses (`services/agent/enforcer/__init__.py`,
+`ip=%s` on apply/unblock). The backend does **not** log IPs. That distinction
+matters: the PII stays on the customer's own machine rather than landing in the
+publisher's logs. The backend does *store* IPs in DynamoDB, which is inherent
+to what the product does.
 
-Reviewed all new test files and the captured log output from the E2E runs
-above for secrets/PII: only the test placeholder `test-secret-for-ci` /
-`test-secret` (matching `.github/workflows/deploy.yml`'s own CI placeholder)
-appears, never a real credential. Test IPs use `203.0.113.0/24`
-(RFC 5737 TEST-NET-3, reserved for documentation — never a real address).
-No PII anywhere in fixtures or logs.
+`docs/PRD.md` raised this exact question under Constraints and left it open —
+"cần xác nhận nếu backend xử lý dữ liệu traffic thật của bên thứ ba (có thể
+chứa PII, vd IP người dùng cuối của khách hàng)". Phase 5 cannot close it: it
+is a compliance decision for the publisher, not a test result. Flagged here so
+it does not quietly disappear.
 
-## Coverage by service
+**Tool substitution:** `varlock`, the skill routed for this row, ships a CLI
+that is not installed, and installing it was out of scope. The checks above
+were run as targeted source scans instead — recorded as a substitution, not
+claimed as a varlock run. One varlock recommendation worth adopting later: a
+typed `.env.schema` marking each variable sensitive or not. The project has
+`.env.example`, which declares names but not sensitivity.
 
-| Service | Coverage | Target |
-|---|---|---|
-| AI Engine | 82% | 80% — met |
-| Worker Orchestrator | 94% | 80% — met |
+## Open issues carried to Phase 6
 
-### AI Engine — remaining gap: `ml/training.py` (32%, 64/94 statements uncovered)
-
-Everything else is at or above 81%. `training.py` orchestrates
-`run_baseline_training`/`run_daily_retrain`/`start_training_scheduler` — it
-touches real `IsolationForest.fit()`, the APScheduler job registration, and
-the registry/validator modules together. It's the least-covered module
-precisely because it's the most expensive to test in isolation (needs a
-real Redis Stream read, a real model fit, and registry/validator
-coordination). Overall AI Engine coverage already clears the 80% target
-without it, so this was left as a follow-up rather than done here — a
-reasonable next task would be integration-style tests that seed a fake
-Redis Stream and assert on the promotion decision, rather than trying to
-unit-test each internal step.
-
-### Worker Orchestrator — no significant gaps
-
-`blocklist.py` (88%) and `configmap_patcher.py` (90%) are the only files
-below 95%, both just missing a couple of error-handling branches
-(`ApiException` paths) that aren't worth contriving synthetic k8s API
-failures for at this stage.
-
-## Notable finding from writing these tests
-
-`tests/ai-engine/test_api.py`'s original `patch("...get_redis", ...)`
-pattern does not actually override the FastAPI dependency — `Depends(get_redis)`
-binds the real function object at import time, so patching the module
-attribute afterward never reaches it (confirmed by making a test hang on a
-real network call to a stale kubeconfig cluster IP during Stage 2 — see
-`docs/PLAN.md` Stage 2). All new tests in this stage instead use
-`app.dependency_overrides[get_redis] = lambda: mock_redis`, the pattern
-`tests/worker-orchestrator/test_api.py` already used correctly throughout.
-The original AI Engine tests still pass only because they happen to run
-against a real, empty local Redis — worth fixing as its own small task if
-this repo's test isolation matters going forward (not done here, out of
-this stage's scope).
+- **Still no real AWS.** Everything is moto plus locally signed JWTs. No
+  Cognito, no Lambda, no live DynamoDB has ever run. US-9 ("bằng chứng chạy
+  thật") remains untouched and is the developer's to close.
+- The E2E suite mocks `nginx -s reload`; no test has ever driven a real nginx
+  or a real iptables rule.
+- `httpx2` was missing from `requirements.txt` until today, so no clean-machine
+  install had ever been verified. Phase 6's clean-clone check should expect
+  more of this kind.
+- **Free-tier throttling (US-4 AC3) is a warning only.** Usage is counted and a
+  ceiling warning is surfaced, but nothing actually throttles when the
+  threshold is crossed. The acceptance criterion says "cơ chế giới hạn/điều
+  tiết"; what exists is measurement, not limiting. This AC is **not met** — it
+  is recorded here rather than marked done.

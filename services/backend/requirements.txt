@@ -13,6 +13,10 @@ jinja2==3.1.6
 python-multipart==0.0.31
 
 # dev/test only
+# starlette 1.x TestClient needs this; without it the suite cannot even
+# be COLLECTED on a clean install - found by rebuilding the venv from
+# this file for the first time (Phase 5)
+httpx2==2.12.0
 moto[dynamodb]==5.0.9
 pytest==9.0.3
 pytest-asyncio==1.4.0
