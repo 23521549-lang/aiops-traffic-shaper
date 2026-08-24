@@ -15,7 +15,7 @@ Always-Free tier — the hard constraint that shaped every decision in
 
 **Never deployed. Verified locally only.**
 
-The backend and agent are complete and tested — 158 tests, 98% line coverage,
+The backend and agent are complete and tested — 164 tests, 98% line coverage,
 a clean dependency audit — but every test runs against `moto` (an in-process
 DynamoDB simulator) and locally signed JWTs. No Lambda, no Cognito user pool,
 and no live DynamoDB table has ever run. Provisioning the real infrastructure
@@ -143,6 +143,8 @@ findings, four of them High, all fixed with a failing test written first.
 
 | Document | What it covers |
 |---|---|
+| [docs/onboarding.md](docs/onboarding.md) | **Start here if you are inheriting this code** |
+| [CHANGELOG.md](CHANGELOG.md) | What changed, and what the rebuild removed |
 | [docs/PRD.md](docs/PRD.md) | Product requirements and user stories |
 | [docs/PLAN.md](docs/PLAN.md) | Implementation plan, 9 stages |
 | [docs/architecture.md](docs/architecture.md) | System design and request flows |
@@ -170,8 +172,9 @@ findings, four of them High, all fixed with a failing test written first.
 
 - Never run on real AWS (PRD US-9).
 - No Cognito Hosted UI: both the CLI and the web UI take a pasted ID token.
-- Free-tier **throttling** does not exist (PRD US-4 AC3). Usage is measured and
-  a ceiling warning is surfaced, but nothing limits traffic when it is crossed.
+- Throttling is coarse: at 100% of the day's free-tier share, telemetry
+  ingest is refused wholesale rather than shaped per tenant, so one noisy
+  tenant can pause ingest for everyone.
 - No rate limiting at the edge — a consequence of dropping API Gateway for
   cost, accepted in ADR-002.
 - No supported way to run the application locally (see above).

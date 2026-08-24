@@ -136,8 +136,8 @@ typed `.env.schema` marking each variable sensitive or not. The project has
 - `httpx2` was missing from `requirements.txt` until today, so no clean-machine
   install had ever been verified. Phase 6's clean-clone check should expect
   more of this kind.
-- **Free-tier throttling (US-4 AC3) is a warning only.** Usage is counted and a
-  ceiling warning is surfaced, but nothing actually throttles when the
-  threshold is crossed. The acceptance criterion says "cơ chế giới hạn/điều
-  tiết"; what exists is measurement, not limiting. This AC is **not met** — it
-  is recorded here rather than marked done.
+- ~~Free-tier throttling (US-4 AC3) is a warning only.~~ **Closed in Phase 6**
+  (`test_usage_throttle.py`, 6 cases): telemetry ingest is refused with `429`
+  + `Retry-After` at 100% of the daily share, while reads keep serving. The
+  limiter is global rather than per tenant, which is a known coarseness, not a
+  gap in the criterion.

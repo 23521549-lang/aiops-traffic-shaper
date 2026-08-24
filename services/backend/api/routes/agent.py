@@ -6,7 +6,12 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
 
 from services.backend.api.cognito_auth import dashboard_auth
-from services.backend.api.dependencies import agent_auth, assert_tenant_active, hash_api_key
+from services.backend.api.dependencies import (
+    agent_auth,
+    assert_tenant_active,
+    enforce_usage_ceiling,
+    hash_api_key,
+)
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.tables import AgentsTable, MitigationStateTable, WhitelistTable
 from services.backend.ml.feature_engineering import compute_features_for_ip, record_batch
@@ -52,7 +57,8 @@ _TTL_SECONDS = {
 }
 
 
-@router.post("/agent/v1/telemetry", response_model=TelemetryResponse)
+@router.post("/agent/v1/telemetry", response_model=TelemetryResponse,
+             dependencies=[Depends(enforce_usage_ceiling)])
 def ingest_telemetry(
     batch: TelemetryBatch,
     tenant_id: str = Depends(agent_auth),

@@ -4,6 +4,7 @@ from fastapi import Depends, Header, HTTPException
 
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.tables import AgentsTable, TenantsTable
+from services.backend.core.usage import is_over_daily_ceiling, seconds_until_daily_reset
 
 
 def hash_api_key(raw_key: str) -> str:
@@ -55,3 +56,26 @@ def agent_auth(x_agent_key: str | None = Header(default=None),
         if agent.get("api_key_hash") == key_hash and agent.get("status") == "active":
             return tenant_id
     raise HTTPException(status_code=401, detail="Invalid agent key")
+
+
+def enforce_usage_ceiling(resource=Depends(get_dynamo_resource)) -> None:
+    """PRD US-4 AC3 - the limiter, applied only to the ingest path.
+
+    Telemetry is the sole high-frequency write path in the system, so it is the
+    cost driver and it is what gets refused. Reads stay up on purpose:
+    `/agent/v1/decisions` keeps serving so agents already enforcing a block do
+    not silently go open during an overload, and the dashboard keeps serving so
+    the operator can see the overload while it is happening.
+
+    This costs one small GetItem per telemetry batch. Batches carry up to 100
+    log lines, so the read is amortised across them - and it is a read, against
+    a separate budget from the writes it is protecting."""
+    if is_over_daily_ceiling(resource):
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "Daily free-tier ceiling reached - telemetry ingest is paused "
+                "until the quota resets. Existing mitigations remain in force."
+            ),
+            headers={"Retry-After": str(seconds_until_daily_reset())},
+        )

@@ -48,7 +48,10 @@ async def ui_auth_redirect_handler(request: Request, exc: HTTPException):
             response.headers["X-UI-Redirect"] = "/ui/login"
             return response
         return RedirectResponse(url="/ui/login", status_code=302)
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    # exc.headers must survive: the 429 carries Retry-After, and returning it
+    # without that header leaves an agent with no basis for a backoff.
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail},
+                        headers=getattr(exc, "headers", None))
 
 
 def _resolve_resource(request):
@@ -74,7 +77,7 @@ _UNMETERED_PATH_PREFIXES = ("/health", "/ui/login", "/ui/logout", "/ui/static")
 def _should_meter(request, response) -> bool:
     if request.url.path.startswith(_UNMETERED_PATH_PREFIXES):
         return False
-    if response.status_code in (401, 403):
+    if response.status_code in (401, 403, 429):
         return False
     # Set by the exception handler above, for UI paths whose 401 has already
     # been rewritten into a 302 by the time this middleware sees the response.

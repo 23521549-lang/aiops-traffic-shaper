@@ -21,7 +21,7 @@ Builds a venv from `services/backend/requirements.txt` and runs exactly what CI
 runs: `ruff`, the full suite, and a coverage gate at 80%. Extra arguments pass
 through to pytest, so `bash scripts/run_tests.sh -k cognito` works.
 
-Expected: **158 passed**, coverage ≈ 98%.
+Expected: **164 passed**, coverage ≈ 98%.
 
 ### Rebuild the environment from scratch
 
@@ -119,9 +119,14 @@ curl -H "Authorization: Bearer <admin-id-token>" https://<function-url>/admin/v1
 Returns today's request count, estimated GB-seconds, and a `ceiling_warning`
 flag. The Control Platform UI shows the same thing with a banner.
 
-**There is no throttling.** When the ceiling is crossed the system warns and
-keeps serving (PRD US-4 AC3 is not met). Acting on the warning is manual today:
-suspend the noisiest tenant, or accept the cost.
+**At 80% the system warns; at 100% it refuses telemetry ingest** with `429`
+and a `Retry-After` pointing at the next UTC midnight, when the daily counter
+resets. Reads keep serving throughout: agents already enforcing a block do not
+go open, and this dashboard stays readable.
+
+The limiter is global, not per tenant — it protects the bill, not fairness, so
+one noisy tenant can pause ingest for everyone. Identify them from
+`/admin/v1/agents` and suspend if needed.
 
 ### Suspend a tenant
 
