@@ -43,14 +43,10 @@ id_rsa.pub
 .DS_Store
 Thumbs.db
 
-# K8s secrets
-k8s/secrets/*.yaml
-!k8s/secrets/.gitkeep
-
-# Model files
-services/ai-engine/models/production/*.joblib
-services/ai-engine/models/staging/*.joblib
-services/ai-engine/models/archive/*.
+# Local backups taken by scripts/backup-tables.sh. These hold agent API key
+# hashes and customers' whitelisted IPs — they must never reach the repo.
+aiops-backups/
+*.backup.json
 
 # other
 dump-code.sh
