@@ -20,7 +20,9 @@ only to be valid. `docs/deployment.md` is the procedure.
 | `alarms.tf` | Three CloudWatch alarms → SNS. Set `alert_email` or they fire into a topic nobody is subscribed to |
 | `outputs.tf` | Function URL and the three values that must be wired back after the first apply |
 | `modules/github-oidc/` | GitHub Actions → AWS with no long-lived credentials |
-| `modules/s3-backend/` | Remote state on S3 with DynamoDB locking. A bootstrap step: apply once with a local backend, then migrate |
+| `backend.tf` | Remote state in S3 with native lock files. Not cosmetic: without it, every CI run would start with empty state and try to create the stack again |
+| `bootstrap/` | Creates that state bucket. A separate root with local state, because the configuration whose state lives in the bucket cannot create it |
+| `modules/s3-backend/` | The bucket itself — versioned, encrypted, private. The DynamoDB lock table is now optional and off: Terraform 1.10+ locks with an S3 object, and that table billed PAY_PER_REQUEST |
 
 ## What is deliberately absent
 
@@ -36,6 +38,11 @@ the sub-cent monthly cost it adds to a constraint that was stated as zero.
 `modules/vpc`, `modules/ec2`, `modules/security_group`, `modules/ecr`, the root
 files that wired them, and `scripts/*.tpl` (kubeadm master-init and worker-join
 templates).
+
+## Order of operations
+
+`bootstrap/` first (once, local state), then the root. `docs/deployment.md` has
+the full walkthrough with expected output at each step.
 
 ## Variables
 

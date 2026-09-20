@@ -1,9 +1,13 @@
 # Deployment
 
 **Status: written, never executed.** Every file described here exists and
-`terraform validate` passes, but no `terraform apply` has ever run against a
-real AWS account. Treat this as a deployment *design* until someone runs it and
-updates this line.
+`terraform validate` passes on both roots, but no `terraform apply` has ever
+run against a real AWS account. Treat this as a deployment *design* until
+someone runs it and updates this line.
+
+Two rows of the Phase 7 gate are open and both close inside the walkthrough
+below: the post-deploy smoke test (step 6) and a tested backup restore
+(step 8).
 
 ## What gets created
 
@@ -19,53 +23,196 @@ updates this line.
 | 3 × CloudWatch alarm + SNS topic | Errors, retrain failure, retrain approaching its timeout. Inside Always-Free (10 alarms, 1,000 emails/month) |
 | No load balancer health check | There is nothing in front of the Function URL to run one. `/ready` exists and is correct; nothing polls it automatically |
 | GitHub OIDC role | No static AWS keys. Trust is scoped to the `production` environment, not to any branch |
+| S3 bucket for Terraform state | Created separately by `terraform/bootstrap/`, before any of the above. Versioned, encrypted, private, locked with S3-native lock files rather than a PAY_PER_REQUEST DynamoDB table |
 
 No VPC (a NAT gateway is not free at any tier), no ECR (the function ships as a
 zip through Mangum), no S3 for *models* (those live as gzipped blobs inside
 DynamoDB items — the S3 bucket above holds only the deployment artifact). Each
 omission is a cost decision.
 
-## First deployment
+## First deployment — the whole thing, in order
+
+Nobody has run this. It is written to be followed exactly, and every step says
+what it should print so you can tell a success from a silent failure.
+
+### Before you start
+
+| Need | Check |
+|---|---|
+| AWS account with admin-level credentials **for this first apply only** | `aws sts get-caller-identity` prints an account id |
+| Terraform ≥ 1.10 | `terraform version`. 1.10 is where `use_lockfile` landed; `backend.tf` needs it |
+| Python 3.12 and `pip`, to build the package | `python3 --version` |
+| The repository, on the commit you intend to deploy | `git status` clean |
+
+The first apply runs as **you**, not as the CI role. The CI role
+(`modules/github-oidc`) is created *by* this apply and is what later
+deployments use — so a gap in its policy cannot show up until step 7.
+
+### 0. Put a floor under the bill first
+
+This whole architecture exists to cost nothing. Before creating anything,
+create a zero-spend budget so AWS tells you the moment that stops being true:
 
 ```bash
-cd terraform
-terraform init                       # needs the S3 backend to exist first
-terraform plan  -var="github_repo=<owner>/<repo>"
-terraform apply -var="github_repo=<owner>/<repo>"
+aws budgets create-budget --account-id "$(aws sts get-caller-identity --query Account --output text)" \
+  --budget '{"BudgetName":"aiops-zero-spend","BudgetLimit":{"Amount":"1","Unit":"USD"},"TimeUnit":"MONTHLY","BudgetType":"COST"}' \
+  --notifications-with-subscribers '[{"Notification":{"NotificationType":"ACTUAL","ComparisonOperator":"GREATER_THAN","Threshold":1,"ThresholdType":"PERCENTAGE"},"Subscribers":[{"SubscriptionType":"EMAIL","Address":"YOU@example.com"}]}]'
 ```
 
-The remote state bucket comes from `modules/s3-backend` and is a bootstrap
-step: apply it once with a local backend, then configure the S3 backend and
-migrate. That ordering is inherent to Terraform, not a quirk of this project.
+AWS Budgets is free for the first two budgets. This is the only step that is
+not strictly required, and it is the one worth doing anyway.
 
-Then wire the outputs back:
+### 1. Bootstrap the state backend
+
+The main configuration keeps its state in S3. Something has to create that
+bucket, and it cannot be the configuration whose state lives in it — so
+`terraform/bootstrap/` is a separate root with its own local state.
 
 ```bash
-terraform output function_url            # → agent CLI --backend-url
-terraform output cognito_user_pool_id    # → backend env cognito_user_pool_id
-terraform output cognito_app_client_id   # → backend env cognito_app_client_id
-terraform output github_actions_role_arn # → repo variable AWS_DEPLOY_ROLE_ARN
+terraform -chdir=terraform/bootstrap init
+terraform -chdir=terraform/bootstrap apply
+terraform -chdir=terraform/bootstrap output state_bucket
+# aiops-traffic-shaper-prod-terraform-state
 ```
 
-**Both Cognito values are required.** Authentication fails closed without them
-(Phase 4 / H1) — an unconfigured deployment authenticates nobody, deliberately,
-rather than silently skipping audience verification as the pre-Phase-4 code did.
+That name must match `bucket` in `terraform/backend.tf` exactly. A backend
+block cannot use variables, so the value is literal there; if you changed
+`project_name` or `environment`, change `backend.tf` to match.
 
-Then confirm the deployment can actually serve, not merely answer:
+Keep `terraform/bootstrap/terraform.tfstate`, but losing it is not a disaster:
+it costs you a `terraform import`, not the bucket.
+
+### 2. Build the deployment package
+
+Terraform uploads the zip; it does not build it. `lambda.tf` reads the file
+with `filemd5()`, so the apply fails immediately if it is missing.
 
 ```bash
-curl -s "$(terraform output -raw function_url)ready"
+bash scripts/build-lambda-package.sh dist
+# unzipped: 197MB (Lambda hard limit 250MB)
+# zipped:   61MB
+```
+
+Over 50MB zipped is expected and is why the artifact goes through S3
+([ADR-004](adr/004-lambda-artifact-via-s3.md)). Over 250MB unzipped is a hard
+failure and the script stops there rather than letting the apply do it.
+
+### 3. Fill in the variables
+
+```bash
+cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+```
+
+`github_repo` is the only one with no default. Set `alert_email` now — leaving
+it empty still creates the three alarms, but they publish to an SNS topic with
+no subscriber, which looks configured and notifies nobody.
+
+### 4. Apply
+
+```bash
+terraform -chdir=terraform init      # initialises the S3 backend from step 1
+terraform -chdir=terraform plan      # READ THIS. ~30 resources, all new
+terraform -chdir=terraform apply
+```
+
+Read the plan rather than skimming it. Everything should be a create; anything
+listed as a change or a destroy on a first apply means the state is not what
+you think it is.
+
+### 5. Confirm the subscription AWS just emailed you
+
+If you set `alert_email`, AWS has sent a confirmation link. The subscription
+stays **inactive** until someone clicks it, and an unconfirmed subscription is
+indistinguishable from a working one in the console.
+
+### 6. Verify — this is where /ready earns its place
+
+```bash
+URL=$(terraform -chdir=terraform output -raw function_url)
+curl -s "${URL}ready"
 # {"status":"ready","checks":{"dynamodb":true,"cognito_config":true}}
 ```
 
-A `503` names the failing check. `"cognito_config": false` is the wiring above
-left undone; `"dynamodb": false` means no table exists yet — they are created
-both by Terraform here and by `create_all_tables()` in application code, so
-this says neither has run against this account. `/health` answers 200 in both
-cases, which is exactly why `/ready` exists.
+The Lambda's Cognito environment variables come from Terraform's own outputs,
+so there is nothing to wire by hand — but `503` tells you which half is wrong:
 
-`bash scripts/smoke-test.sh <url>` runs that plus four more checks and needs no
-credentials.
+- `"cognito_config": false` — the pool id or app client id did not reach the
+  function. Authentication fails closed, so the deployment serves nobody while
+  `/health` still answers 200.
+- `"dynamodb": false` — no table. They are created both here and by
+  `create_all_tables()` in application code; this says neither has run.
+
+Then the full unattended check:
+
+```bash
+bash scripts/smoke-test.sh "$URL"
+# === SMOKE RESULT: PASS (5/5) ===
+```
+
+**That output closes row 4 of the Phase 7 gate.** Paste it into
+`.sdlc/gate-evidence/`.
+
+### 7. Hand the pipeline its credentials
+
+```bash
+terraform -chdir=terraform output -raw github_actions_role_arn
+```
+
+In the GitHub repository:
+
+- **Settings → Environments → New environment → `production`**, and add
+  yourself under *Required reviewers*. This is where the approval gate
+  actually lives; `deploy.yml` only asks for it.
+- **Settings → Variables → Actions**: `AWS_DEPLOY_ROLE_ARN` = the ARN above,
+  `AWS_REGION` = `ap-southeast-1`.
+
+The OIDC trust policy is scoped to `environment:production`, not to a branch —
+so approval in that environment, not the branch a workflow ran from, is what
+grants access to the role.
+
+Then run **Actions → Deploy (manual) → plan**. It should reach
+`No changes. Your infrastructure matches the configuration.` A permission
+error here is the CI role's policy being short an action — expected, since no
+apply has ever exercised it, and the fix is one statement in
+`terraform/modules/github-oidc/main.tf`.
+
+### 8. Prove the backup actually restores
+
+Documented backup that has never been restored is a hope. Do this once, with a
+disposable row, before real tenants exist:
+
+```bash
+aws dynamodb put-item --table-name Tenants \
+  --item '{"tenant_id":{"S":"restore-drill"},"status":{"S":"active"}}'
+
+bash scripts/backup-tables.sh export ~/aiops-backups
+# exported Tenants: 1 items
+
+aws dynamodb delete-item --table-name Tenants \
+  --key '{"tenant_id":{"S":"restore-drill"}}'
+
+bash scripts/backup-tables.sh restore ~/aiops-backups/<timestamp>
+
+aws dynamodb get-item --table-name Tenants \
+  --key '{"tenant_id":{"S":"restore-drill"}}'
+# the item is back
+
+aws dynamodb delete-item --table-name Tenants \
+  --key '{"tenant_id":{"S":"restore-drill"}}'
+```
+
+**That closes row 6.** Note the deletes here are done with your own
+credentials: the API Lambda's role has no `DeleteItem` on `Tenants` at all,
+which is the point.
+
+### Tearing it down again
+
+`terraform destroy` **will fail**, deliberately. Three tables carry
+`prevent_destroy` and all seven carry `deletion_protection_enabled`. To
+actually remove everything you must first delete the `lifecycle` blocks from
+`terraform/dynamodb.tf`, set `deletion_protection_enabled = false`, apply that,
+and only then destroy. Two steps where one would do — which is exactly what
+those settings are for.
 
 ## Routine deployment
 

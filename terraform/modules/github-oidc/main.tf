@@ -127,15 +127,45 @@ resource "aws_iam_role_policy" "github_actions" {
           "arn:aws:s3:::${var.project_name}-${var.environment}-terraform-state/*"
         ]
       },
+      # The DynamoDB state-lock table is gone: Terraform 1.10+ locks S3 state
+      # with a lock file in the same bucket (`use_lockfile` in backend.tf), and
+      # that table billed PAY_PER_REQUEST - the one mode ADR-002 names as
+      # having no Always-Free allowance. The lock object lives under the state
+      # key, so the bucket grant above already covers it. No statement here.
+
       {
+        # The OIDC provider this module creates is part of the same state, so
+        # a CI-driven `terraform plan` has to be able to READ it. Without this
+        # the pipeline fails on its own trust anchor with AccessDenied - at
+        # apply time, in front of whoever just approved the deployment.
         Effect = "Allow"
         Action = [
-          "dynamodb:GetItem",
-          "dynamodb:PutItem",
-          "dynamodb:DeleteItem"
+          "iam:GetOpenIDConnectProvider",
+          "iam:CreateOpenIDConnectProvider",
+          "iam:DeleteOpenIDConnectProvider",
+          "iam:UpdateOpenIDConnectProviderThumbprint",
+          "iam:TagOpenIDConnectProvider",
         ]
-        Resource = "arn:aws:dynamodb:*:${data.aws_caller_identity.current.account_id}:table/${var.project_name}-${var.environment}-terraform-lock"
+        Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"
+      },
+      {
+        # Reading the AWS-managed AWSLambdaBasicExecutionRole that iam.tf
+        # attaches to both functions, and listing providers, are account-wide
+        # reads that cannot be resource-scoped.
+        Effect = "Allow"
+        Action = [
+          "iam:GetPolicy",
+          "iam:GetPolicyVersion",
+          "iam:ListOpenIDConnectProviders",
+        ]
+        Resource = "*"
       }
     ]
   })
 }
+
+# NOT VERIFIED AGAINST A REAL APPLY. `terraform validate` checks that the HCL
+# parses; it cannot tell you a policy is missing an action. The first apply is
+# done with the operator's own credentials, so gaps here surface only on the
+# first CI-driven deploy - which is the real test of this policy, and has not
+# happened. See docs/deployment.md.
