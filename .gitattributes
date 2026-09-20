@@ -1,0 +1,14 @@
+# Shell scripts must keep LF endings in the working tree, on every platform.
+#
+# WHY: this repository is developed on a Windows checkout with
+# core.autocrlf=true, which rewrites tracked text files to CRLF on checkout.
+# A CRLF shell script does not run under WSL or Linux — bash reports
+# "set: - : invalid option" and "$'\r': command not found", which points at
+# nothing useful. scripts/run_tests.sh, the one command the README and
+# onboarding doc tell a newcomer to run, was broken this way.
+*.sh text eol=lf
+
+# Terraform and CI configuration are read by Linux tooling for the same reason.
+*.tf     text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
