@@ -41,7 +41,7 @@ what it should print so you can tell a success from a silent failure.
 |---|---|
 | AWS account with admin-level credentials **for this first apply only** | `aws sts get-caller-identity` prints an account id |
 | Terraform ≥ 1.10 | `terraform version`. 1.10 is where `use_lockfile` landed; `backend.tf` needs it |
-| Python 3.12 and `pip`, to build the package | `python3 --version` |
+| Python 3.12 and `pip`, **on Linux** | `python3 --version`. On a Windows checkout this means WSL — see step 2 |
 | The repository, on the commit you intend to deploy | `git status` clean |
 
 The first apply runs as **you**, not as the CI role. The CI role
@@ -92,6 +92,21 @@ bash scripts/build-lambda-package.sh dist
 # unzipped: 197MB (Lambda hard limit 250MB)
 # zipped:   61MB
 ```
+
+**This must run on Linux.** pip resolves wheels for the machine it runs on, and
+scipy, numpy, scikit-learn and cryptography all ship compiled binaries. Built
+on Windows the package contains `win_amd64` `.pyd` files; on macOS, macOS
+`.so` files. Either one zips, uploads and applies without a single error, and
+then the function dies at import on the first real request. On a Windows
+checkout:
+
+```bash
+wsl bash scripts/build-lambda-package.sh dist
+```
+
+The script refuses to run anywhere but Linux rather than letting you find this
+out in production, and asserts afterwards that nothing Windows-shaped ended up
+in the package.
 
 Over 50MB zipped is expected and is why the artifact goes through S3
 ([ADR-004](adr/004-lambda-artifact-via-s3.md)). Over 250MB unzipped is a hard

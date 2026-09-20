@@ -14,6 +14,28 @@ cd "$(dirname "$0")/.."
 OUT="${1:-dist}"
 BUILD=build/package
 
+# MUST BUILD ON LINUX. pip resolves wheels for the machine it runs on, and
+# scipy/numpy/scikit-learn/cryptography all ship compiled binaries. Built on
+# Windows this script produces win_amd64 .pyd files; on macOS, macosx .so
+# files. Either one packages, uploads and applies without a single error, and
+# then the function dies at import on the first real request - the most
+# expensive place to find out.
+#
+# On a Windows checkout, run it from WSL:  wsl bash scripts/build-lambda-package.sh
+# If you genuinely must cross-build, pip can do it with
+#   --platform manylinux2014_x86_64 --only-binary=:all:
+# but that is not wired in here, because nothing in this project needs it.
+OS=$(uname -s)
+case "$OS" in
+  Linux) ;;
+  *)
+    echo "ERROR: runtime is Linux; this is $OS. The wheels pip picks here will" >&2
+    echo "       not load on Lambda, and nothing before production would say so." >&2
+    echo "       Run it under WSL:  wsl bash scripts/build-lambda-package.sh" >&2
+    exit 1
+    ;;
+esac
+
 # Runtime dependencies only. requirements.txt carries a "# dev/test only"
 # marker; pytest, moto and httpx2 exist to test the thing, not to run it.
 # Cutting at the marker keeps one source of truth instead of a second
@@ -49,6 +71,19 @@ rm -rf "$BUILD"/boto3-*.dist-info "$BUILD"/botocore-*.dist-info "$BUILD"/s3trans
 find "$BUILD" -name "__pycache__" -type d -prune -exec rm -rf {} + 2>/dev/null || true
 find "$BUILD" -name "tests" -type d -prune -exec rm -rf {} + 2>/dev/null || true
 find "$BUILD" -name "*.so" -exec strip --strip-unneeded {} + 2>/dev/null || true
+
+# Belt and braces: even on Linux, a stray Windows or macOS wheel in the tree
+# (a leftover build directory, a wheel cache copied between machines) would
+# ship silently. Assert what actually landed rather than trusting the check
+# above.
+if find "$BUILD" -name "*.pyd" | grep -q .; then
+  echo "ERROR: Windows .pyd extensions in the package - it will not import on Lambda" >&2
+  exit 1
+fi
+if find "$BUILD" -name "*.so" | grep -qv -- "-linux-gnu.so$"; then
+  echo "NOTE: some .so files are not named *-linux-gnu.so; check them before deploying:" >&2
+  find "$BUILD" -name "*.so" | grep -v -- "-linux-gnu.so$" | head -5 >&2
+fi
 
 UNZIPPED=$(du -sm "$BUILD" | cut -f1)
 echo "--- size ---"
