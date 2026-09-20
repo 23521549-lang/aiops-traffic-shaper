@@ -20,6 +20,20 @@
 # Five RCU and five WCU of headroom. Spend them deliberately.
 
 resource "aws_dynamodb_table" "tenants" {
+  # FREE, and it removes the single most catastrophic failure mode: no API
+  # call, console click or `terraform destroy` can delete this table until
+  # someone deliberately turns this off first. DynamoDB already replicates
+  # synchronously across three AZs, so hardware loss was never the risk -
+  # human and software error was.
+  deletion_protection_enabled = true
+
+  # Tenants, Agents and Whitelist cannot be reconstructed from anything else,
+  # so Terraform must refuse to replace or destroy them even if a future config
+  # change would otherwise do so silently.
+  lifecycle {
+    prevent_destroy = true
+  }
+
   name           = "Tenants"
   billing_mode   = "PROVISIONED"
   read_capacity  = 1
@@ -33,6 +47,20 @@ resource "aws_dynamodb_table" "tenants" {
 }
 
 resource "aws_dynamodb_table" "agents" {
+  # FREE, and it removes the single most catastrophic failure mode: no API
+  # call, console click or `terraform destroy` can delete this table until
+  # someone deliberately turns this off first. DynamoDB already replicates
+  # synchronously across three AZs, so hardware loss was never the risk -
+  # human and software error was.
+  deletion_protection_enabled = true
+
+  # Tenants, Agents and Whitelist cannot be reconstructed from anything else,
+  # so Terraform must refuse to replace or destroy them even if a future config
+  # change would otherwise do so silently.
+  lifecycle {
+    prevent_destroy = true
+  }
+
   name           = "Agents"
   billing_mode   = "PROVISIONED"
   read_capacity  = 1
@@ -71,6 +99,20 @@ resource "aws_dynamodb_table" "agents" {
 }
 
 resource "aws_dynamodb_table" "whitelist" {
+  # FREE, and it removes the single most catastrophic failure mode: no API
+  # call, console click or `terraform destroy` can delete this table until
+  # someone deliberately turns this off first. DynamoDB already replicates
+  # synchronously across three AZs, so hardware loss was never the risk -
+  # human and software error was.
+  deletion_protection_enabled = true
+
+  # Tenants, Agents and Whitelist cannot be reconstructed from anything else,
+  # so Terraform must refuse to replace or destroy them even if a future config
+  # change would otherwise do so silently.
+  lifecycle {
+    prevent_destroy = true
+  }
+
   name           = "Whitelist"
   billing_mode   = "PROVISIONED"
   read_capacity  = 1
@@ -89,6 +131,13 @@ resource "aws_dynamodb_table" "whitelist" {
 }
 
 resource "aws_dynamodb_table" "mitigation_state" {
+  # FREE, and it removes the single most catastrophic failure mode: no API
+  # call, console click or `terraform destroy` can delete this table until
+  # someone deliberately turns this off first. DynamoDB already replicates
+  # synchronously across three AZs, so hardware loss was never the risk -
+  # human and software error was.
+  deletion_protection_enabled = true
+
   name           = "MitigationState"
   billing_mode   = "PROVISIONED"
   read_capacity  = 3
@@ -118,6 +167,13 @@ resource "aws_dynamodb_table" "mitigation_state" {
 }
 
 resource "aws_dynamodb_table" "models" {
+  # FREE, and it removes the single most catastrophic failure mode: no API
+  # call, console click or `terraform destroy` can delete this table until
+  # someone deliberately turns this off first. DynamoDB already replicates
+  # synchronously across three AZs, so hardware loss was never the risk -
+  # human and software error was.
+  deletion_protection_enabled = true
+
   name           = "Models"
   billing_mode   = "PROVISIONED"
   read_capacity  = 2
@@ -136,6 +192,13 @@ resource "aws_dynamodb_table" "models" {
 }
 
 resource "aws_dynamodb_table" "telemetry_events" {
+  # FREE, and it removes the single most catastrophic failure mode: no API
+  # call, console click or `terraform destroy` can delete this table until
+  # someone deliberately turns this off first. DynamoDB already replicates
+  # synchronously across three AZs, so hardware loss was never the risk -
+  # human and software error was.
+  deletion_protection_enabled = true
+
   name           = "TelemetryEvents"
   billing_mode   = "PROVISIONED"
   read_capacity  = 2
@@ -180,6 +243,13 @@ resource "aws_dynamodb_table" "telemetry_events" {
 }
 
 resource "aws_dynamodb_table" "usage_counters" {
+  # FREE, and it removes the single most catastrophic failure mode: no API
+  # call, console click or `terraform destroy` can delete this table until
+  # someone deliberately turns this off first. DynamoDB already replicates
+  # synchronously across three AZs, so hardware loss was never the risk -
+  # human and software error was.
+  deletion_protection_enabled = true
+
   name           = "UsageCounters"
   billing_mode   = "PROVISIONED"
   read_capacity  = 1

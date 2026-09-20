@@ -36,6 +36,11 @@ resource "aws_iam_role_policy_attachment" "retrain_logs" {
 # --- API Lambda: everything the request path touches ----------------------
 data "aws_iam_policy_document" "api_data" {
   statement {
+    # No DeleteItem here. The request path removes exactly one thing - a
+    # whitelist entry - and that is granted separately below. A tenant or an
+    # agent record is never deleted by serving traffic, so the API role should
+    # not be able to; cheapest possible protection for data that cannot be
+    # reconstructed.
     actions = [
       "dynamodb:GetItem",
       "dynamodb:BatchGetItem",
@@ -43,7 +48,6 @@ data "aws_iam_policy_document" "api_data" {
       "dynamodb:Scan",
       "dynamodb:PutItem",
       "dynamodb:UpdateItem",
-      "dynamodb:DeleteItem",
     ]
     resources = concat(
       [
@@ -59,6 +63,13 @@ data "aws_iam_policy_document" "api_data" {
         "${aws_dynamodb_table.telemetry_events.arn}/index/*",
       ],
     )
+  }
+
+  # The one legitimate delete in the whole request path: a tenant removing an
+  # IP from their own whitelist.
+  statement {
+    actions   = ["dynamodb:DeleteItem"]
+    resources = [aws_dynamodb_table.whitelist.arn, aws_dynamodb_table.mitigation_state.arn]
   }
 
   # Models is read-only from the request path. Only the retrain function
