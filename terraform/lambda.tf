@@ -123,6 +123,25 @@ resource "aws_lambda_function_url" "api" {
   }
 }
 
+# WITHOUT THIS, EVERY REQUEST IS 403. Found on the first real deployment
+# (2026-09-21), which is precisely the class of defect `terraform validate` and
+# a green test suite cannot see.
+#
+# `authorization_type = NONE` on the Function URL above only says "do not
+# require SigV4". It does not grant anybody permission to invoke. Lambda still
+# evaluates the function's resource-based policy, which starts empty, so an
+# anonymous caller is denied. The AWS Console adds this statement silently when
+# you create a Function URL through the UI; Terraform does not, and the failure
+# it produces - a JSON "Forbidden" from the Lambda service itself, never
+# reaching the application - looks nothing like a missing permission.
+resource "aws_lambda_permission" "public_function_url" {
+  statement_id           = "AllowPublicFunctionUrlInvoke"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.api.function_name
+  principal              = "*"
+  function_url_auth_type = "NONE"
+}
+
 resource "aws_cloudwatch_event_rule" "nightly_retrain" {
   name                = "${var.project_name}-nightly-retrain"
   description         = "Daily per-tenant retrain; promotion still goes through the validation gate."

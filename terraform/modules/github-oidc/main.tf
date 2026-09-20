@@ -1,14 +1,45 @@
 data "aws_caller_identity" "current" {}
 
+# THE OIDC PROVIDER IS AN ACCOUNT-LEVEL SINGLETON. AWS allows exactly one per
+# issuer URL per account, so it cannot belong to this project's state the way a
+# Lambda or a table does.
+#
+# Found on the first real deployment (2026-09-21): creating it failed with
+# EntityAlreadyExists, and the provider already in the account was tagged
+# `Project = hivemind` - another project in the same account had created it
+# first. Importing it here would have been worse than the error: two Terraform
+# configurations managing one resource, each apply reverting the other's
+# thumbprints and tags forever.
+#
+# So by default this module REFERENCES the provider and creates only the role,
+# which genuinely is per-project. Set create_oidc_provider = true in the one
+# account where nothing has created it yet.
 resource "aws_iam_openid_connect_provider" "github" {
+  count = var.create_oidc_provider ? 1 : 0
+
   url = "https://token.actions.githubusercontent.com"
 
   client_id_list = ["sts.amazonaws.com"]
 
+  # Thumbprints stopped being load-bearing in 2023: IAM now trusts GitHub's
+  # certificate through its CA rather than a pinned leaf. These are kept
+  # because the argument is still required, and they are deliberately NOT used
+  # to "correct" an existing provider - the one in this account carries a
+  # different, newer thumbprint, and it is not ours to change.
   thumbprint_list = [
     "6938fd4d98bab03faadb97b34396831e3780aea1",
     "1c58a3a8518e8759bf075b76b750d4f2df264fcd"
   ]
+}
+
+data "aws_iam_openid_connect_provider" "github" {
+  count = var.create_oidc_provider ? 0 : 1
+
+  url = "https://token.actions.githubusercontent.com"
+}
+
+locals {
+  oidc_provider_arn = var.create_oidc_provider ? one(aws_iam_openid_connect_provider.github[*].arn) : one(data.aws_iam_openid_connect_provider.github[*].arn)
 }
 
 resource "aws_iam_role" "github_actions" {
@@ -19,7 +50,7 @@ resource "aws_iam_role" "github_actions" {
     Statement = [{
       Effect = "Allow"
       Principal = {
-        Federated = aws_iam_openid_connect_provider.github.arn
+        Federated = local.oidc_provider_arn
       }
       Action = "sts:AssumeRoleWithWebIdentity"
       Condition = {

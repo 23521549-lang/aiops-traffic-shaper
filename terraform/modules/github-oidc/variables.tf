@@ -15,3 +15,16 @@ variable "deploy_environment" {
   default     = "production"
 }
 
+
+variable "create_oidc_provider" {
+  description = <<-EOT
+    Create the GitHub OIDC provider, rather than referencing the one already in
+    the account. AWS permits exactly one per issuer URL per account, so this is
+    true for at most ONE configuration per AWS account. Default false: in a
+    shared account some other project has almost certainly created it, and
+    importing a resource another project's state already owns starts a fight
+    that neither apply wins.
+  EOT
+  type        = bool
+  default     = false
+}

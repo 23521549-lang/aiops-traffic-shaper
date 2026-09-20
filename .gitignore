@@ -60,3 +60,4 @@ repo_dump.md
 .venv/
 .venv*/
 venv/
+aiops-terraform_accessKeys.csv

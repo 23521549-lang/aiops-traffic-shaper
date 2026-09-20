@@ -32,6 +32,35 @@
 # manager export — not in the project repository.
 set -euo pipefail
 
+# Resolve a Python that actually runs. `python3` EXISTS on a Windows machine
+# with Git Bash and is a Microsoft Store stub that prints an advert and exits
+# non-zero, so `command -v python3` is not a usable test - the interpreter has
+# to be probed. Found running this script for real on 2026-09-21.
+PY=""
+for candidate in python3 python py; do
+  if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c "import sys" >/dev/null 2>&1; then
+    PY="$candidate"
+    break
+  fi
+done
+if [ -z "$PY" ]; then
+  echo "ERROR: no working Python found (tried python3, python, py)." >&2
+  echo "       This script needs one to chunk BatchWriteItem into the 25-item" >&2
+  echo "       groups DynamoDB accepts." >&2
+  exit 1
+fi
+
+# Under Git Bash, paths look like /c/Users/... but a WINDOWS Python resolves
+# them literally and fails with FileNotFoundError on a file the shell just
+# wrote. cygpath is the translator; it exists only where the problem does.
+native_path() {
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$1"
+  else
+    printf '%s' "$1"
+  fi
+}
+
 TABLES="Tenants Agents Whitelist"
 MODE="${1:?usage: backup-tables.sh export <dir> | restore <dir>}"
 DIR="${2:?usage: backup-tables.sh export <dir> | restore <dir>}"
@@ -47,7 +76,10 @@ case "$MODE" in
       # something that may never have existed.
       aws dynamodb scan --table-name "$t" --region "$REGION" \
         --consistent-read --output json > "$OUT/$t.json"
-      COUNT=$(python3 -c "import json,sys; print(json.load(open('$OUT/$t.json'))['Count'])")
+      # Read the count out of the JSON with grep rather than Python: it keeps
+      # the export path free of any interpreter, and the field is written by
+      # the AWS CLI in a fixed shape.
+      COUNT=$(grep -o '"Count"[[:space:]]*:[[:space:]]*[0-9]*' "$OUT/$t.json" | head -1 | grep -o '[0-9]*$')
       echo "  exported $t: $COUNT items"
     done
     echo "written to $OUT"
@@ -66,7 +98,7 @@ case "$MODE" in
       # BatchWriteItem takes 25 items per call, so chunk. Written in python
       # rather than jq because python is already a dependency of this project
       # and jq is not.
-      python3 - "$DIR/$t.json" "$t" "$REGION" <<'PY'
+      "$PY" - "$(native_path "$DIR/$t.json")" "$t" "$REGION" <<'PY'
 import json, subprocess, sys
 path, table, region = sys.argv[1], sys.argv[2], sys.argv[3]
 items = json.load(open(path))["Items"]
