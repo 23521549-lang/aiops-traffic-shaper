@@ -12,3 +12,10 @@
 *.tf     text eol=lf
 *.yml    text eol=lf
 *.yaml   text eol=lf
+
+# nginx configuration, including config/nginx/aiops-agent-geo.conf. That file
+# must stay byte-identical to what NginxAdapter._write_ratelimit_file() emits,
+# and the adapter writes LF. Without this line a Windows checkout turns the
+# seed into CRLF and test_nginx_example_config.py fails for a reason that has
+# nothing to do with the change under test.
+*.conf   text eol=lf
