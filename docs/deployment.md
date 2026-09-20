@@ -17,6 +17,7 @@ updates this line.
 | 2 × CloudWatch log group, 14-day retention | "Never expire" is the default and the commonest way a free-tier project starts costing money |
 | S3 bucket for the Lambda artifact | Forced: the package is 61MB zipped and Lambda's direct-upload ceiling is 50MB — see [ADR-004](adr/004-lambda-artifact-via-s3.md) |
 | 3 × CloudWatch alarm + SNS topic | Errors, retrain failure, retrain approaching its timeout. Inside Always-Free (10 alarms, 1,000 emails/month) |
+| No load balancer health check | There is nothing in front of the Function URL to run one. `/ready` exists and is correct; nothing polls it automatically |
 | GitHub OIDC role | No static AWS keys. Trust is scoped to the `production` environment, not to any branch |
 
 No VPC (a NAT gateway is not free at any tier), no ECR (the function ships as a
@@ -49,6 +50,22 @@ terraform output github_actions_role_arn # → repo variable AWS_DEPLOY_ROLE_ARN
 **Both Cognito values are required.** Authentication fails closed without them
 (Phase 4 / H1) — an unconfigured deployment authenticates nobody, deliberately,
 rather than silently skipping audience verification as the pre-Phase-4 code did.
+
+Then confirm the deployment can actually serve, not merely answer:
+
+```bash
+curl -s "$(terraform output -raw function_url)ready"
+# {"status":"ready","checks":{"dynamodb":true,"cognito_config":true}}
+```
+
+A `503` names the failing check. `"cognito_config": false` is the wiring above
+left undone; `"dynamodb": false` means no table exists yet — they are created
+both by Terraform here and by `create_all_tables()` in application code, so
+this says neither has run against this account. `/health` answers 200 in both
+cases, which is exactly why `/ready` exists.
+
+`bash scripts/smoke-test.sh <url>` runs that plus four more checks and needs no
+credentials.
 
 ## Routine deployment
 
@@ -89,42 +106,56 @@ a faster rollback and is worth doing before real traffic exists.
 
 **Data: there is no rollback.** See below.
 
-## Backup — unresolved, and the tension is real
+## Backup — resolved at zero AWS cost, with a stated limit
 
-There is no automated backup, and this is the one place where the ~0₫
-constraint and operational safety genuinely conflict. DynamoDB point-in-time
-recovery and on-demand backups are both billed per GB; neither is in the
-Always-Free tier. Turning PITR on would break the constraint that shaped the
-entire architecture.
+The first thing to be clear about: **DynamoDB already replicates synchronously
+across three availability zones.** Hardware loss was never the exposure. What
+backup protects against here is accidental deletion, malicious deletion, and a
+bug overwriting rows — and most of that is preventable for nothing.
 
-What is actually at risk, by table:
+**What is irreplaceable:** `Tenants`, `Agents`, `Whitelist`. The other four
+tables rebuild themselves — `TelemetryEvents` has a 25-hour TTL, `Models` is
+retrained nightly, `UsageCounters` is today's metering, `MitigationState`
+refills on the next telemetry batch.
 
-| Table | If lost |
+**Free protections, all in Terraform:**
+
+| Protection | Stops |
 |---|---|
-| `TelemetryEvents` | Nothing. 25-hour TTL by design; the next day's traffic replaces it |
-| `Models` | One night. The nightly retrain rebuilds every tenant's model from telemetry |
-| `UsageCounters` | Today's metering only |
-| `MitigationState` | Active blocks lift early. Agents re-receive decisions on the next telemetry batch |
-| **`Tenants`, `Agents`, `Whitelist`** | **Irreplaceable.** Tenant records, agent key hashes, and customer-curated whitelists cannot be reconstructed from anything |
+| `deletion_protection_enabled` on all 7 tables | any API call, console click or `terraform destroy` deleting a table |
+| `prevent_destroy` on the three irreplaceable | Terraform replacing them as a side effect of a config change |
+| API role has **no** `DeleteItem` on `Tenants`/`Agents` | the request path removing a record it never legitimately removes — it can delete a whitelist entry and nothing else |
 
-So the exposure is three small, low-write tables. Options, none free and none
-chosen:
+**Free copy, manual:** `scripts/backup-tables.sh export <dir>` scans the three
+tables with `--consistent-read` and writes JSON. The Scan consumes read
+capacity that is already provisioned and already paid for, so the AWS cost is
+genuinely zero. `restore <dir>` writes them back in batches of 25.
 
-1. **PITR on those three only** — cheapest real answer; cost scales with their
-   size, which is tiny. Probably a few cents a month, but not zero.
-2. **A scheduled export** to S3 or elsewhere — also billed, and adds a moving
-   part.
-3. **Accept the risk**, documented, on the grounds that a free product with no
-   paying customers can ask tenants to re-register. Defensible early, indefensible
-   once anyone depends on it.
+```bash
+bash scripts/backup-tables.sh export  ~/aiops-backups
+bash scripts/backup-tables.sh restore ~/aiops-backups/20260824-2200
+```
 
-**This is the publisher's decision, not an engineering one.** It is recorded
-here unresolved rather than being quietly skipped, and it is a failing row on
-the Phase 7 gate until it is decided.
+**The limit, stated plainly.** This is manual: whatever changed since the last
+export is gone. For three tables that only change when a tenant signs up or
+edits a whitelist, running it after such a change is realistic — but an
+unattended schedule that costs nothing does not exist, and pretending otherwise
+would be the kind of claim this project spends its gates removing. Restore is
+also a *merge*, not a rewind: it puts the exported rows back and does not
+remove rows created since.
+
+**The dump is sensitive.** It contains agent API key hashes and customers'
+whitelisted IP addresses. Store it like a password-manager export, never in
+this repository.
+
+**Gate status:** the Phase 7 row asks for backup *documented and tested*. It is
+documented and the mechanism costs nothing, but no restore has been performed
+against a real table — the row stays FAIL until someone deploys and runs one.
 
 ## Observability
 
-`/health`, structured logging into CloudWatch with 14-day retention,
+`/health` (liveness) and `/ready` (readiness — DynamoDB reachable and both
+Cognito values set), structured logging into CloudWatch with 14-day retention,
 `/admin/v1/usage` for free-tier headroom, and three alarms
 (`terraform/alarms.tf`) publishing to an SNS topic:
 
@@ -143,6 +174,8 @@ Cost: CloudWatch's Always-Free tier covers 10 alarms and SNS's covers 1,000
 emails a month. Unlike the backup question, this gap could be closed without
 touching the cost constraint.
 
-Still missing: no `/ready` endpoint, nothing polls `/health`, and no alarm on
-the free-tier usage ceiling itself — that flag is visible only to someone
-looking at the Control Platform.
+Still missing: **nothing polls either probe automatically** — a Function URL has
+nothing in front of it to run a health check, so `/ready` is only as useful as
+the person or script that calls it. And there is no alarm on the free-tier
+usage ceiling itself; that flag is visible only to someone looking at the
+Control Platform or calling `/admin/v1/usage`.

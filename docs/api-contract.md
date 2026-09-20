@@ -56,7 +56,17 @@
 
 | Method | Path | Description | Auth |
 |---|---|---|---|
-| GET | /health | Liveness | no |
+| GET | /health | Liveness — the process answers. Says nothing about whether it can serve | no |
+| GET | /ready | Readiness — 200 when the DynamoDB tables exist AND both Cognito values are set; 503 with a per-check body otherwise | no |
+
+Neither path is metered, so a probe polling them cannot spend the free-tier
+quota. `/ready` uses `DescribeTable`, a control-plane call that consumes no
+read capacity.
+
+```json
+// GET /ready, 503
+{"status": "not_ready", "checks": {"dynamodb": true, "cognito_config": false}}
+```
 
 ---
 

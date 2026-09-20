@@ -3,11 +3,12 @@
 > Rewritten 2026-08-24. The previous runbook operated a Kubernetes cluster
 > that no longer exists; it is in git history.
 
-**Scope warning.** The system has never been deployed. This runbook covers
-what can actually be operated today — the development loop and the agent
-lifecycle — and states plainly which production procedures do not exist yet
-rather than inventing them. A procedure nobody has run is not a runbook entry;
-it is fiction with a heading.
+**Scope warning.** The system has never been deployed. The development loop
+and the agent lifecycle below are exercised daily. The production procedures
+at the end are written and their tooling validates, but **none has been run
+against real AWS** — each one says so. A procedure nobody has run is not a
+runbook entry; it is fiction with a heading, and marking the difference is the
+whole point of this file.
 
 ## Development loop
 
@@ -21,7 +22,7 @@ Builds a venv from `services/backend/requirements.txt` and runs exactly what CI
 runs: `ruff`, the full suite, and a coverage gate at 80%. Extra arguments pass
 through to pytest, so `bash scripts/run_tests.sh -k cognito` works.
 
-Expected: **164 passed**, coverage ≈ 98%.
+Expected: **172 passed**, coverage ≈ 98%.
 
 ### Rebuild the environment from scratch
 
@@ -140,20 +141,60 @@ The response reports how many were revoked. Its agents are refused on their
 very next call, and its still-valid dashboard token cannot mint a replacement.
 There is no un-suspend endpoint — that is a gap, not a policy.
 
-## Procedures that do not exist yet
+## Production procedures — written, not yet exercised
 
-Honest gaps, all Phase 7 work:
+Phase 7 wrote all of these. The distinction that matters: **written and
+validated** means the file exists and its tooling accepts it; **exercised**
+means somebody ran it against real AWS. Nothing below has been exercised,
+because there has been no deployment.
 
-- **Deployment.** No Terraform describes the Lambdas, DynamoDB tables,
-  EventBridge rule or Cognito pool. Tables are currently created by
-  `create_all_tables()` from application code.
-- **Rollback.** No release versioning, no previous-version artefact to return
-  to.
-- **Backup and restore.** No DynamoDB backup is configured, and no restore has
-  ever been tested.
-- **Alerting.** No alarm on repeated 5xx or on the free-tier ceiling. The
-  ceiling flag is only visible to someone looking at the dashboard.
-- **Health and readiness.** `/health` exists and is unmetered; there is no
-  `/ready`, and nothing polls either.
+| Procedure | Where | State |
+|---|---|---|
+| Deploy | `docs/deployment.md`, `.github/workflows/deploy.yml` | written; `terraform validate` passes, never applied |
+| Rollback | `docs/deployment.md` § Rollback | written; re-deploy from an earlier tag. No Lambda alias, so it is a re-apply, not a pointer flip |
+| Backup | `scripts/backup-tables.sh export` | written; **no restore has ever been performed against a real table** |
+| Alerting | `terraform/alarms.tf` | written; 3 alarms → SNS. Useless until `alert_email` is set *and* the emailed confirmation link is clicked |
+| Readiness | `GET /ready` | implemented and tested; nothing polls it yet |
+
+### Checking readiness after a deploy
+
+```bash
+curl -s https://<function-url>/ready | jq
+```
+
+`200 {"status":"ready"}` means the DynamoDB tables exist and both Cognito
+values are set. `503` names which check failed:
+
+- `"dynamodb": false` — tables were never created. They come from
+  `create_all_tables()` in application code as well as from Terraform; if
+  neither has run against this account, nothing is there.
+- `"cognito_config": false` — the pool id or app client id is unset on the
+  Lambda. Authentication fails closed, so the deployment serves nobody while
+  `/health` still answers 200. Wire `terraform output` back in.
+
+`scripts/smoke-test.sh <url>` runs this plus four other checks unattended.
+
+### Taking a backup
+
+```bash
+bash scripts/backup-tables.sh export ~/aiops-backups
+```
+
+Exports `Tenants`, `Agents` and `Whitelist` — the three tables nothing can
+reconstruct. AWS cost is genuinely zero: a Scan consumes read capacity that is
+already provisioned. It is **manual**; whatever changed since the last export
+is gone, and restore is a merge, not a rewind. The dump contains agent API key
+hashes and customer IPs — store it like a password-manager export, never in
+this repository.
+
+## Still genuinely missing
+
+- **Un-suspend.** Suspension is one-way. A gap, not a policy.
+- **Per-tenant throttling.** The free-tier limiter is global.
+- **An alarm on the free-tier ceiling itself.** The three CloudWatch alarms
+  watch Lambda errors and retrain health; the usage ceiling is still visible
+  only to someone looking at the Control Platform.
 - **Local application run.** The mock harness that made the UI viewable
   offline was removed; running the app now needs real AWS.
+- **An owner for table creation.** Terraform and `create_all_tables()` both
+  create the 7 tables. Whichever runs first wins; this has never been observed.

@@ -9,7 +9,7 @@ hour total, and you will know where everything is and what you must not break.
 bash scripts/run_tests.sh
 ```
 
-Expect **164 passed, ~98% coverage**. If that works you have a complete
+Expect **172 passed, ~98% coverage**. If that works you have a complete
 development environment; nothing else is needed — no AWS account, no Redis, no
 cluster. If it does not work, that is a bug in `requirements.txt`, not in your
 machine (it happened once already; see the runbook).
@@ -71,6 +71,11 @@ same checks the gates do:
 | `pytest --cov-fail-under=80` | Phase 3 suite + Phase 5 coverage |
 | `pip-audit` | Phase 4 — dependency audit clean |
 
+Deployment is a second workflow (`deploy.yml`) and it fires on nothing: a
+human dispatches it and a human approves the GitHub `production` environment.
+Do not restore an automatic trigger — the previous workflow of that name would
+have deployed the superseded architecture the moment the rebuild merged.
+
 So a red CI and a failed gate mean the same thing. The dependency audit blocks
 on purpose: a newly disclosed upstream CVE will fail an unrelated PR. Relaxing
 that needs a recorded decision, not a quiet edit.
@@ -84,9 +89,12 @@ not `test_auth_2`. Skim `test_cognito_auth.py` for the house style.
 Ordered by how much it will surprise you:
 
 1. **Nothing has ever run on real AWS.** Every test uses `moto` and locally
-   signed JWTs. Phase 7 — provisioning Lambda, DynamoDB, EventBridge and
-   Cognito — has not started. `terraform/` holds only the two modules that will
-   survive into it.
+   signed JWTs. The infrastructure is now fully written — `terraform/`
+   describes all 7 tables, both Lambdas, Cognito, the schedule and the alarms,
+   and `terraform validate` passes — but no `terraform apply` has happened.
+   Two things therefore remain unproven no matter how green the suite is: the
+   post-deploy smoke test and a backup restore. They are the two open rows on
+   the Phase 7 gate, and neither can close without an AWS account.
 2. **No supported way to run the application locally.** The app needs real
    DynamoDB and Cognito; the temporary mock harness was removed. Restoring one
    is a good first task and would pay for itself immediately.
@@ -95,7 +103,11 @@ Ordered by how much it will surprise you:
 4. **Throttling is global, not per tenant.** It protects the bill, not
    fairness: one noisy tenant can pause ingest for everyone.
 5. **No un-suspend endpoint.** Suspension is one-way today.
-6. **PII is an open question.** The backend stores end-user IPs and the agent
+6. **Two owners for table creation.** Terraform describes the 7 tables and
+   `create_all_tables()` creates them from application code. Whichever runs
+   first wins. Nobody has decided which should own it, and only a real
+   deployment will show which actually runs first.
+7. **PII is an open question.** The backend stores end-user IPs and the agent
    logs them. `docs/PRD.md` raises it under Constraints and leaves it open; it
    is a compliance decision, not a technical one.
 
