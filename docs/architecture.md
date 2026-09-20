@@ -162,10 +162,36 @@ checks and the login page write nothing, so anonymous traffic cannot spend the
 free-tier quota — a mitigation, not a cure, since the Function URL still has no
 edge rate limiting.
 
+## Deployment shape
+
+`terraform/` describes the whole system: 7 DynamoDB tables (provisioned,
+14 RCU / 20 WCU of the 25/25 free pool), two Lambda functions sharing one S3-
+hosted zip, the Function URL, the Cognito pool whose immutable
+`custom:tenant_id` claim the isolation story rests on, the nightly EventBridge
+rule, two log groups with 14-day retention, and three CloudWatch alarms into an
+SNS topic. No VPC (a NAT gateway is not free), no ECR (zip, not container), no
+S3 for models. Detail and the deploy procedure: [deployment.md](deployment.md).
+
+Deployment is manual by design — `.github/workflows/deploy.yml` runs only on
+`workflow_dispatch` behind a GitHub `production` environment approval. The
+previous workflow of that name auto-deployed on push to `main`, which is how
+the superseded architecture would have shipped itself during the rebuild.
+
+Two liveness surfaces, and the difference matters: `/health` says the process
+answers, `/ready` says it can serve — it describes a DynamoDB table and
+verifies both Cognito values are set, because a deployment missing either is up
+and healthy-looking while serving nobody.
+
 ## What this architecture does not have yet
 
-- **Any deployed infrastructure.** No Terraform describes the Lambdas, tables,
-  EventBridge rule or Cognito pool. Tables are created by `create_all_tables()`
-  from application code. Phase 7 work.
-- **Throttling.** Usage is measured; nothing limits it at the ceiling.
-- **Edge rate limiting.** Dropped with API Gateway, accepted in ADR-002.
+- **Anything actually running.** No `terraform apply` has been executed. The
+  post-deploy smoke test and the backup restore have never run against real
+  resources — the two open rows on the Phase 7 gate.
+- **Tables from IaC in practice.** Terraform describes all 7, but
+  `create_all_tables()` in application code still creates them too; whichever
+  runs first wins, and only a real deployment will show which.
+- **Edge rate limiting.** Dropped with API Gateway, accepted in ADR-002. The
+  free-tier throttle in `core/usage.py` refuses ingest at 100% of the day's
+  share, which protects the bill but is global rather than per tenant.
+- **Unattended backup.** `scripts/backup-tables.sh` is manual; nothing free
+  schedules it.

@@ -3,5 +3,6 @@ output "bucket_name" {
 }
 
 output "dynamodb_table_name" {
-  value = aws_dynamodb_table.terraform_lock.name
+  description = "Empty unless create_lock_table is true; S3-native locking replaced it."
+  value       = try(aws_dynamodb_table.terraform_lock[0].name, "")
 }

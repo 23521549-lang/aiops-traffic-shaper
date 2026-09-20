@@ -1,0 +1,28 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is git-ignored.
+#
+# Every variable below except github_repo has a working default in
+# variables.tf — this file exists to show what is worth overriding, not to
+# make you retype defaults.
+
+# REQUIRED. owner/repo, for the GitHub Actions OIDC trust policy.
+github_repo = "23521549-lang/aiops-traffic-shaper"
+
+# Where alarms go. Left empty, the three CloudWatch alarms are still created
+# and still fire — into an SNS topic nobody is subscribed to. AWS emails a
+# confirmation link; the subscription delivers nothing until someone clicks it.
+alert_email = ""
+
+# Must match cognito_region in the backend's settings.
+region       = "ap-southeast-1"
+project_name = "aiops-traffic-shaper"
+environment  = "prod"
+
+# Built by CI, not by Terraform — see variables.tf for why.
+# lambda_package_path = "../dist/backend.zip"
+
+# Also the CPU dial on Lambda. Raising it raises GB-seconds against the
+# 400,000/month Always-Free allowance linearly; re-measure before changing.
+# lambda_memory_mb = 512
+
+# Nightly retrain, UTC.
+# retrain_schedule = "cron(0 18 * * ? *)"

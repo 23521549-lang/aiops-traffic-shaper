@@ -13,14 +13,20 @@ Always-Free tier — the hard constraint that shaped every decision in
 
 ## Status — read this first
 
-**Never deployed. Verified locally only.**
+**Never deployed. Written in full, verified locally only.**
 
-The backend and agent are complete and tested — 164 tests, 98% line coverage,
+The backend and agent are complete and tested — 168 tests, 98% line coverage,
 a clean dependency audit — but every test runs against `moto` (an in-process
 DynamoDB simulator) and locally signed JWTs. No Lambda, no Cognito user pool,
-and no live DynamoDB table has ever run. Provisioning the real infrastructure
-is Phase 7 and has not started; `terraform/` currently holds only the two
-modules that will survive into it (see [terraform/README.md](terraform/README.md)).
+and no live DynamoDB table has ever run.
+
+The infrastructure is now **written**: `terraform/` describes every resource
+(7 DynamoDB tables, 2 Lambdas, the Function URL, Cognito, the EventBridge
+schedule, 3 alarms), `terraform validate` passes, and
+`.github/workflows/deploy.yml` will plan and apply it behind a manual approval.
+None of it has been applied. What stands between here and "running" is an AWS
+account and somebody pressing the button — see
+[docs/deployment.md](docs/deployment.md).
 
 An earlier version of this README claimed the system was "deployed and verified
 stable on AWS". That was never true, and it described a different architecture
@@ -95,7 +101,7 @@ services/agent/       thin client installed by the customer
   collector.py        batches log records, forwards them
   enforcer/           pluggable adapters: nginx, iptables
   cli.py              register / status
-terraform/            only what survives into Phase 7
+terraform/            the full deployment: tables, Lambdas, Cognito, alarms
 config/nginx/         example customer nginx config
 scripts/              test runner, traffic simulators
 docs/                 PRD, PLAN, architecture, MLOps design, runbook, ADRs
@@ -152,6 +158,7 @@ findings, four of them High, all fixed with a failing test written first.
 | [docs/runbook.md](docs/runbook.md) | Operating and troubleshooting |
 | [docs/schema.md](docs/schema.md) | DynamoDB tables and access patterns |
 | [docs/api-contract.md](docs/api-contract.md) | HTTP contract |
+| [docs/deployment.md](docs/deployment.md) | What gets created, how to deploy, rollback, backup |
 | [docs/adr/](docs/adr/) | Architecture decisions, with the reasoning |
 | [docs/security-report.md](docs/security-report.md) · [docs/test-report.md](docs/test-report.md) | Audit and verification results |
 
@@ -170,11 +177,15 @@ findings, four of them High, all fixed with a failing test written first.
 
 ## Known gaps
 
-- Never run on real AWS (PRD US-9).
+- **Never run on real AWS** (PRD US-9). The infrastructure is written and
+  validated; no `terraform apply` has happened, so the post-deploy smoke test
+  and the backup restore have never executed against anything real.
 - No Cognito Hosted UI: both the CLI and the web UI take a pasted ID token.
 - Throttling is coarse: at 100% of the day's free-tier share, telemetry
   ingest is refused wholesale rather than shaped per tenant, so one noisy
   tenant can pause ingest for everyone.
 - No rate limiting at the edge — a consequence of dropping API Gateway for
   cost, accepted in ADR-002.
+- Backup is manual (`scripts/backup-tables.sh`); an unattended schedule that
+  costs nothing does not exist. See docs/deployment.md.
 - No supported way to run the application locally (see above).

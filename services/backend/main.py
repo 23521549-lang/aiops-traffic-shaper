@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException, Request
+from botocore.exceptions import BotoCoreError, ClientError
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from mangum import Mangum
 
@@ -6,6 +7,7 @@ from services.backend.api.routes.admin import router as admin_router
 from services.backend.api.routes.admin_usage import router as admin_usage_router
 from services.backend.api.routes.agent import router as agent_router
 from services.backend.api.routes.dashboard import router as dashboard_router
+from services.backend.core.config import settings
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.usage import record_invocation
 from services.backend.ui.auth_pages import router as ui_auth_router
@@ -71,7 +73,7 @@ def _resolve_resource(request):
 # constantly, and the login/static endpoints are reachable before any
 # credential exists, so metering them just hands an anonymous caller a lever
 # on the free-tier ceiling this whole product is built around.
-_UNMETERED_PATH_PREFIXES = ("/health", "/ui/login", "/ui/logout", "/ui/static")
+_UNMETERED_PATH_PREFIXES = ("/health", "/ready", "/ui/login", "/ui/logout", "/ui/static")
 
 
 def _should_meter(request, response) -> bool:
@@ -131,7 +133,50 @@ async def security_headers(request, call_next):
 
 @app.get("/health")
 def health():
+    """Liveness only: the process started and can answer. It says nothing
+    about whether this instance can serve a real request - see /ready."""
     return {"status": "healthy"}
+
+
+# The readiness probe describes a table rather than reading from one.
+# DescribeTable is a control-plane call: it consumes no read capacity, so a
+# probe polled every few seconds costs nothing against the 25 RCU the whole
+# architecture is budgeted to (ADR-002). A GetItem here would not.
+_READINESS_TABLE = "Tenants"
+
+
+def _dynamodb_ready(resource) -> bool:
+    try:
+        described = resource.meta.client.describe_table(TableName=_READINESS_TABLE)
+    except (ClientError, BotoCoreError):
+        return False
+    return described["Table"]["TableStatus"] == "ACTIVE"
+
+
+@app.get("/ready")
+def ready(resource=Depends(get_dynamo_resource)):
+    """Readiness: can this instance actually serve? Two dependencies decide
+    that, and both have failed silently in this project's history.
+
+    DynamoDB - tables are created by create_all_tables() from application
+    code, not by Terraform, so a fresh deployment can be up and answering
+    /health with no table behind it.
+
+    Cognito configuration - Phase 4 (H1) made authentication fail CLOSED when
+    the pool id or app client id is unset. Such a deployment authenticates
+    nobody while looking perfectly healthy; docs/deployment.md calls both
+    values required, and this is what makes that claim checkable rather than
+    a sentence somebody has to remember to read.
+    """
+    checks = {
+        "dynamodb": _dynamodb_ready(resource),
+        "cognito_config": bool(settings.cognito_user_pool_id
+                               and settings.cognito_app_client_id),
+    }
+    if all(checks.values()):
+        return {"status": "ready", "checks": checks}
+    return JSONResponse(status_code=503,
+                        content={"status": "not_ready", "checks": checks})
 
 
 handler = Mangum(app)

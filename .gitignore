@@ -4,13 +4,16 @@
 .env.*
 !.env.example
 
-# Terraform
-terraform/.terraform/
-terraform/*.tfstate
-terraform/*.tfstate.*
-terraform/*.tfstate.backup
-terraform/.terraform.lock.hcl
-terraform/crash.log
+# Terraform. These are ** patterns, not terraform/ prefixes: the bootstrap
+# root is a second root configuration with its own .terraform/ directory, and
+# a prefixed pattern missed it — one `git add -A` away from committing a 500MB
+# provider binary.
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+crash.log
 terraform/terraform.tfvars
 !terraform/terraform.tfvars.example
 
@@ -43,14 +46,10 @@ id_rsa.pub
 .DS_Store
 Thumbs.db
 
-# K8s secrets
-k8s/secrets/*.yaml
-!k8s/secrets/.gitkeep
-
-# Model files
-services/ai-engine/models/production/*.joblib
-services/ai-engine/models/staging/*.joblib
-services/ai-engine/models/archive/*.
+# Local backups taken by scripts/backup-tables.sh. These hold agent API key
+# hashes and customers' whitelisted IPs — they must never reach the repo.
+aiops-backups/
+*.backup.json
 
 # other
 dump-code.sh

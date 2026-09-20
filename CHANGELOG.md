@@ -2,10 +2,73 @@
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] — hybrid model
+## [Unreleased] — deployment (Phase 7)
 
-Everything below lives on `feature/hybrid-backend` and is **not yet tagged or
-merged**; tagging is a pending decision. Nothing here has run on real AWS.
+The infrastructure the rebuild never had. **Still not deployed:** everything
+here is written and validated, and no `terraform apply` has run against a real
+AWS account.
+
+### Added
+
+- **Terraform root configuration** — all 7 DynamoDB tables (provisioned,
+  14 RCU / 20 WCU of the 25/25 Always-Free pool), both Lambda functions, the
+  Function URL, the Cognito pool whose immutable `custom:tenant_id` the whole
+  isolation story rests on, the nightly EventBridge rule, two log groups at
+  14-day retention, and least-privilege IAM.
+- **`.github/workflows/deploy.yml`** — manual dispatch only, behind a GitHub
+  `production` environment approval, authenticating through OIDC with no
+  static AWS keys. It builds the package, plans, applies on request, and runs
+  the smoke test.
+- **Three CloudWatch alarms → SNS** (`terraform/alarms.tf`): API errors,
+  retrain failure, retrain approaching Lambda's 15-minute ceiling. Within the
+  Always-Free allowance of 10 alarms and 1,000 emails.
+- **`GET /ready`** — readiness, as distinct from liveness. Describes a DynamoDB
+  table (a control-plane call, so it consumes no read capacity) and verifies
+  both Cognito values are set. A deployment missing either authenticates nobody
+  while `/health` still answers 200; that now reports as `503 not_ready` with a
+  per-check body instead of looking healthy. `scripts/smoke-test.sh` checks it.
+- **`scripts/backup-tables.sh`** — export/restore for `Tenants`, `Agents` and
+  `Whitelist`, the three tables nothing can reconstruct. Zero AWS cost: a Scan
+  consumes capacity that is already provisioned.
+- **Free protections for the data**, all in Terraform and all free:
+  `deletion_protection_enabled` on every table, `prevent_destroy` on the three
+  irreplaceable ones, and the API role stripped of `DeleteItem` on `Tenants`
+  and `Agents` — the request path can delete a whitelist entry and nothing else.
+- **`.gitattributes`** — forces LF on `*.sh`. With `core.autocrlf=true` on a
+  Windows checkout, every shell script in the repository was checked out CRLF
+  and failed under WSL with `set: - : invalid option`. That included
+  `scripts/run_tests.sh`, the one command the README tells a newcomer to run.
+- **`config/nginx/` rewritten** as a real customer example for the agent's
+  enforcement model, with `aiops-agent-geo.conf` as a seed so nginx can start
+  before the agent has ever enforced anything. Four tests assert the example
+  and the adapter cannot drift apart.
+
+### Changed
+
+- **`ADR-004`** records the first real exception to ADR-002's "0đ, absolutely,
+  forever": the deployment package is 62MB zipped, Lambda's direct-upload
+  ceiling is 50MB, so the artifact ships through S3 at roughly one US cent a
+  month. Recorded rather than buried in a Terraform comment.
+- `.env.example` rewritten. It had described the superseded architecture —
+  Redis hosts, a Grafana password, a Kubernetes master IP — so anyone filling
+  it in was configuring a system that had already been deleted. The backend
+  reads exactly three settings.
+- README, architecture, runbook, onboarding and `terraform/README.md` had all
+  frozen at "Phase 7 has not started" while Phase 7 was writing the
+  infrastructure. Corrected; each now separates *written and validated* from
+  *run against real AWS*.
+
+### Not done, and it is the point
+
+`docs/deployment.md` is a deployment **design**. The Phase 7 gate has two
+failing rows — the post-deploy smoke test and a tested backup restore — and
+neither can close without an AWS account. They are recorded as failures rather
+than waved through.
+
+## [0.1.0] — 2026-08-24 — hybrid model
+
+Merged to `main` with `--no-ff` and tagged `v0.1.0`. Nothing in this release
+has run on real AWS.
 
 This release is a rebuild, not an increment. ADR-002 replaced the original
 architecture — a self-managed Kubernetes cluster on EC2 with Redis — with a

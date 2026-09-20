@@ -1,0 +1,76 @@
+# Deploy the hybrid model to AWS.
+#
+# MANUAL ONLY, ON PURPOSE. The previous file of this name triggered on push to
+# main and would have deployed the superseded architecture the moment the
+# rebuild merged. Nothing here fires on a push; a human dispatches it and a
+# human approves the `production` environment before anything is applied.
+#
+# Requires, one time:
+#   - the GitHub environment `production` with required reviewers configured
+#     (that is where the approval gate actually lives — this file only asks for
+#     it; GitHub enforces it)
+#   - repo variable AWS_DEPLOY_ROLE_ARN = terraform output github_actions_role_arn
+#   - repo variable AWS_REGION
+# No static AWS keys. Authentication is OIDC only.
+
+name: Deploy (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "plan only, or plan then apply?"
+        type: choice
+        options: ["plan", "apply"]
+        default: "plan"
+        required: true
+
+permissions:
+  id-token: write   # OIDC
+  contents: read
+
+jobs:
+  deploy:
+    name: Package, plan${{ github.event.inputs.apply == 'apply' && ', apply and smoke test' || '' }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build the Lambda package
+        # The same script anyone can run locally. Duplicating the build inline
+        # here is how the local copy silently produced an empty requirements
+        # file and a 1MB package that looked fine - one script, one behaviour.
+        run: bash scripts/build-lambda-package.sh dist
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init
+        working-directory: terraform
+        run: terraform init -no-color
+
+      - name: Terraform plan
+        working-directory: terraform
+        run: terraform plan -no-color -var="github_repo=${{ github.repository }}"
+
+      - name: Terraform apply
+        if: github.event.inputs.apply == 'apply'
+        working-directory: terraform
+        run: terraform apply -auto-approve -no-color -var="github_repo=${{ github.repository }}"
+
+      - name: Smoke test
+        if: github.event.inputs.apply == 'apply'
+        working-directory: terraform
+        run: |
+          URL=$(terraform output -raw function_url)
+          echo "deployed at: $URL"
+          bash ../scripts/smoke-test.sh "$URL"
