@@ -164,6 +164,7 @@ findings, four of them High, all fixed with a failing test written first.
 | [docs/schema.md](docs/schema.md) | DynamoDB tables and access patterns |
 | [docs/api-contract.md](docs/api-contract.md) | HTTP contract |
 | [docs/deployment.md](docs/deployment.md) | What gets created, how to deploy, rollback, backup |
+| [docs/retrospective.md](docs/retrospective.md) | What the project carried, what got reversed, what is still open and who decides |
 | [docs/adr/](docs/adr/) | Architecture decisions, with the reasoning |
 | [docs/security-report.md](docs/security-report.md) · [docs/test-report.md](docs/test-report.md) | Audit and verification results |
 
