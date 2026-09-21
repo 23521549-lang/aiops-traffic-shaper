@@ -113,7 +113,7 @@ resource "aws_lambda_function" "retrain" {
 # residual risk, partially mitigated by the free-tier throttle in core/usage.py.
 resource "aws_lambda_function_url" "api" {
   function_name      = aws_lambda_function.api.function_name
-  authorization_type = "NONE"
+  authorization_type = "AWS_IAM"
 
   cors {
     allow_origins = ["*"]
@@ -123,23 +123,22 @@ resource "aws_lambda_function_url" "api" {
   }
 }
 
-# WITHOUT THIS, EVERY REQUEST IS 403. Found on the first real deployment
-# (2026-09-21), which is precisely the class of defect `terraform validate` and
-# a green test suite cannot see.
+# Only CloudFront may invoke the function URL, and only THIS distribution.
 #
-# `authorization_type = NONE` on the Function URL above only says "do not
-# require SigV4". It does not grant anybody permission to invoke. Lambda still
-# evaluates the function's resource-based policy, which starts empty, so an
-# anonymous caller is denied. The AWS Console adds this statement silently when
-# you create a Function URL through the UI; Terraform does not, and the failure
-# it produces - a JSON "Forbidden" from the Lambda service itself, never
-# reaching the application - looks nothing like a missing permission.
-resource "aws_lambda_permission" "public_function_url" {
-  statement_id           = "AllowPublicFunctionUrlInvoke"
+# The previous version granted Principal "*" with function_url_auth_type NONE,
+# which is what the AWS Console adds silently when you create a public function
+# URL by hand - Terraform does not, so every request was 403 until it was added.
+# That whole approach is gone: the account blocks anonymous invocation whatever
+# the policy says, and scoping to the distribution ARN is strictly better
+# regardless - the origin is no longer reachable by anyone who did not come
+# through the edge.
+resource "aws_lambda_permission" "cloudfront_function_url" {
+  statement_id           = "AllowCloudFrontServicePrincipal"
   action                 = "lambda:InvokeFunctionUrl"
   function_name          = aws_lambda_function.api.function_name
-  principal              = "*"
-  function_url_auth_type = "NONE"
+  principal              = "cloudfront.amazonaws.com"
+  source_arn             = aws_cloudfront_distribution.api.arn
+  function_url_auth_type = "AWS_IAM"
 }
 
 resource "aws_cloudwatch_event_rule" "nightly_retrain" {
