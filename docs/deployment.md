@@ -36,7 +36,8 @@ been scored in production, and the nightly retrain has never fired on live data.
 | 2 × CloudWatch log group, 14-day retention | "Never expire" is the default and the commonest way a free-tier project starts costing money |
 | S3 bucket for the Lambda artifact | Forced: the package is 61MB zipped and Lambda's direct-upload ceiling is 50MB — see [ADR-004](adr/004-lambda-artifact-via-s3.md) |
 | 3 × CloudWatch alarm + SNS topic | Errors, retrain failure, retrain approaching its timeout. Inside Always-Free (10 alarms, 1,000 emails/month) |
-| No load balancer health check | There is nothing in front of the Function URL to run one. `/ready` exists and is correct; nothing polls it automatically |
+| Probe Lambda + 5-minute EventBridge rule | Polls `/ready` **through CloudFront** — the path real agents take — and reports free-tier usage as metrics. Stands in for the load-balancer health check a Function URL has no place to run |
+| 3 more alarms (6 in total) | Service not ready for 10 minutes, free-tier usage past 80%, and the probe itself broken — kept separate so a probe bug is never mistaken for an outage |
 | GitHub OIDC role | No static AWS keys. Trust is scoped to the `production` environment, not to any branch. The provider itself is **referenced, not created** — it is an account-level singleton and another project already owned it |
 | CloudFront distribution + OAC | The public entrypoint. Caching disabled on purpose: every response is tenant-scoped or a live-TTL decision. Always-Free covers 1 TB and 10M requests/month |
 | S3 bucket for Terraform state | Created separately by `terraform/bootstrap/`, before any of the above. Versioned, encrypted, private, locked with S3-native lock files rather than a PAY_PER_REQUEST DynamoDB table |
@@ -375,8 +376,17 @@ Cost: CloudWatch's Always-Free tier covers 10 alarms and SNS's covers 1,000
 emails a month. Unlike the backup question, this gap could be closed without
 touching the cost constraint.
 
-Still missing: **nothing polls either probe automatically** — a Function URL has
-nothing in front of it to run a health check, so `/ready` is only as useful as
-the person or script that calls it. And there is no alarm on the free-tier
-usage ceiling itself; that flag is visible only to someone looking at the
-Control Platform or calling `/admin/v1/usage`.
+**The probe** (`terraform/probe.tf`, `services/backend/probe_handler.py`) runs
+every five minutes, calls `/ready` through CloudFront, reads the day's global
+usage, and writes one Embedded Metric Format log line — which CloudWatch turns
+into two metrics, `ReadyProbeSuccess` and `DailyUsageRatio`, in the
+`AiopsTrafficShaper` namespace. No `PutMetricData` call, so no extra permission.
+
+| Alarm | Fires when |
+|---|---|
+| `not-ready` | `/ready` failed for two consecutive probes (10 min). **Missing data counts as failing** — a probe that stopped running is not a healthy signal |
+| `free-tier-80pct` | today's usage passed 80% of the free-tier share, the same threshold the dashboard banner uses |
+| `probe-broken` | the probe Lambda itself errored. It never raises for a service failure, so this means its code or permissions, not an outage |
+
+Still missing: per-tenant usage is enforced but not graphed; it is readable
+from `UsageCounters` (see the runbook).
