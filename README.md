@@ -18,22 +18,27 @@ Always-Free tier — the hard constraint that shaped every decision in
 
 The public entrypoint is a CloudFront distribution; the post-deploy smoke test
 passes 5/5 against it, and a backup restore has been performed against the real
-DynamoDB tables. 177 tests, 98% line coverage, a clean dependency audit.
+DynamoDB tables. 184 tests, 98% line coverage, a clean dependency audit.
 
-Read that claim narrowly, because an earlier README of this project made a
-wider one that was false. What has been proved is that the infrastructure
-stands up, the application answers, authentication fails closed, the security
-headers survive deployment, and a deleted row can be restored. What has **not**
-happened is a real agent reporting real traffic: no tenant has been registered,
-no telemetry has been scored in production, and the nightly retrain has never
-fired on live data. The path from here to that is in
-[docs/deployment.md](docs/deployment.md).
+**The product has been exercised end to end on production.** A real agent,
+registered through the real CLI, sent real telemetry through CloudFront; the
+nightly retrain Lambda trained and promoted a per-tenant IsolationForest on 182
+live samples; a brute-force IP then came back with a Tier 1 rate-limit decision
+while five normal visitors got none; and the agent's own nginx enforcer wrote
+the resulting config. 165 log lines from 9 IPs cost exactly 9 DynamoDB items —
+the cost property the whole architecture exists for, observed in production.
 
-Three defects were found by deploying that nothing else could have found: a
+What has **not** happened is traffic from someone other than the publisher: no
+external tenant, and no real nginx reloaded by the agent.
+
+Five defects were found by deploying and running it that nothing else could have found: a
 Lambda function URL needs **two** IAM statements for CloudFront rather than one,
 the readiness probe needed `dynamodb:DescribeTable` it was never granted, and
 the GitHub OIDC provider turned out to be an account-level singleton already
-owned by another project. All three are fixed; see
+owned by another project, CloudFront silently replaces the `Authorization`
+header so no Bearer token ever reached the app, and the nightly retrain failed
+at its last step on every run because its return value was not JSON. All five
+are fixed; see
 [ADR-005](docs/adr/005-cloudfront-oac.md).
 
 ## How it works
@@ -184,9 +189,10 @@ findings, four of them High, all fixed with a failing test written first.
 
 ## Known gaps
 
-- **No real traffic has been served.** The deployment is verified; the product
-  is not. No tenant registered, no telemetry scored in production, no nightly
-  retrain fired on live data.
+- **No traffic from anyone but the publisher.** The full loop has run on
+  production with a demo tenant (`acme-demo`); no external tenant has.
+- **Human credentials travel in `X-Id-Token`, not `Authorization`** — CloudFront
+  replaces the latter. The CLI and UI handle it; other API clients must too.
 - **POST requests must carry `x-amz-content-sha256`.** CloudFront's origin
   access control signs the request but not the body, so every client sending a
   body hashes it first. The agent and the UI do this; anything else calling the

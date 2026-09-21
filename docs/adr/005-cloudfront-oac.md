@@ -125,6 +125,26 @@ the application. Three places pay this:
   login form now submits through `fetch`. This is the one place where the
   decision changed user-facing behaviour rather than plumbing.
 
+**The `Authorization` header cannot carry a user credential any more.** Found
+the first time a real agent registered against the real deployment: the CLI
+sent a valid Cognito token as `Authorization: Bearer ...` and the backend
+answered `401 Missing credentials`, because it never saw it. OAC signs the
+origin request by *replacing* `Authorization` with its own SigV4 signature. The
+other OAC setting, `no-override`, passes the viewer's header through but then
+does not sign — and an `AWS_IAM` function URL rejects an unsigned request. No
+configuration lets both through.
+
+The token now travels in `X-Id-Token`, a header CloudFront leaves alone. The
+backend checks `Authorization: Bearer` first, `X-Id-Token` second and the
+cookie third; in production the `Authorization` header holds CloudFront's
+signature, which does not begin with `Bearer `, so it falls through on its own
+and every direct-to-origin caller keeps working unchanged.
+
+This is the second client-visible obligation this decision created, after the
+body hash. Both were invisible to 172 green tests and to a passing smoke test,
+because the smoke test only ever sent *unauthenticated* requests — and a
+request with no credential is the one request this bug cannot affect.
+
 **The origin is no longer publicly reachable.** Anything bypassing CloudFront
 gets 403 from AWS itself — a stronger guarantee than the original design had.
 `terraform output function_url` is no longer the address to give anybody;

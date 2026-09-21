@@ -7,6 +7,26 @@
 > Endpoints are namespaced by audience since there is no network boundary
 > to separate them anymore.
 
+## Human credentials go in `X-Id-Token`, not `Authorization`
+
+CloudFront's origin access control signs each origin request with SigV4, and
+signing **replaces** the `Authorization` header with CloudFront's own
+signature. The alternative OAC setting, `no-override`, forwards the viewer's
+`Authorization` and then does not sign at all — which an `AWS_IAM` function URL
+rejects. There is no OAC configuration in which a Bearer token reaches the
+application.
+
+So a Cognito ID token travels in `X-Id-Token`:
+
+```bash
+curl "$BASE/dashboard/v1/mitigations" -H "X-Id-Token: <cognito-id-token>"
+```
+
+`Authorization: Bearer` still works for callers that reach the origin directly;
+the browser UI uses the `id_token` cookie. All three funnel into the same
+verification. Found by registering a real agent against the real deployment,
+which got `401 Missing credentials` for a perfectly valid token.
+
 ## Every request with a body must carry `x-amz-content-sha256`
 
 The API is served through CloudFront, whose origin access control signs the

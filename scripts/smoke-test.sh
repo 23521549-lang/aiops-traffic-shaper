@@ -77,10 +77,32 @@ echo "$HEADERS" | grep -qi 'x-content-type-options: nosniff' \
   && echo "$HEADERS" | grep -qi 'content-security-policy'
 check $? "security headers present on the response"
 
-echo
-if [ "$FAILED" = "0" ]; then
-  echo "=== SMOKE RESULT: PASS (5/5) ==="
+# 6. OPTIONAL: an authenticated request actually authenticates.
+#
+# Checks 1-5 need no credentials so this script can run unattended - and that
+# is precisely what let it pass 5/5 while every authenticated flow in
+# production was broken. CloudFront replaces the Authorization header with its
+# own SigV4 signature (ADR-005), so a Bearer token never reached the app; an
+# unauthenticated request is the one request that bug cannot affect. Found only
+# when a real agent tried to register.
+#
+# Set SMOKE_ID_TOKEN to a Cognito ID token for any tenant user and this check
+# runs. Unset, it is reported as skipped - not passed.
+TOTAL=5
+if [ -n "${SMOKE_ID_TOKEN:-}" ]; then
+  TOTAL=6
+  CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20     -H "X-Id-Token: $SMOKE_ID_TOKEN" "$URL/dashboard/v1/mitigations")
+  [ "$CODE" = "200" ]
+  check $? "authenticated /dashboard/v1/mitigations via X-Id-Token is 200 (got $CODE)"
 else
-  echo "=== SMOKE RESULT: FAIL ($FAILED of 5) ==="
+  echo "  SKIP  authenticated request (set SMOKE_ID_TOKEN to run it)"
+fi
+
+echo
+PASSED=$((TOTAL - FAILED))
+if [ "$FAILED" = "0" ]; then
+  echo "=== SMOKE RESULT: PASS ($PASSED/$TOTAL) ==="
+else
+  echo "=== SMOKE RESULT: FAIL ($FAILED of $TOTAL) ==="
 fi
 exit $FAILED

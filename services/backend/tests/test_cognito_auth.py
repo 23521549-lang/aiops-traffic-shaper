@@ -133,3 +133,66 @@ def test_auth_error_detail_does_not_leak_library_internals(cognito_test_keys):
     with pytest.raises(HTTPException) as exc:
         dashboard_auth(authorization=f"Bearer {token}", jwks=cognito_test_keys["jwks"])
     assert exc.value.detail == "Invalid token"
+
+
+# --- ADR-005: CloudFront OAC overwrites the Authorization header ----------
+
+def test_dashboard_auth_accepts_x_id_token_header(cognito_test_keys):
+    """Authorization: Bearer cannot survive the edge.
+
+    CloudFront's origin access control signs every origin request with SigV4,
+    and signing means REPLACING the Authorization header with its own. The
+    alternative OAC setting, no-override, is worse: it passes the viewer's
+    Authorization through and then does not sign at all, which an AWS_IAM
+    function URL rejects outright. So there is no OAC configuration in which a
+    Bearer token reaches this application.
+
+    Found by registering a real agent against the real deployment on
+    2026-09-21: the CLI sent a valid token and the backend answered
+    401 "Missing credentials", because it never saw one.
+
+    X-Id-Token is a header CloudFront has no opinion about, so it arrives
+    intact. Bearer still works for anything talking to the origin directly.
+    """
+    token = sign_test_token(cognito_test_keys["private_pem"], {"custom:tenant_id": "t-1"})
+    tenant_id = dashboard_auth(x_id_token=token, jwks=cognito_test_keys["jwks"])
+    assert tenant_id == "t-1"
+
+
+def test_admin_auth_accepts_x_id_token_header(cognito_test_keys):
+    token = sign_test_token(cognito_test_keys["private_pem"],
+                            {"custom:tenant_id": "t-1", "cognito:groups": ["admin"]})
+    # admin_auth returns None and signals failure by raising; not raising IS
+    # the assertion.
+    admin_auth(x_id_token=token, jwks=cognito_test_keys["jwks"])
+
+
+def test_a_real_bearer_header_still_wins_when_both_are_sent(cognito_test_keys):
+    """Order is Bearer, then X-Id-Token. That sounds backwards for a system
+    whose production traffic always uses the second one, and it is not: in
+    production the Authorization header carries CloudFront's SigV4 signature,
+    which does not start with "Bearer ", so it falls through to X-Id-Token on
+    its own. Keeping Bearer first leaves every direct-to-origin caller
+    behaving exactly as it did before ADR-005."""
+    explicit = sign_test_token(cognito_test_keys["private_pem"], {"custom:tenant_id": "t-explicit"})
+    bearer = sign_test_token(cognito_test_keys["private_pem"], {"custom:tenant_id": "t-bearer"})
+    assert dashboard_auth(authorization=f"Bearer {bearer}", x_id_token=explicit,
+                          jwks=cognito_test_keys["jwks"]) == "t-bearer"
+
+
+def test_cloudfront_sigv4_authorization_falls_through_to_x_id_token(cognito_test_keys):
+    """The production shape, exactly: CloudFront replaced Authorization with
+    its own signature and the real credential rides in X-Id-Token."""
+    token = sign_test_token(cognito_test_keys["private_pem"], {"custom:tenant_id": "t-1"})
+    sigv4 = "AWS4-HMAC-SHA256 Credential=AKIA.../20260921/ap-southeast-1/lambda/aws4_request"
+    assert dashboard_auth(authorization=sigv4, x_id_token=token,
+                          jwks=cognito_test_keys["jwks"]) == "t-1"
+
+
+def test_bearer_still_works_for_direct_origin_callers(cognito_test_keys):
+    """Regression guard: the edge is not the only caller. Local runs and
+    anything hitting the function URL with SigV4 credentials of its own still
+    use Bearer, and removing that path would break them silently."""
+    token = sign_test_token(cognito_test_keys["private_pem"], {"custom:tenant_id": "t-1"})
+    assert dashboard_auth(authorization=f"Bearer {token}",
+                          jwks=cognito_test_keys["jwks"]) == "t-1"

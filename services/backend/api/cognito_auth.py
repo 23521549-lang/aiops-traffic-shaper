@@ -33,18 +33,47 @@ def get_jwks() -> dict:
     return _fetch_jwks(_jwks_url())
 
 
-def _extract_token(authorization: str | None, id_token_cookie: str | None) -> str:
-    """Header first (JSON API clients — the agent CLI, curl, etc.), falling
-    back to a cookie (Stage 9's browser UI). A normal HTML page navigation
-    (typing a URL, clicking a link, a plain form GET/POST) can't attach a
-    custom Authorization header — only JS/fetch can — so the server-
-    rendered dashboard/control-platform pages need cookie-based auth to
-    work at all with plain browser navigation. Both paths funnel into the
-    exact same `_decode_and_verify`, so verification itself is identical
-    either way."""
-    if authorization and authorization.startswith("Bearer "):
+def _extract_token(authorization: str | None, id_token_cookie: str | None,
+                   x_id_token: str | None = None) -> str:
+    """Three sources, all funnelling into the same `_decode_and_verify`, so
+    verification is identical however the token arrived.
+
+    Bearer is checked first and X-Id-Token second, which sounds backwards and
+    is not: in production the Authorization header holds CloudFront's SigV4
+    signature, which does not begin with "Bearer ", so it falls through. The
+    order costs nothing and keeps every direct-to-origin caller working
+    unchanged.
+
+    X-Id-Token is the one that matters in production. Since
+    ADR-005 every request reaches this app through CloudFront, whose origin
+    access control signs the origin request with SigV4 — and signing means
+    REPLACING the Authorization header with its own signature. The alternative
+    OAC setting, no-override, is worse: it forwards the viewer's Authorization
+    and then does not sign at all, which an AWS_IAM function URL rejects. There
+    is no OAC configuration in which a Bearer token reaches this function.
+    X-Id-Token is a header CloudFront has no opinion about, so it survives.
+
+    Found the hard way: a real agent registering against the real deployment
+    sent a valid token and got 401 "Missing credentials" back, because the
+    application never saw one.
+
+    Authorization: Bearer still works for anything talking to the origin
+    directly — local runs, and callers holding AWS credentials of their own.
+
+    The cookie is Stage 9's browser UI: a plain HTML page navigation cannot
+    attach any custom header, only JS/fetch can, so server-rendered pages need
+    it to work at all.
+
+    The isinstance guards are not defensive noise. These functions are FastAPI
+    dependencies with Header()/Cookie() defaults, and the unit tests call them
+    directly - so an argument nobody passed arrives as a Header OBJECT, not as
+    None, and is perfectly truthy. Checking for a real string is what keeps the
+    direct-call and through-FastAPI paths behaving the same."""
+    if isinstance(authorization, str) and authorization.startswith("Bearer "):
         return authorization[len("Bearer "):]
-    if id_token_cookie:
+    if isinstance(x_id_token, str) and x_id_token:
+        return x_id_token
+    if isinstance(id_token_cookie, str) and id_token_cookie:
         return id_token_cookie
     raise HTTPException(status_code=401, detail="Missing credentials")
 
@@ -110,9 +139,10 @@ def _decode_and_verify(id_token: str, jwks: dict) -> dict:
 
 
 def dashboard_auth(authorization: str | None = Header(default=None),
+                    x_id_token: str | None = Header(default=None),
                     id_token: str | None = Cookie(default=None),
                     jwks: dict = Depends(get_jwks)) -> str:
-    claims = _decode_and_verify(_extract_token(authorization, id_token), jwks)
+    claims = _decode_and_verify(_extract_token(authorization, id_token, x_id_token), jwks)
     tenant_id = claims.get("custom:tenant_id")
     if not tenant_id:
         raise HTTPException(status_code=401, detail="Token missing tenant_id claim")
@@ -120,9 +150,10 @@ def dashboard_auth(authorization: str | None = Header(default=None),
 
 
 def admin_auth(authorization: str | None = Header(default=None),
+               x_id_token: str | None = Header(default=None),
                id_token: str | None = Cookie(default=None),
                jwks: dict = Depends(get_jwks)) -> None:
-    claims = _decode_and_verify(_extract_token(authorization, id_token), jwks)
+    claims = _decode_and_verify(_extract_token(authorization, id_token, x_id_token), jwks)
     groups = claims.get("cognito:groups", [])
     if "admin" not in groups:
         raise HTTPException(status_code=403, detail="Admin group membership required")

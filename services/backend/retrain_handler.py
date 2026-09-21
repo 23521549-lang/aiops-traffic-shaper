@@ -1,6 +1,6 @@
 import logging
 import time
-from dataclasses import replace
+from dataclasses import asdict, replace
 
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.tables import TenantsTable
@@ -85,4 +85,20 @@ def handler(event, context):
     reaches API traffic only once the API Lambda's warm containers recycle
     naturally, exactly as Stage 3 already documented."""
     resource = get_dynamo_resource()
-    return retrain_all_tenants(resource)
+    results = retrain_all_tenants(resource)
+    # The Lambda runtime JSON-serialises whatever this returns, and
+    # ModelMetadata is a dataclass json cannot encode. Returning the rich
+    # objects made every real invocation fail at the very last step with
+    # Runtime.MarshalError - AFTER the training work had already happened -
+    # so the retrain-failed alarm would fire nightly on runs that had in fact
+    # promoted a model. retrain_all_tenants keeps returning the objects for
+    # in-process callers; only the Lambda boundary flattens them.
+    #
+    # A skipped tenant stays an explicit null rather than a missing key, so a
+    # tenant with too little data is distinguishable from one never visited.
+    return {
+        "tenants": {
+            tenant_id: (asdict(meta) if meta is not None else None)
+            for tenant_id, meta in results.items()
+        },
+    }

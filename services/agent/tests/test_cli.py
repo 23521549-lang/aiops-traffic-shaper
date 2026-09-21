@@ -11,7 +11,7 @@ def test_register_success_saves_config(tmp_path, monkeypatch):
     def fake_post_json(url, payload, headers=None):
         assert url == "http://backend/agent/v1/register"
         assert payload == {"agent_label": "prod-web-1"}
-        assert headers == {"Authorization": "Bearer test-token"}
+        assert headers == {"X-Id-Token": "test-token"}  # ADR-005: CloudFront overwrites Authorization
         return {"tenant_id": "t-1", "agent_id": "a-1", "api_key": "raw-key"}
 
     monkeypatch.setattr("services.agent.cli.post_json", fake_post_json)

@@ -2,6 +2,35 @@
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.1] — 2026-09-21 — proven end to end
+
+The full product loop ran on production: agent registration, telemetry through
+CloudFront, nightly retrain, a Tier 1 decision for a brute-force IP and none for
+normal visitors, the dashboard, and whitelist writes. Evidence with checkable
+identifiers in `.sdlc/gate-evidence/e2e-production-20260921.txt`.
+
+### Fixed — both found only by running the product for real
+
+- **No Bearer token could ever reach the application.** CloudFront's origin
+  access control *replaces* the `Authorization` header with its own SigV4
+  signature, and the alternative `no-override` mode stops signing altogether,
+  which an `AWS_IAM` origin rejects. The agent's first real registration got
+  `401 Missing credentials` for a valid token. Credentials now travel in
+  `X-Id-Token`; `Authorization: Bearer` still works for direct-to-origin callers.
+- **The nightly retrain failed on every run it would ever have made.** The
+  Lambda runtime JSON-serialises a handler's return value and `ModelMetadata`
+  is a dataclass, so each run died with `Runtime.MarshalError` *after* the
+  training work — the `retrain-failed` alarm would have fired nightly on runs
+  that had in fact promoted a model. Every test called the inner function and
+  never went through `json`.
+
+### Added
+
+- The smoke test gained an authenticated check, run when `SMOKE_ID_TOKEN` is
+  set. The five credential-free checks had passed 5/5 while every
+  authenticated flow was broken, because an unauthenticated request is the one
+  request the `Authorization` bug cannot affect.
+
 ## [0.2.0] — 2026-09-21 — deployed
 
 **The system runs on AWS.** Account `375916766707`, `ap-southeast-1`. The

@@ -26,7 +26,10 @@ def register(backend_url: str, token: str, label: str, config_path: str | None):
         result = post_json(
             f"{backend_url.rstrip('/')}/agent/v1/register",
             {"agent_label": label},
-            headers={"Authorization": f"Bearer {token}"},
+            # X-Id-Token, not Authorization: the backend sits behind CloudFront,
+            # whose origin access control replaces the Authorization header with
+            # its own SigV4 signature, so a Bearer token never arrives (ADR-005).
+            headers={"X-Id-Token": token},
         )
     except BackendError as e:
         click.echo(f"Registration failed: {e}", err=True)
