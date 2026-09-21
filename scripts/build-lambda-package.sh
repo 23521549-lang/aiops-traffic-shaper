@@ -125,10 +125,42 @@ fi
 
 # python -m zipfile rather than the zip binary: zip is not installed
 # everywhere, python is, and this script has to work in CI and on a laptop.
-# Zip from inside the build dir so the archive holds services/, fastapi/, ...
-# at its root - which is where Lambda looks - wherever BUILD happens to live.
+# A REPRODUCIBLE zip: the same code must produce the same bytes.
+#
+# `python -m zipfile -c` stamps every entry with its file's mtime, so rebuilding
+# identical code produced a different archive - measured: a gate run that only
+# rebuilt the package made Terraform plan to update all three Lambdas, publish a
+# new API version, move the `live` alias and re-upload 61MB, for zero changed
+# lines. Every build became a Lambda version, eating the 75GB code-storage quota
+# at the rate of builds rather than of real changes, and a plan could no longer
+# say whether code had changed at all.
+#
+# Fixed: entries sorted, every timestamp set to 1980-01-01 (the earliest a zip
+# can hold), permissions normalised to 644/755. Paths are relative to BUILD, so
+# the archive has services/, fastapi/, ... at its root, which is where Lambda
+# looks, wherever BUILD happens to live.
 rm -f "$OUT_ABS/backend.zip"
-( cd "$BUILD" && python3 -m zipfile -c "$OUT_ABS/backend.zip" ./* )
+python3 - "$BUILD" "$OUT_ABS/backend.zip" <<'PY'
+import os
+import sys
+import zipfile
+
+root, out = sys.argv[1], sys.argv[2]
+files = []
+for dirpath, dirnames, filenames in os.walk(root):
+    for name in filenames:
+        full = os.path.join(dirpath, name)
+        files.append((os.path.relpath(full, root).replace(os.sep, "/"), full))
+
+with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+    for arcname, full in sorted(files):
+        info = zipfile.ZipInfo(arcname, date_time=(1980, 1, 1, 0, 0, 0))
+        executable = os.stat(full).st_mode & 0o111
+        info.external_attr = (0o100000 | (0o755 if executable else 0o644)) << 16
+        info.compress_type = zipfile.ZIP_DEFLATED
+        with open(full, "rb") as fh:
+            zf.writestr(info, fh.read())
+PY
 ZIPPED=$(( $(stat -c%s "$OUT_ABS/backend.zip") / 1048576 ))
 echo "zipped:   ${ZIPPED}MB"
 
