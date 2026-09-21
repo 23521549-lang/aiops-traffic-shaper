@@ -27,15 +27,16 @@ flowchart TB
     end
 
     subgraph AWS["Publisher's AWS account - Always Free only"]
-        FU[Lambda Function URL] --> API[API Lambda<br/>FastAPI via Mangum]
+        CF[CloudFront + OAC<br/>signs each request SigV4] --> FU[Lambda Function URL<br/>AWS_IAM, not public]
+        FU --> API[API Lambda<br/>FastAPI via Mangum]
         API --> DDB[(DynamoDB<br/>7 tables)]
         EB[EventBridge<br/>daily rule] --> RT[Retrain Lambda]
         RT --> DDB
         COG[Cognito] -.->|verify JWT| API
     end
 
-    CO -->|POST /agent/v1/telemetry| FU
-    FU -->|decisions| EN
+    CO -->|POST /agent/v1/telemetry| CF
+    CF -->|decisions| EN
     API --> UI[Dashboard + Control Platform<br/>server-rendered HTML]
 ```
 
@@ -164,6 +165,16 @@ edge rate limiting.
 
 ## Deployment shape
 
+**Live since 2026-09-21** in account `375916766707`, `ap-southeast-1`.
+
+The public entrypoint is CloudFront. The Lambda function URL behind it is
+`AWS_IAM` and its resource policy names exactly one principal,
+`cloudfront.amazonaws.com`, scoped to that distribution — so nothing reaches
+the application except through the edge. CloudFront signs each origin request
+with SigV4 but not the body, which is why every client sending a body supplies
+`x-amz-content-sha256`; [ADR-005](adr/005-cloudfront-oac.md) has the reasoning
+and the hour of wrong diagnosis that preceded it.
+
 `terraform/` describes the whole system: 7 DynamoDB tables (provisioned,
 14 RCU / 20 WCU of the 25/25 free pool), two Lambda functions sharing one S3-
 hosted zip, the Function URL, the Cognito pool whose immutable
@@ -184,9 +195,9 @@ and healthy-looking while serving nobody.
 
 ## What this architecture does not have yet
 
-- **Anything actually running.** No `terraform apply` has been executed. The
-  post-deploy smoke test and the backup restore have never run against real
-  resources — the two open rows on the Phase 7 gate.
+- **Any real traffic.** The infrastructure is verified; the product is not.
+  No tenant registered, no telemetry scored in production, no nightly retrain
+  fired on live data.
 - **Tables from IaC in practice.** Terraform describes all 7, but
   `create_all_tables()` in application code still creates them too; whichever
   runs first wins, and only a real deployment will show which.

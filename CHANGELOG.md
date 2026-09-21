@@ -2,6 +2,53 @@
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.0] — 2026-09-21 — deployed
+
+**The system runs on AWS.** Account `375916766707`, `ap-southeast-1`. The
+post-deploy smoke test passes 5/5 and a backup restore has been performed
+against the live DynamoDB tables. No real traffic has been served yet: no
+tenant registered, no telemetry scored in production, no nightly retrain on
+live data.
+
+### Added
+
+- **CloudFront + Origin Access Control as the public entrypoint** (ADR-005).
+  The Lambda function URL is now `AWS_IAM` and reachable only through the
+  distribution. Inside CloudFront's perpetual Always-Free tier (1 TB,
+  10M requests/month), and AWS Shield Standard comes with it — the first real
+  answer to the "no edge protection" residual risk ADR-002 had to accept.
+- **Remote Terraform state** in S3 with native lock files, plus
+  `terraform/bootstrap/` to create the bucket. Without it the deploy workflow
+  would have started every run with empty state and tried to rebuild the whole
+  stack.
+- `x-amz-content-sha256` on every request that carries a body — in the agent,
+  the dashboard JS, and the smoke test. OAC signs the request but not the body.
+
+### Fixed — all three found by deploying, none findable any other way
+
+- **A Lambda function URL behind CloudFront needs two IAM statements**, not
+  one: `InvokeFunctionUrl` *and* `InvokeFunction`. Granting only the first
+  produces a 403 indistinguishable from an account-level block, and cost an
+  hour of confidently wrong diagnosis recorded in ADR-005.
+- **`/ready` reported `dynamodb: false` on a healthy stack** — the API role was
+  never granted `dynamodb:DescribeTable`. The probe was right about its own
+  permissions and misleading about everything else.
+- **The GitHub OIDC provider is an account-level singleton** already owned by
+  another project in the same account. The module now references it instead of
+  creating it; importing it would have started a fight between two Terraform
+  states that neither apply wins.
+- `scripts/backup-tables.sh` could not run on Windows: `python3` there is a
+  Microsoft Store stub that exits non-zero, and Windows Python cannot resolve
+  MSYS `/c/Users/...` paths.
+
+### Changed
+
+- The login form submits through `fetch` rather than as a plain HTML form post.
+  A browser-built form cannot carry the body hash CloudFront requires.
+- `docs/deployment.md` first-deployment section rewritten as a runnable
+  checklist; README, architecture, runbook and onboarding now separate
+  *deployed* from *serving real traffic*.
+
 ## [Unreleased] — deployment (Phase 7)
 
 The infrastructure the rebuild never had. **Still not deployed:** everything

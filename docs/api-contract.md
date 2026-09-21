@@ -7,6 +7,22 @@
 > Endpoints are namespaced by audience since there is no network boundary
 > to separate them anymore.
 
+## Every request with a body must carry `x-amz-content-sha256`
+
+The API is served through CloudFront, whose origin access control signs the
+request to the Lambda function URL but **not** the body. Lambda refuses
+unsigned payloads, so a `POST` or `PUT` without this header is rejected at the
+edge with `403` and never reaches the application. The value is the lowercase
+hex SHA-256 of the exact request body bytes.
+
+```bash
+BODY='{"logs":[]}'
+curl -X POST "$BASE/agent/v1/telemetry"   -H "content-type: application/json"   -H "x-amz-content-sha256: $(printf '%s' "$BODY" | sha256sum | cut -d' ' -f1)"   -H "X-Agent-Key: <tenant>.<key>"   -d "$BODY"
+```
+
+`GET` and `DELETE` carry no body and need no header. See
+[ADR-005](adr/005-cloudfront-oac.md).
+
 ## Overview
 - Base URL: one Lambda Function URL, e.g. `https://<id>.lambda-url.<region>.on.aws`
 - Format: JSON, UTF-8

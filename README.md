@@ -13,24 +13,28 @@ Always-Free tier — the hard constraint that shaped every decision in
 
 ## Status — read this first
 
-**Never deployed. Written in full, verified locally only.**
+**Deployed and verified on AWS, 2026-09-21.** Account `375916766707`,
+`ap-southeast-1`.
 
-The backend and agent are complete and tested — 168 tests, 98% line coverage,
-a clean dependency audit — but every test runs against `moto` (an in-process
-DynamoDB simulator) and locally signed JWTs. No Lambda, no Cognito user pool,
-and no live DynamoDB table has ever run.
+The public entrypoint is a CloudFront distribution; the post-deploy smoke test
+passes 5/5 against it, and a backup restore has been performed against the real
+DynamoDB tables. 177 tests, 98% line coverage, a clean dependency audit.
 
-The infrastructure is now **written**: `terraform/` describes every resource
-(7 DynamoDB tables, 2 Lambdas, the Function URL, Cognito, the EventBridge
-schedule, 3 alarms), `terraform validate` passes, and
-`.github/workflows/deploy.yml` will plan and apply it behind a manual approval.
-None of it has been applied. What stands between here and "running" is an AWS
-account and somebody pressing the button — see
+Read that claim narrowly, because an earlier README of this project made a
+wider one that was false. What has been proved is that the infrastructure
+stands up, the application answers, authentication fails closed, the security
+headers survive deployment, and a deleted row can be restored. What has **not**
+happened is a real agent reporting real traffic: no tenant has been registered,
+no telemetry has been scored in production, and the nightly retrain has never
+fired on live data. The path from here to that is in
 [docs/deployment.md](docs/deployment.md).
 
-An earlier version of this README claimed the system was "deployed and verified
-stable on AWS". That was never true, and it described a different architecture
-besides — one replaced by ADR-002 in August 2026.
+Three defects were found by deploying that nothing else could have found: a
+Lambda function URL needs **two** IAM statements for CloudFront rather than one,
+the readiness probe needed `dynamodb:DescribeTable` it was never granted, and
+the GitHub OIDC provider turned out to be an account-level singleton already
+owned by another project. All three are fixed; see
+[ADR-005](docs/adr/005-cloudfront-oac.md).
 
 ## How it works
 
@@ -101,7 +105,8 @@ services/agent/       thin client installed by the customer
   collector.py        batches log records, forwards them
   enforcer/           pluggable adapters: nginx, iptables
   cli.py              register / status
-terraform/            the full deployment: tables, Lambdas, Cognito, alarms
+terraform/            the full deployment: CloudFront, Lambdas, tables, Cognito
+  bootstrap/          the state bucket, applied once before everything else
 config/nginx/         example customer nginx config
 scripts/              test runner, traffic simulators
 docs/                 PRD, PLAN, architecture, MLOps design, runbook, ADRs
@@ -167,7 +172,8 @@ findings, four of them High, all fixed with a failing test written first.
 | Layer | Choice | Why |
 |---|---|---|
 | Compute | AWS Lambda + Mangum | Always Free, no 12-month cutoff |
-| Ingress | Lambda Function URLs | API Gateway is 12-month free only |
+| Edge | CloudFront + Origin Access Control | Always Free (1 TB, 10M req/month); Shield Standard included; the Lambda URL is not publicly reachable |
+| Ingress | Lambda Function URL, `AWS_IAM` | API Gateway is 12-month free only |
 | Storage | DynamoDB, provisioned 25 WCU / 25 RCU | Always Free ceiling |
 | ML | scikit-learn IsolationForest, 50 estimators | Fits DynamoDB's 400KB item limit gzipped |
 | Retraining | EventBridge scheduled rule | No charge for invoking Lambda |
@@ -177,9 +183,13 @@ findings, four of them High, all fixed with a failing test written first.
 
 ## Known gaps
 
-- **Never run on real AWS** (PRD US-9). The infrastructure is written and
-  validated; no `terraform apply` has happened, so the post-deploy smoke test
-  and the backup restore have never executed against anything real.
+- **No real traffic has been served.** The deployment is verified; the product
+  is not. No tenant registered, no telemetry scored in production, no nightly
+  retrain fired on live data.
+- **POST requests must carry `x-amz-content-sha256`.** CloudFront's origin
+  access control signs the request but not the body, so every client sending a
+  body hashes it first. The agent and the UI do this; anything else calling the
+  API must too ([ADR-005](docs/adr/005-cloudfront-oac.md)).
 - No Cognito Hosted UI: both the CLI and the web UI take a pasted ID token.
 - Throttling is coarse: at 100% of the day's free-tier share, telemetry
   ingest is refused wholesale rather than shaped per tenant, so one noisy

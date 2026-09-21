@@ -9,7 +9,7 @@ hour total, and you will know where everything is and what you must not break.
 bash scripts/run_tests.sh
 ```
 
-Expect **172 passed, ~98% coverage**. If that works you have a complete
+Expect **177 passed, ~98% coverage**. If that works you have a complete
 development environment; nothing else is needed — no AWS account, no Redis, no
 cluster. If it does not work, that is a bug in `requirements.txt`, not in your
 machine (it happened once already; see the runbook).
@@ -88,13 +88,11 @@ not `test_auth_2`. Skim `test_cognito_auth.py` for the house style.
 
 Ordered by how much it will surprise you:
 
-1. **Nothing has ever run on real AWS.** Every test uses `moto` and locally
-   signed JWTs. The infrastructure is now fully written — `terraform/`
-   describes all 7 tables, both Lambdas, Cognito, the schedule and the alarms,
-   and `terraform validate` passes — but no `terraform apply` has happened.
-   Two things therefore remain unproven no matter how green the suite is: the
-   post-deploy smoke test and a backup restore. They are the two open rows on
-   the Phase 7 gate, and neither can close without an AWS account.
+1. **It is deployed, but it has never served a real user.** Live on AWS since
+   2026-09-21 and the smoke test passes 5/5, yet no tenant has registered, no
+   telemetry has been scored in production, and the nightly retrain has never
+   fired on live data. The gap between "the infrastructure works" and "the
+   product works" is the whole of what remains.
 2. **No supported way to run the application locally.** The app needs real
    DynamoDB and Cognito; the temporary mock harness was removed. Restoring one
    is a good first task and would pay for itself immediately.

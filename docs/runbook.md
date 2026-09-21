@@ -3,7 +3,8 @@
 > Rewritten 2026-08-24. The previous runbook operated a Kubernetes cluster
 > that no longer exists; it is in git history.
 
-**Scope warning.** The system has never been deployed. The development loop
+**Scope warning.** The system is deployed (2026-09-21) but has never served
+real traffic. The development loop
 and the agent lifecycle below are exercised daily. The production procedures
 at the end are written and their tooling validates, but **none has been run
 against real AWS** — each one says so. A procedure nobody has run is not a
@@ -22,7 +23,7 @@ Builds a venv from `services/backend/requirements.txt` and runs exactly what CI
 runs: `ruff`, the full suite, and a coverage gate at 80%. Extra arguments pass
 through to pytest, so `bash scripts/run_tests.sh -k cognito` works.
 
-Expected: **172 passed**, coverage ≈ 98%.
+Expected: **177 passed**, coverage ≈ 98%.
 
 ### Rebuild the environment from scratch
 
@@ -141,20 +142,25 @@ The response reports how many were revoked. Its agents are refused on their
 very next call, and its still-valid dashboard token cannot mint a replacement.
 There is no un-suspend endpoint — that is a gap, not a policy.
 
-## Production procedures — written, not yet exercised
-
-Phase 7 wrote all of these. The distinction that matters: **written and
-validated** means the file exists and its tooling accepts it; **exercised**
-means somebody ran it against real AWS. Nothing below has been exercised,
-because there has been no deployment.
+## Production procedures
 
 | Procedure | Where | State |
 |---|---|---|
-| Deploy | `docs/deployment.md`, `.github/workflows/deploy.yml` | written; `terraform validate` passes, never applied |
-| Rollback | `docs/deployment.md` § Rollback | written; re-deploy from an earlier tag. No Lambda alias, so it is a re-apply, not a pointer flip |
-| Backup | `scripts/backup-tables.sh export` | written; **no restore has ever been performed against a real table** |
-| Alerting | `terraform/alarms.tf` | written; 3 alarms → SNS. Useless until `alert_email` is set *and* the emailed confirmation link is clicked |
-| Readiness | `GET /ready` | implemented and tested; nothing polls it yet |
+| Deploy | `docs/deployment.md`, `.github/workflows/deploy.yml` | **exercised** — applied by hand 2026-09-21. The *workflow* has still never run |
+| Rollback | `docs/deployment.md` § Rollback | written, never exercised. No Lambda alias, so it is a re-apply from an earlier tag, not a pointer flip |
+| Backup | `scripts/backup-tables.sh` | **exercised** — export and restore both performed against the live tables; raw output in `.sdlc/gate-evidence/phase-7-restore-drill.txt` |
+| Alerting | `terraform/alarms.tf` | 3 alarms → SNS, subscription created. Confirm the emailed link or it delivers nothing |
+| Readiness | `GET /ready` | **exercised** — caught a missing `dynamodb:DescribeTable` grant on the first deployment |
+
+### The public address is CloudFront, not the function URL
+
+```bash
+terraform -chdir=terraform output -raw cloudfront_url
+```
+
+The Lambda function URL is `AWS_IAM` and refuses anything that did not come
+through the distribution. Handing somebody `function_url` gives them a 403 and
+a confusing afternoon.
 
 ### Checking readiness after a deploy
 
@@ -173,6 +179,19 @@ values are set. `503` names which check failed:
   `/health` still answers 200. Wire `terraform output` back in.
 
 `scripts/smoke-test.sh <url>` runs this plus four other checks unattended.
+
+### A POST that returns 403 with no application log
+
+The request died at the edge. CloudFront signs the origin request but not the
+body, so a `POST` without `x-amz-content-sha256` is rejected before Lambda ever
+runs — which is why nothing appears in CloudWatch. Add the header:
+
+```bash
+BODY='{"logs":[]}'
+curl -X POST "$(terraform -chdir=terraform output -raw cloudfront_url)/agent/v1/telemetry"   -H 'content-type: application/json'   -H "x-amz-content-sha256: $(printf '%s' "$BODY" | sha256sum | cut -d' ' -f1)"   -d "$BODY"
+```
+
+The agent and the dashboard already do this. See [ADR-005](adr/005-cloudfront-oac.md).
 
 ### Taking a backup
 

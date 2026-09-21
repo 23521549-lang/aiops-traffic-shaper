@@ -1,13 +1,28 @@
 # Deployment
 
-**Status: written, never executed.** Every file described here exists and
-`terraform validate` passes on both roots, but no `terraform apply` has ever
-run against a real AWS account. Treat this as a deployment *design* until
-someone runs it and updates this line.
+**Status: deployed and verified, 2026-09-21.** Account `375916766707`,
+`ap-southeast-1`. The post-deploy smoke test passes 5/5 and a backup restore
+has been performed against the live tables.
 
-Two rows of the Phase 7 gate are open and both close inside the walkthrough
-below: the post-deploy smoke test (step 6) and a tested backup restore
-(step 8).
+The public address is **CloudFront**, not the Lambda function URL:
+
+```bash
+terraform -chdir=terraform output -raw cloudfront_url
+```
+
+The function URL is `AWS_IAM` and refuses anything that did not come through
+the distribution, so handing somebody `function_url` gives them a 403.
+
+**Every request with a body must carry `x-amz-content-sha256`**, the hex
+SHA-256 of that body. CloudFront's origin access control signs the request but
+not the body, and Lambda rejects unsigned payloads — so a POST without it dies
+at the edge with a 403 and no CloudWatch entry, because the function never ran.
+See [ADR-005](adr/005-cloudfront-oac.md).
+
+What deploying proved, and what it did not: the infrastructure stands up, the
+application answers, authentication fails closed, the security headers survive,
+and a deleted row can be restored. No tenant has registered, no telemetry has
+been scored in production, and the nightly retrain has never fired on live data.
 
 ## What gets created
 
@@ -22,7 +37,8 @@ below: the post-deploy smoke test (step 6) and a tested backup restore
 | S3 bucket for the Lambda artifact | Forced: the package is 61MB zipped and Lambda's direct-upload ceiling is 50MB — see [ADR-004](adr/004-lambda-artifact-via-s3.md) |
 | 3 × CloudWatch alarm + SNS topic | Errors, retrain failure, retrain approaching its timeout. Inside Always-Free (10 alarms, 1,000 emails/month) |
 | No load balancer health check | There is nothing in front of the Function URL to run one. `/ready` exists and is correct; nothing polls it automatically |
-| GitHub OIDC role | No static AWS keys. Trust is scoped to the `production` environment, not to any branch |
+| GitHub OIDC role | No static AWS keys. Trust is scoped to the `production` environment, not to any branch. The provider itself is **referenced, not created** — it is an account-level singleton and another project already owned it |
+| CloudFront distribution + OAC | The public entrypoint. Caching disabled on purpose: every response is tenant-scoped or a live-TTL decision. Always-Free covers 1 TB and 10M requests/month |
 | S3 bucket for Terraform state | Created separately by `terraform/bootstrap/`, before any of the above. Versioned, encrypted, private, locked with S3-native lock files rather than a PAY_PER_REQUEST DynamoDB table |
 
 No VPC (a NAT gateway is not free at any tier), no ECR (the function ships as a
