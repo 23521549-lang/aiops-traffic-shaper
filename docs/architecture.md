@@ -155,8 +155,13 @@ growing lists of URIs and user agents; both were rejected before sign-off
 because write cost would scale with request volume — spiking precisely during
 an attack.
 
-Measured: 20 log lines from 10 IPs costs 11 writes; **200 log lines from the
-same 10 IPs also costs 11**. `test_perf_budget.py` asserts this permanently.
+Measured: 20 log lines from 10 IPs costs 12 writes; **200 log lines from the
+same 10 IPs also costs 12** — ten per-IP aggregates, plus one global usage
+counter and one per-tenant quota counter per batch. `test_perf_budget.py`
+asserts the *equality* permanently rather than the number, which is why adding
+the tenant counter moved the constant from 11 to 12 without tripping it.
+Confirmed on production: 165 log lines from 9 IPs became exactly 9
+`TelemetryEvents` items.
 
 Metering counts authenticated work only. Unauthenticated requests, health
 checks and the login page write nothing, so anonymous traffic cannot spend the
@@ -203,6 +208,7 @@ and healthy-looking while serving nobody.
   runs first wins, and only a real deployment will show which.
 - **Edge rate limiting.** Dropped with API Gateway, accepted in ADR-002. The
   free-tier throttle in `core/usage.py` refuses ingest at 100% of the day's
-  share, which protects the bill but is global rather than per tenant.
+  global share, and each tenant is separately capped at 25% of it, so one
+  noisy tenant can no longer pause ingest for the others.
 - **Unattended backup.** `scripts/backup-tables.sh` is manual; nothing free
   schedules it.

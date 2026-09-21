@@ -84,8 +84,13 @@ property: **write cost does not grow with attack volume.**
 
 | Measured | DynamoDB writes |
 |---|---|
-| 20 log lines from 10 IPs | 11 |
-| 200 log lines from 10 IPs | 11 |
+| 20 log lines from 10 IPs | 12 |
+| 200 log lines from 10 IPs | 12 |
+
+Ten of those are the per-IP aggregates; the other two are the global usage
+counter and the per-tenant quota counter, one each per *batch*. The number
+rose from 11 to 12 when per-tenant quotas arrived — a constant, and the
+property that matters is that both rows are equal.
 
 Telemetry is aggregated per IP per time bucket with atomic `ADD` operations,
 so a flood costs the same as a trickle from the same attackers — exactly when

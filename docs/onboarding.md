@@ -98,8 +98,10 @@ Ordered by how much it will surprise you:
    is a good first task and would pay for itself immediately.
 3. **No Cognito Hosted UI.** Both the CLI and the web login take a pasted ID
    token.
-4. **Throttling is global, not per tenant.** It protects the bill, not
-   fairness: one noisy tenant can pause ingest for everyone.
+4. **Per-tenant usage is enforced but not yet visible in the UI.** Each tenant
+   is capped at 25% of the day's free-tier share, but the Control Platform
+   still only shows the global total; the per-tenant counters are readable
+   straight from `UsageCounters` (see the runbook).
 5. **No un-suspend endpoint.** Suspension is one-way today.
 6. **Two owners for table creation.** Terraform describes the 7 tables and
    `create_all_tables()` creates them from application code. Whichever runs
@@ -114,7 +116,7 @@ Ordered by how much it will surprise you:
 - Restore a supported local run (item 2 above) — self-contained, and everyone
   after you benefits.
 - Add an un-suspend endpoint with tests; the suspend path shows the shape.
-- Make throttling per tenant rather than global.
+- Show per-tenant quota usage in the Control Platform.
 
 Each is small, has a clear finish line, and touches enough of the system to
 teach you the layout.

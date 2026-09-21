@@ -9,11 +9,13 @@ from services.backend.api.cognito_auth import dashboard_auth
 from services.backend.api.dependencies import (
     agent_auth,
     assert_tenant_active,
+    enforce_tenant_quota,
     enforce_usage_ceiling,
     hash_api_key,
 )
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.tables import AgentsTable, MitigationStateTable, WhitelistTable
+from services.backend.core.usage import record_tenant_ingest
 from services.backend.ml.feature_engineering import compute_features_for_ip, record_batch
 from services.backend.ml.model import AnomalyTier, ModelManager, classify_score
 from services.backend.schemas.agent_register import AgentRegisterRequest, AgentRegisterResponse
@@ -61,11 +63,15 @@ _TTL_SECONDS = {
              dependencies=[Depends(enforce_usage_ceiling)])
 def ingest_telemetry(
     batch: TelemetryBatch,
-    tenant_id: str = Depends(agent_auth),
+    tenant_id: str = Depends(enforce_tenant_quota),
     resource=Depends(get_dynamo_resource),
 ) -> TelemetryResponse:
     if not batch.logs:
         return TelemetryResponse(received=0, processed_ips=0, decisions=[])
+
+    # Counted only once the request has been accepted: a refused batch must
+    # not spend the quota that refused it.
+    record_tenant_ingest(resource, tenant_id)
 
     touched_ips = record_batch(resource, tenant_id, batch.logs)
     whitelist = {i["ip"] for i in WhitelistTable(resource).query_by_tenant(tenant_id)}

@@ -4,7 +4,11 @@ from fastapi import Depends, Header, HTTPException
 
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.tables import AgentsTable, TenantsTable
-from services.backend.core.usage import is_over_daily_ceiling, seconds_until_daily_reset
+from services.backend.core.usage import (
+    is_over_daily_ceiling,
+    is_tenant_over_quota,
+    seconds_until_daily_reset,
+)
 
 
 def hash_api_key(raw_key: str) -> str:
@@ -79,3 +83,28 @@ def enforce_usage_ceiling(resource=Depends(get_dynamo_resource)) -> None:
             ),
             headers={"Retry-After": str(seconds_until_daily_reset())},
         )
+
+
+def enforce_tenant_quota(tenant_id: str = Depends(agent_auth),
+                         resource=Depends(get_dynamo_resource)) -> str:
+    """Per-tenant limiter, checked after the global one.
+
+    The global ceiling pools every tenant, so on its own it let one flooding
+    tenant refuse ingest for all of them. This bounds each tenant to its share
+    of the day, and names the tenant in the refusal so an agent can tell "my
+    tenant is over quota" apart from "the platform is over its ceiling".
+
+    Returns the tenant id so the route can reuse it: FastAPI caches
+    agent_auth within a request, so depending on it twice costs one lookup.
+    A refused request is not counted - refusing must not itself spend quota."""
+    if is_tenant_over_quota(resource, tenant_id):
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "This tenant's daily ingest quota is used up - telemetry is paused "
+                "for this tenant only until the quota resets. Other tenants are "
+                "unaffected, and existing mitigations remain in force."
+            ),
+            headers={"Retry-After": str(seconds_until_daily_reset())},
+        )
+    return tenant_id

@@ -126,9 +126,24 @@ and a `Retry-After` pointing at the next UTC midnight, when the daily counter
 resets. Reads keep serving throughout: agents already enforcing a block do not
 go open, and this dashboard stays readable.
 
-The limiter is global, not per tenant — it protects the bill, not fairness, so
-one noisy tenant can pause ingest for everyone. Identify them from
-`/admin/v1/agents` and suspend if needed.
+Two limiters, both checked on every telemetry batch:
+
+| Limiter | Trips at | Refusal says |
+|---|---|---|
+| Global ceiling | 100% of the day's free-tier share | the platform is paused |
+| Per-tenant quota | 25% of that same share, per tenant | *this tenant* is paused; others are unaffected |
+
+So one noisy tenant — or an attacker holding one tenant's agent key — is
+stopped at its own quota and can no longer pause ingest for everyone. Both
+refusals carry `Retry-After` pointing at the next UTC midnight, and a refused
+batch is not counted against the quota that refused it.
+
+To see who is near their quota, read the counters directly (the rows share the
+`UsageCounters` table with the global row, keyed `YYYY-MM-DD#tenant#<id>`):
+
+```bash
+aws dynamodb scan --table-name UsageCounters   --filter-expression "contains(#d, :m)"   --expression-attribute-names '{"#d":"date"}'   --expression-attribute-values '{":m":{"S":"#tenant#"}}'
+```
 
 ### Suspend a tenant
 
