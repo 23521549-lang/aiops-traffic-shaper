@@ -57,6 +57,7 @@ resource "aws_lambda_function" "probe" {
     variables = merge(local.common_env, {
       # Through the edge, deliberately - see the handler's docstring.
       PROBE_TARGET_URL = "https://${aws_cloudfront_distribution.api.domain_name}"
+      LOG_LEVEL        = "INFO"
     })
   }
 }

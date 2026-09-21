@@ -29,6 +29,7 @@ import urllib.error
 import urllib.request
 
 from services.backend.core.dynamo import get_dynamo_resource
+from services.backend.core.log_level import apply_log_level
 from services.backend.core.usage import _DAILY_REQUEST_CEILING, get_usage_report
 
 METRIC_NAMESPACE = "AiopsTrafficShaper"
@@ -80,5 +81,6 @@ def run_probe(base_url: str, resource, opener=None) -> dict:
 
 
 def handler(event, context):
+    apply_log_level()
     return run_probe(os.environ["PROBE_TARGET_URL"], get_dynamo_resource(),
                      opener=_default_opener)

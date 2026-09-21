@@ -108,6 +108,12 @@ data "aws_iam_policy_document" "retrain_data" {
     actions   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query"]
     resources = [aws_dynamodb_table.models.arn]
   }
+  # Fan-out: the nightly dispatcher invokes this same function once per tenant.
+  # Scoped to itself - it cannot invoke the API function or anything else.
+  statement {
+    actions   = ["lambda:InvokeFunction"]
+    resources = [aws_lambda_function.retrain.arn]
+  }
 }
 
 resource "aws_iam_role_policy" "retrain_data" {

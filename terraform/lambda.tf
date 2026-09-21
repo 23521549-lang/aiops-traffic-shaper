@@ -122,14 +122,40 @@ resource "aws_lambda_function" "retrain" {
   runtime = "python3.12"
 
   memory_size = var.lambda_memory_mb
-  # The retrain loop walks every tenant serially and logs a warning past 600s.
-  # 900s is Lambda's ceiling; crossing it means moving to per-tenant fan-out,
-  # which retrain_handler already says in its own docstring.
+  # One invocation now retrains ONE tenant (fan-out, see retrain_handler), which
+  # measured about two seconds in production. 900s is Lambda's ceiling and is
+  # kept only because it costs nothing - Lambda bills duration, not timeout.
   timeout = 900
 
+  # The ceiling on how many tenants retrain at once, and the reason it exists
+  # is the API, not the retrain. Lambda concurrency is shared across the whole
+  # account (400 here, 374 unreserved when this was written, some of it other
+  # projects'). An unbounded fan-out of N tenants means N workers loading
+  # scikit-learn at the same moment, and every one of them is concurrency the
+  # API function serving live agents can no longer get. Five caps that; the
+  # rest queue in Lambda's own async queue and run as slots free up - at ~2s a
+  # tenant, several hundred tenants still clear in minutes.
+  #
+  # Reserved concurrency is free. PROVISIONED concurrency is the one that bills.
+  reserved_concurrent_executions = 5
+
   environment {
-    variables = local.common_env
+    # INFO here and on the probe only. The runtime default (WARNING) dropped
+    # every success line this function ever wrote; the API keeps WARNING
+    # because it logs INFO on the telemetry path (core/log_level.py).
+    variables = merge(local.common_env, { LOG_LEVEL = "INFO" })
   }
+}
+
+# How long a queued per-tenant retrain may wait, and how often a failed one is
+# retried. Both are Lambda's defaults, written out because they now carry the
+# fan-out: a tenant queued behind the concurrency cap waits here rather than
+# failing, and a worker that raises gets two more attempts before the event is
+# dropped - at which point the retrain-failed alarm has already seen it.
+resource "aws_lambda_function_event_invoke_config" "retrain" {
+  function_name                = aws_lambda_function.retrain.function_name
+  maximum_retry_attempts       = 2
+  maximum_event_age_in_seconds = 21600
 }
 
 # HTTPS ingress without API Gateway, which is 12-month-free only. The Function

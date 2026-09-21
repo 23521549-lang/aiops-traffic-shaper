@@ -82,6 +82,6 @@ resource "aws_cloudwatch_metric_alarm" "retrain_duration" {
   threshold           = 600000 # ms
   comparison_operator = "GreaterThanThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_description   = "Retrain run exceeded 10 minutes of Lambda's 15-minute limit - time for per-tenant fan-out."
+  alarm_description   = "A single tenant's retrain took over 10 minutes. Since fan-out each invocation is one tenant (~2s measured), so this means one tenant's data has grown pathologically, not that the platform has too many tenants."
   alarm_actions       = [aws_sns_topic.alerts.arn]
 }

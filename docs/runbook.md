@@ -105,6 +105,34 @@ iptables -S INPUT | grep aiops-agent    # then delete the matching rules
 | Decisions returned but nothing enforced | No adapter available | Check nginx `conf.d` write access and, for iptables, root |
 | Blocks never lift | The agent process is not running | Nothing external removes an nginx `deny` line — expiry is the agent's own sweep |
 
+### How the nightly retrain runs
+
+One EventBridge rule, one function, two modes. The scheduled call is a
+**dispatcher**: it invokes the same function asynchronously once per tenant and
+returns in about a second. Each of those is a **worker** that retrains exactly
+one tenant. A tenant's failure stays with that tenant, gets two automatic
+retries, and shows up in the `retrain-failed` alarm; at most five workers run
+at once so the retrain can never starve the API of account-wide concurrency.
+
+A healthy night in the retrain log group looks like:
+
+```
+[INFO] Retrain dispatched: tenants=3
+[INFO] Retrained and promoted: tenant=acme version=v2026... samples=187 (Approved: block_rate=0.011 ...)
+[INFO] Skipping retrain: tenant=new-co samples=12 (need 100)
+```
+
+Until 2026-09-21 none of the `[INFO]` lines were ever written: the Lambda
+runtime leaves Python logging at WARNING, so a successful night was
+indistinguishable from one that never ran. `LOG_LEVEL=INFO` is now set on this
+function and the probe only — see `core/log_level.py` for why not the API.
+
+To retrain one tenant by hand, outside the schedule:
+
+```bash
+aws lambda invoke --function-name aiops-traffic-shaper-retrain   --payload '{"tenant_id":"<tenant>"}' --cli-binary-format raw-in-base64-out out.json
+```
+
 ### Retraining refused a model
 
 Look for `Retrain NOT promoted` in the retrain Lambda's logs. The reason is
