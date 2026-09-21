@@ -71,6 +71,9 @@ jobs:
         if: github.event.inputs.apply == 'apply'
         working-directory: terraform
         run: |
-          URL=$(terraform output -raw function_url)
+          # cloudfront_url, NOT function_url. Since ADR-005 the function URL
+          # is AWS_IAM and answers 403 to anything that did not come through
+          # the distribution - so smoke-testing it would fail every deploy.
+          URL=$(terraform output -raw cloudfront_url)
           echo "deployed at: $URL"
           bash ../scripts/smoke-test.sh "$URL"

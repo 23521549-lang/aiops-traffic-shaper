@@ -49,11 +49,12 @@ live data.
   checklist; README, architecture, runbook and onboarding now separate
   *deployed* from *serving real traffic*.
 
-## [Unreleased] — deployment (Phase 7)
+## [0.1.1] — 2026-09-20 — infrastructure written
 
-The infrastructure the rebuild never had. **Still not deployed:** everything
-here is written and validated, and no `terraform apply` has run against a real
-AWS account.
+Everything needed to deploy, written and validated, none of it applied. Kept as
+a separate entry because it is the state the project stood in for a day, and
+because the Phase 7 gate failed 2/8 against it twice - the two failing rows
+being exactly the two that need a real deployment.
 
 ### Added
 

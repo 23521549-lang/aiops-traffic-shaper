@@ -159,8 +159,8 @@ indistinguishable from a working one in the console.
 ### 6. Verify — this is where /ready earns its place
 
 ```bash
-URL=$(terraform -chdir=terraform output -raw function_url)
-curl -s "${URL}ready"
+URL=$(terraform -chdir=terraform output -raw cloudfront_url)
+curl -s "$URL/ready"
 # {"status":"ready","checks":{"dynamodb":true,"cognito_config":true}}
 ```
 
