@@ -11,7 +11,7 @@
     <div class="alert alert-danger">{{ error }}</div>
     {% endif %}
 
-    <form method="post" action="/ui/login">
+    <form method="post" action="/ui/login" data-signed-post>
       <div class="field" style="margin-bottom: 14px;">
         <label for="id_token">ID token</label>
         <input type="password" id="id_token" name="id_token" style="width: 100%; min-width: 0;" required autofocus>

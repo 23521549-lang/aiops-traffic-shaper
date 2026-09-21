@@ -65,3 +65,46 @@ def test_get_json_returns_parsed_body():
     result = get_json("http://backend/agent/v1/decisions",
                        headers={"X-Agent-Key": "t-1.key"}, opener=fake_opener)
     assert result == {"decisions": []}
+
+
+def test_post_json_sends_body_hash_for_cloudfront_oac():
+    """ADR-005: the backend sits behind CloudFront, whose origin access control
+    signs the request to the Lambda function URL but NOT the body. Lambda
+    refuses unsigned payloads, so a POST without x-amz-content-sha256 dies at
+    the edge with a 403 the application never sees - and the agent would report
+    a backend outage that is really a missing header.
+
+    Measured against the real deployment on 2026-09-21: without this header
+    403, with it 401 plus a real JSON error from the app.
+    """
+    import hashlib
+
+    captured = {}
+
+    def fake_opener(req):
+        captured["headers"] = {k.lower(): v for k, v in req.headers.items()}
+        captured["data"] = req.data
+        return _FakeResponse({"ok": True})
+
+    payload = {"logs": [{"ip": "1.2.3.4"}]}
+    post_json("http://backend/agent/v1/telemetry", payload, opener=fake_opener)
+
+    expected = hashlib.sha256(captured["data"]).hexdigest()
+    assert captured["headers"]["x-amz-content-sha256"] == expected
+
+
+def test_body_hash_matches_the_exact_bytes_that_are_sent():
+    """The hash has to cover the serialised bytes, not a re-serialisation of
+    the same dict: json.dumps is not guaranteed to produce identical output
+    twice across versions or flags, and a hash of different bytes is a 403."""
+    import hashlib
+
+    captured = {}
+
+    def fake_opener(req):
+        captured["data"] = req.data
+        captured["headers"] = {k.lower(): v for k, v in req.headers.items()}
+        return _FakeResponse({"ok": True})
+
+    post_json("http://backend/x", {"b": 2, "a": 1}, opener=fake_opener)
+    assert hashlib.sha256(captured["data"]).hexdigest() == captured["headers"]["x-amz-content-sha256"]

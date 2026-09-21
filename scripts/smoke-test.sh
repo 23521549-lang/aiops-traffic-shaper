@@ -54,8 +54,19 @@ CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$URL/dashboard/v1/m
 check $? "unauthenticated /dashboard/v1/mitigations is 401 (got $CODE)"
 
 # 4. The agent surface refuses an unauthenticated write.
+#
+# The x-amz-content-sha256 header is not optional decoration. CloudFront's
+# origin access control signs the request to the Lambda function URL but NOT
+# the body, and Lambda refuses unsigned payloads - so every POST and PUT must
+# carry the hex SHA-256 of its own body or it dies at the edge with a 403 the
+# application never sees. Measured on the first deployment: without the header
+# 403, with it 401 and a real JSON error from the app. See ADR-005.
+BODY='{"logs":[]}'
+BODY_HASH=$(printf '%s' "$BODY" | sha256sum | cut -d' ' -f1)
 CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
-  -X POST -H 'content-type: application/json' -d '{"logs":[]}' "$URL/agent/v1/telemetry")
+  -X POST -H 'content-type: application/json' \
+  -H "x-amz-content-sha256: $BODY_HASH" \
+  -d "$BODY" "$URL/agent/v1/telemetry")
 [ "$CODE" = "401" ]
 check $? "unauthenticated /agent/v1/telemetry is 401 (got $CODE)"
 

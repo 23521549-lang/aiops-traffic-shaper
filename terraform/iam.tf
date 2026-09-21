@@ -48,6 +48,13 @@ data "aws_iam_policy_document" "api_data" {
       "dynamodb:Scan",
       "dynamodb:PutItem",
       "dynamodb:UpdateItem",
+      # DescribeTable is the readiness probe, not the request path. It is a
+      # control-plane call that consumes no read capacity, which is why /ready
+      # uses it instead of a GetItem. Missing it made the first deployment
+      # report dynamodb:false while every table was present and healthy - the
+      # probe was accurate about its own permissions and misleading about
+      # everything else, which is worth knowing before trusting it in an alarm.
+      "dynamodb:DescribeTable",
     ]
     resources = concat(
       [

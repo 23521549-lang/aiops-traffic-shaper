@@ -141,6 +141,24 @@ resource "aws_lambda_permission" "cloudfront_function_url" {
   function_url_auth_type = "AWS_IAM"
 }
 
+# BOTH statements are required, and the second one is the reason this took a
+# deployment to find. Granting only lambda:InvokeFunctionUrl produces a 403
+# that is indistinguishable from an account-level block: CloudFront reaches the
+# origin, Lambda rejects the signed request, and the error body is the generic
+# function-URL authorization message. The AWS documentation for restricting a
+# Lambda function URL origin lists two add-permission calls; every Terraform
+# example found online lists one.
+resource "aws_lambda_permission" "cloudfront_invoke_function" {
+  statement_id  = "AllowCloudFrontServicePrincipalInvokeFunction"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.api.function_name
+  principal     = "cloudfront.amazonaws.com"
+  source_arn    = aws_cloudfront_distribution.api.arn
+  # No function_url_auth_type here: Lambda rejects it with
+  # "FunctionUrlAuthType is only supported for lambda:InvokeFunctionUrl action".
+  # The AWS documentation's second add-permission command omits it too.
+}
+
 resource "aws_cloudwatch_event_rule" "nightly_retrain" {
   name                = "${var.project_name}-nightly-retrain"
   description         = "Daily per-tenant retrain; promotion still goes through the validation gate."

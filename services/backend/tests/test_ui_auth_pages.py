@@ -100,3 +100,36 @@ def test_interactions_js_is_served(dynamo_resource, cognito_test_keys):
     resp = client.get("/ui/static/interactions.js")
     assert resp.status_code == 200
     assert "hx-get" in resp.text
+
+
+# --- ADR-005: CloudFront OAC does not sign request bodies -----------------
+
+def _static(name: str) -> str:
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1] / "ui"
+    return (root / name).read_text()
+
+
+def test_login_form_is_marked_for_signed_submission():
+    """A plain <form method="post"> is built and sent by the browser, which
+    cannot add x-amz-content-sha256 - so through CloudFront it is rejected at
+    the edge with a 403 nobody can debug from the application logs. The marker
+    is what routes it through fetch instead."""
+    assert 'data-signed-post' in _static("templates/login.html")
+
+
+def test_ui_helper_hashes_request_bodies():
+    js = _static("static/interactions.js")
+    assert "x-amz-content-sha256" in js
+    assert "SHA-256" in js
+
+
+def test_signed_form_handler_rebinds_after_replacing_the_document():
+    """The error path rewrites the whole document, which drops every event
+    listener. Without a rebind the second sign-in attempt degrades into an
+    unsigned plain form post and fails at the edge - a bug that would only
+    appear on someone's second try with a bad token."""
+    js = _static("static/interactions.js")
+    handler = js[js.index("function bindSignedForm"):js.index("function bindAll")]
+    assert "documentElement.innerHTML" in handler
+    assert "bindAll(document)" in handler

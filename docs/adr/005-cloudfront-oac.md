@@ -8,10 +8,8 @@
 
 ## Context
 
-Phase 7's first real `terraform apply` put the system on AWS for the first
-time. Everything came up. Nothing could reach it.
-
-Every request to the Function URL returned:
+Phase 7's first real `terraform apply` put the system on AWS. Everything came
+up. Nothing could reach it: every request to the Function URL returned
 
 ```
 HTTP/1.1 403 Forbidden
@@ -19,54 +17,74 @@ x-amzn-ErrorType: AccessDeniedException
 {"Message":"Forbidden. For troubleshooting Function URL authorization issues, ..."}
 ```
 
-What was measured, in order, before anything was changed:
+`terraform validate` was clean, 172 tests were green, and neither could have
+seen this. It is the exact failure the Phase 7 gate refuses to wave through.
+
+### The diagnosis was wrong for an hour, and that is the useful part
+
+The first conclusion, drawn from real measurements, was that the AWS account
+blocked anonymous invocation of Lambda function URLs:
 
 | Test | Result |
 |---|---|
-| `authorization_type = NONE`, resource policy allowing `Principal: "*"` | **403** |
-| Same, after adding a second explicit `lambda:InvokeFunctionUrl` allow | **403** |
-| A *different* function, URL + public permission created by hand via CLI | **403** |
-| Direct `lambda invoke` of the same function | **200**, `{"status":"healthy"}` |
-| Function URL switched to `AWS_IAM`, request SigV4-signed | **200**, `{"status":"healthy"}` |
+| `authorization_type = NONE`, resource policy allowing `Principal: "*"` | 403 |
+| A *different* function, URL + public permission created by hand via CLI | 403 |
+| Direct `lambda invoke` | **200** |
+| Function URL `AWS_IAM`, request SigV4-signed with IAM user credentials | **200** |
 
-So: the application, Mangum, FastAPI, the model loading and the whole request
-path work on real AWS. The Function URL edge works. **Anonymous access is
-blocked at the account level**, independent of any resource policy, and
-independent of which function is asked.
+That evidence is real and every row of it reproduces. The inference drawn from
+it — "grants made through a resource policy are being blocked" — was wrong, and
+it survived because it explained everything observed and predicted the next
+failure correctly: CloudFront with OAC, added on that theory, **also** returned
+403, apparently confirming it.
 
-The account is not part of an AWS Organization, so there is no SCP or RCP to
-inspect. No operation for this setting exists in the current Lambda service
-model — checked against `boto3` 1.43.98, whose Lambda client exposes 88
-operations and none of them named `*PublicAccessBlock*`. `aws lambda
-get-account-settings` returns usage and limits only.
+The actual cause was a missing permission. The AWS documentation for
+restricting a Lambda function URL origin lists **two** `add-permission` calls,
+not one:
 
-The practical position: the public Function URL cannot be the entrypoint in
-this account, and nothing in the deployment toolchain can change that.
+```
+aws lambda add-permission --action "lambda:InvokeFunctionUrl" --principal cloudfront.amazonaws.com ...
+aws lambda add-permission --action "lambda:InvokeFunction"    --principal cloudfront.amazonaws.com ...
+```
+
+Every Terraform example in circulation has the first. Granting only
+`InvokeFunctionUrl` produces a 403 that is *indistinguishable* from an
+account-level block: CloudFront reaches the origin, Lambda rejects the signed
+request, and the error body is the generic function-URL authorization message
+with no mention of which action was denied. Adding the second statement
+returned `200 {"status":"healthy"}` immediately.
+
+**No account-level guardrail was ever involved.** The lesson worth keeping is
+not about Lambda: it is that a theory which explains every observation and
+correctly predicts the next failure can still be wrong, and the thing that
+settled it was reading the vendor's own documentation instead of reasoning
+further from symptoms.
 
 ## Options considered
 
-1. **Turn the account setting off through the console.** Possibly a single
-   click, if it is exposed there at all. Rejected as the *primary* answer for
-   two reasons: it cannot be expressed in Terraform, so the deployment would
-   depend on a manual step nobody records; and it preserves the weakest part of
-   ADR-002 — a bare public Lambda URL with no edge in front of it.
+1. **Keep the public Function URL, now that it is understood.** Viable — the
+   original design would likely work once the permissions are right. Rejected
+   because it preserves the weakest part of ADR-002: a bare public Lambda URL
+   with nothing in front of it, and a recorded residual risk nobody could
+   close.
 
-2. **API Gateway HTTP API.** The obvious ingress, and ADR-002 rejected it
-   because its free tier is 12 months, not forever. After that it is
-   $1.00/million requests — at this project's own design ceiling of 1M
-   requests/month, about $1/month. That is 100× the exception ADR-004 already
-   accepted, and buys nothing CloudFront does not.
+2. **API Gateway HTTP API.** ADR-002 rejected it because its free tier is 12
+   months, not forever; after that it is $1.00/million requests, roughly
+   $1/month at this project's own design ceiling. That is 100× the exception
+   [ADR-004](004-lambda-artifact-via-s3.md) already accepted, and buys nothing
+   CloudFront does not.
 
 3. **CloudFront + Origin Access Control (chosen).** CloudFront signs each
-   request to the origin with SigV4, so the Function URL can be `AWS_IAM` —
-   the configuration that was measured working — while the viewer still sends
-   an ordinary unauthenticated HTTPS request. No credential reaches any client.
+   request to the origin with SigV4, so the Function URL is `AWS_IAM` — not
+   reachable by anyone who did not come through the edge — while the viewer
+   sends an ordinary unauthenticated HTTPS request.
 
 ## Decision
 
-CloudFront is the public entrypoint. The Lambda Function URL becomes
-`AWS_IAM`, and its resource policy allows exactly one principal:
-`cloudfront.amazonaws.com`, scoped by `SourceArn` to this distribution.
+CloudFront is the public entrypoint. The Lambda Function URL is `AWS_IAM`, and
+its resource policy allows exactly one principal, `cloudfront.amazonaws.com`,
+scoped by `SourceArn` to this distribution, for **both** `InvokeFunctionUrl`
+and `InvokeFunction`.
 
 Caching is **disabled** (`Managed-CachingDisabled`). Every response is either
 tenant-scoped or a mitigation decision with a live TTL; a cached copy served to
@@ -81,30 +99,36 @@ hostname, not the CloudFront one.
 
 **The cost constraint holds.** CloudFront's Always-Free tier is 1 TB out and
 10,000,000 requests per month, perpetual rather than a 12-month trial — an
-order of magnitude above this project's own design ceiling of 1M Lambda
-requests/month. Unlike [ADR-004](004-lambda-artifact-via-s3.md), this exception
-list gains no new entry.
+order of magnitude above this project's design ceiling of 1M Lambda
+requests/month. Unlike ADR-004, this adds no new entry to the exception list.
 
 **A residual risk from ADR-002 shrinks.** "No edge rate limiting" was accepted
-because no Always-Free AWS service closed it. AWS Shield Standard is included
-with CloudFront at no charge, so the endpoint now has real DDoS absorption in
-front of it for the first time. This is not a full answer: Shield Standard is
+because no Always-Free AWS service closed it. AWS Shield Standard comes with
+CloudFront at no charge, so the endpoint now has real DDoS absorption in front
+of it for the first time. This is not a full answer — Shield Standard is
 network and transport layer, and per-IP application rate limiting still needs
 WAF, which is still not free. The gap narrowed; it did not close.
 
-**POST requests carry a new obligation.** CloudFront OAC signs the request but
-**not the body**, and Lambda rejects unsigned payloads, so a client sending
-POST or PUT must supply `x-amz-content-sha256` — the hex SHA-256 of its own
-body. For the agent this is one line of `hashlib`. For the browser UI it means
-the login form submits through `fetch` with a hash computed by SubtleCrypto,
-rather than as a plain HTML form post. That is a real cost of this decision and
-it is paid in client code, which is why it is recorded here rather than left to
-be rediscovered.
+**POST requests carry a new obligation, and it is the real price of this
+decision.** OAC signs the request but **not the body**, and Lambda rejects
+unsigned payloads, so any client sending a body must supply
+`x-amz-content-sha256`, the hex SHA-256 of that body. Measured: without the
+header a POST returns 403 at the edge; with it, 401 and a real JSON error from
+the application. Three places pay this:
 
-**The origin is no longer publicly reachable.** Anything that bypasses
-CloudFront now gets 403 from AWS itself, which is a stronger guarantee than the
-previous design had. It also means the Function URL in `terraform output
-function_url` is no longer the address to give anybody; `cloudfront_url` is.
+- `services/agent/http_client.py` — one `hashlib` call, hashing the exact
+  bytes on the wire rather than a re-serialisation.
+- `services/backend/ui/static/interactions.js` — SubtleCrypto for every
+  request that carries a body.
+- `services/backend/ui/templates/login.html` — a plain `<form method="post">`
+  is built and sent by the browser, which cannot add the header at all, so the
+  login form now submits through `fetch`. This is the one place where the
+  decision changed user-facing behaviour rather than plumbing.
+
+**The origin is no longer publicly reachable.** Anything bypassing CloudFront
+gets 403 from AWS itself — a stronger guarantee than the original design had.
+`terraform output function_url` is no longer the address to give anybody;
+`cloudfront_url` is.
 
 **A distribution takes minutes to deploy.** Applies that touch it are slower
-than the rest of the stack, and a rollback of an edge change is not instant.
+than the rest of the stack, and rolling back an edge change is not instant.
