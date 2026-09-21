@@ -25,6 +25,15 @@ through to pytest, so `bash scripts/run_tests.sh -k cognito` works.
 
 Expected: **177 passed**, coverage ≈ 98%.
 
+### Run the application
+
+```bash
+PYTHONPATH=. python scripts/run_local.py
+```
+
+In-process DynamoDB, a model trained at start-up, printed tokens. Real JWT
+verification; fake credentials; 127.0.0.1 only. See the README.
+
 ### Rebuild the environment from scratch
 
 Do this whenever dependencies change, and never trust a long-lived venv:
@@ -272,7 +281,5 @@ this repository.
 - **An alarm on the free-tier ceiling itself.** The three CloudWatch alarms
   watch Lambda errors and retrain health; the usage ceiling is still visible
   only to someone looking at the Control Platform.
-- **Local application run.** The mock harness that made the UI viewable
-  offline was removed; running the app now needs real AWS.
 - **An owner for table creation.** Terraform and `create_all_tables()` both
   create the 7 tables. Whichever runs first wins; this has never been observed.

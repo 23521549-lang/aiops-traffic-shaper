@@ -137,10 +137,24 @@ needed — no AWS account, no Redis, no cluster.
 > something similar, that is a bug in the declared dependencies, not in your
 > setup — please report it.
 
-**Running the full application locally is not currently supported.** The app
-needs real DynamoDB and a real Cognito pool; the temporary mock harness that
-made the UI viewable offline was removed. Restoring a supported local-run path
-is open work.
+## Running the application locally
+
+```bash
+PYTHONPATH=. python scripts/run_local.py      # http://127.0.0.1:8000
+```
+
+The whole backend on a laptop, with no AWS account and no network: DynamoDB is
+moto in-process, a model is trained at start-up through the real retrain path,
+and it prints an owner token, an admin token and an agent key to use. Paste a
+token into `/ui/login`, or send telemetry with the agent key.
+
+**Authentication is not weakened.** The real JWT verification runs on every
+request — signature, audience, issuer, expiry. Only the source of public keys
+changes, to a key pair generated at start-up; a token signed with any other key
+is rejected. And it **cannot touch real AWS**: it replaces the environment's
+credentials with fake ones before starting, so a call that ever escaped the
+mock would fail to authenticate rather than reach production. It binds to
+127.0.0.1 only and is not in the deployment package.
 
 ## Security posture
 
@@ -210,4 +224,3 @@ findings, four of them High, all fixed with a failing test written first.
   cost, accepted in ADR-002.
 - Backup is manual (`scripts/backup-tables.sh`); an unattended schedule that
   costs nothing does not exist. See docs/deployment.md.
-- No supported way to run the application locally (see above).

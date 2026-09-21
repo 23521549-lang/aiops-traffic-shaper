@@ -2,6 +2,66 @@
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.0] — 2026-09-21 — operational maturity
+
+The v0.3 upgrade programme: seven items, each verified on production rather
+than only in tests. Four more defects were found by running the system for
+real, and one regression was introduced and caught before it shipped twice.
+
+### Added
+
+- **Per-tenant ingest quotas.** Each tenant is capped at 25% of the day's
+  free-tier share on top of the global ceiling, so one noisy tenant — or an
+  attacker holding one tenant's agent key — can no longer pause ingest for
+  everyone. Verified live: 429 naming the tenant, and a refused batch is not
+  counted against the quota that refused it.
+- **Instant rollback.** Every deploy publishes an immutable Lambda version;
+  traffic goes through a `live` alias. Rolling back is repointing the alias —
+  measured at 9.6 seconds on production, down from a rebuild-and-apply.
+  `/health` now reports the version that answered, so a rollback is observable
+  from outside.
+- **Self-monitoring.** A probe Lambda polls `/ready` through CloudFront every
+  five minutes and reports free-tier usage, as CloudWatch metrics via the
+  Embedded Metric Format. Three new alarms: not ready for 10 minutes, usage
+  past 80%, and the probe itself broken — kept apart so a probe bug is never
+  mistaken for an outage.
+- **Fan-out retrain.** The nightly job dispatches one asynchronous invocation
+  per tenant instead of one serial loop: failures stay with the tenant that
+  caused them, no shared 15-minute ceiling, at most five in parallel so the
+  retrain can never starve the API of account-wide concurrency.
+- **Tenant reactivation.** Suspension is no longer one-way. The tenant comes
+  back; its revoked agent keys do not — the reason for suspending may have been
+  a leaked key. Verified live: old key 401 after reactivation, new key 200.
+- **Local run.** `scripts/run_local.py` runs the whole backend on a laptop with
+  no AWS account, real JWT verification, fake credentials and loopback only.
+
+### Fixed — found by running it
+
+- **One tenant's retrain failure stopped every tenant after it** — the serial
+  loop had no per-tenant isolation.
+- **Every INFO log line was silently dropped in Lambda**, including "Retrained
+  and promoted", the success line the runbook sends operators to find. The
+  failure lines always appeared, so a good night looked like one that never
+  ran. `LOG_LEVEL=INFO` now on the scheduled functions only — the API stays at
+  WARNING because it logs INFO on the telemetry path.
+- **Every `terraform apply` re-uploaded the 61MB package** whether or not code
+  changed: S3 gives a multipart object an ETag that never equals `filemd5()`.
+- **Suspension over-reported revoked keys**, counting agents revoked long
+  before and spending a write re-revoking each.
+
+### Changed
+
+- The Lambda package builds on the Linux filesystem under WSL: 85 seconds,
+  down from 8–29 minutes when pip wrote through the Windows drive. The build
+  now checks that all three entry points import, not only the API.
+
+### Caught before shipping twice
+
+- Moving the import check into the build script first wrote `__pycache__`
+  into the package — 197MB to 225MB unzipped, halving the headroom under
+  Lambda's hard 250MB limit. It deployed once, was measured, and was fixed
+  with `PYTHONDONTWRITEBYTECODE` before the next deploy.
+
 ## [0.2.1] — 2026-09-21 — proven end to end
 
 The full product loop ran on production: agent registration, telemetry through

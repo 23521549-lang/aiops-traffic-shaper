@@ -93,9 +93,10 @@ Ordered by how much it will surprise you:
    telemetry has been scored in production, and the nightly retrain has never
    fired on live data. The gap between "the infrastructure works" and "the
    product works" is the whole of what remains.
-2. **No supported way to run the application locally.** The app needs real
-   DynamoDB and Cognito; the temporary mock harness was removed. Restoring one
-   is a good first task and would pay for itself immediately.
+2. **Run it locally before you change it.** `PYTHONPATH=. python
+   scripts/run_local.py` starts the whole backend with no AWS account — see
+   the README. It is tested (`test_run_local.py`), which is the difference
+   between it and the harness that came before it and quietly rotted.
 3. **No Cognito Hosted UI.** Both the CLI and the web login take a pasted ID
    token.
 4. **Per-tenant usage is enforced but not yet visible in the UI.** Each tenant
@@ -112,8 +113,6 @@ Ordered by how much it will surprise you:
 
 ## Good first tasks
 
-- Restore a supported local run (item 2 above) — self-contained, and everyone
-  after you benefits.
 - Show per-tenant quota usage in the Control Platform.
 
 Each is small, has a clear finish line, and touches enough of the system to
