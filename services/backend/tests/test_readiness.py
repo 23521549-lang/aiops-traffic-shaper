@@ -56,3 +56,25 @@ def test_readiness_probe_does_not_consume_usage_quota(dynamo_resource):
     for _ in range(5):
         client.get("/ready")
     assert UsageCountersTable(dynamo_resource).get(date=_today()) is None
+
+
+# --- Which version is actually serving? -----------------------------------
+
+def test_health_reports_the_lambda_version_that_answered(dynamo_resource, monkeypatch):
+    """Every incident starts with "what is running?", and since the `live`
+    alias can be repointed in seconds for a rollback, the answer is no longer
+    "whatever was last deployed". The Lambda runtime sets
+    AWS_LAMBDA_FUNCTION_VERSION to the resolved version behind the alias -
+    this is what makes a rollback observable from outside rather than taken
+    on trust from `aws lambda get-alias`."""
+    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_VERSION", "7")
+    body = _client(dynamo_resource).get("/health").json()
+    assert body == {"status": "healthy", "version": "7"}
+
+
+def test_health_outside_lambda_says_so_instead_of_inventing_a_version(dynamo_resource, monkeypatch):
+    """Locally and in tests there is no Lambda version. Reporting a made-up
+    one would be worse than reporting none."""
+    monkeypatch.delenv("AWS_LAMBDA_FUNCTION_VERSION", raising=False)
+    body = _client(dynamo_resource).get("/health").json()
+    assert body == {"status": "healthy", "version": "local"}

@@ -56,7 +56,14 @@ resource "aws_s3_object" "package" {
   # Uploading through Terraform rather than a separate CI step keeps the bucket,
   # the object and both functions in one apply - no chicken-and-egg where the
   # Lambda needs an object that does not exist yet.
-  etag = filemd5(var.lambda_package_path)
+  #
+  # source_hash, NOT etag. A 61MB object goes up as a multipart upload, and S3
+  # gives a multipart object an ETag like "9c51...f8-13" - not an MD5 of the
+  # file, and never equal to filemd5(). With etag, every plan showed the
+  # package as changed and every apply re-uploaded 61MB whether or not a line
+  # of code had moved, which also made "did the code change?" unanswerable
+  # from a plan. source_hash is compared against state, not against S3.
+  source_hash = filemd5(var.lambda_package_path)
 }
 
 resource "aws_lambda_function" "api" {
@@ -71,6 +78,17 @@ resource "aws_lambda_function" "api" {
   handler = "services.backend.main.handler"
   runtime = "python3.12"
 
+  # Every code change publishes an immutable, numbered version. Traffic reaches
+  # the function only through the `live` alias below, so rolling back is
+  # repointing that alias at an earlier version - seconds, no rebuild, no
+  # CloudFront change. Before this, rollback meant rebuilding and re-applying
+  # an old tag, which is minutes at best and assumes the old tag still builds.
+  #
+  # Cost: each version keeps a ~62MB copy of the package against Lambda's 75GB
+  # per-region code storage, so roughly 1,200 deploys before it matters. Prune
+  # old versions long before then (docs/deployment.md, Rollback).
+  publish = true
+
   memory_size = var.lambda_memory_mb
   # Generous for a request path that answers in ~30ms locally, but cold starts
   # load scikit-learn and a model blob. Lambda bills duration, not the timeout.
@@ -79,6 +97,17 @@ resource "aws_lambda_function" "api" {
   environment {
     variables = local.common_env
   }
+}
+
+# The only thing CloudFront, the function URL and both permissions point at.
+# Terraform moves it to each newly published version on apply; a human moves it
+# back with `aws lambda update-alias` to roll back. The next apply will move it
+# forward again, which is the intended shape: rollback buys time, and the fix is
+# still to revert the offending commit and deploy.
+resource "aws_lambda_alias" "api_live" {
+  name             = "live"
+  function_name    = aws_lambda_function.api.function_name
+  function_version = aws_lambda_function.api.version
 }
 
 resource "aws_lambda_function" "retrain" {
@@ -113,29 +142,45 @@ resource "aws_lambda_function" "retrain" {
 # residual risk, partially mitigated by the free-tier throttle in core/usage.py.
 resource "aws_lambda_function_url" "api" {
   function_name      = aws_lambda_function.api.function_name
+  qualifier          = aws_lambda_alias.api_live.name
   authorization_type = "AWS_IAM"
 
   cors {
     allow_origins = ["*"]
     allow_methods = ["GET", "POST", "DELETE"]
-    allow_headers = ["content-type", "authorization", "x-agent-key", "x-csrf-token", "x-ui-ajax"]
-    max_age       = 3600
+    # x-id-token and x-amz-content-sha256 are part of the API contract since
+    # ADR-005 (CloudFront replaces Authorization; OAC does not sign bodies).
+    # Omitting them here would only surface for a browser client on another
+    # origin, as a preflight failure with no obvious cause.
+    allow_headers = ["content-type", "authorization", "x-agent-key", "x-csrf-token",
+    "x-ui-ajax", "x-id-token", "x-amz-content-sha256"]
+    max_age = 3600
+  }
+
+  # Moving the URL from the unqualified function to the alias gives it a new
+  # hostname. Create the new one first so CloudFront always has an origin to
+  # point at while its distribution update propagates.
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
 # Only CloudFront may invoke the function URL, and only THIS distribution.
 #
-# The previous version granted Principal "*" with function_url_auth_type NONE,
-# which is what the AWS Console adds silently when you create a public function
-# URL by hand - Terraform does not, so every request was 403 until it was added.
-# That whole approach is gone: the account blocks anonymous invocation whatever
-# the policy says, and scoping to the distribution ARN is strictly better
-# regardless - the origin is no longer reachable by anyone who did not come
-# through the edge.
+# The previous version granted Principal "*" with function_url_auth_type NONE.
+# Scoping to the distribution ARN is strictly better: the origin is no longer
+# reachable by anyone who did not come through the edge. (An earlier comment
+# here claimed the account blocked anonymous invocation outright. It did not -
+# the real cause was the missing second statement below. ADR-005 records the
+# wrong diagnosis in full.)
+#
+# Both statements carry the alias qualifier: the URL belongs to `live`, and a
+# permission on the unqualified function would not cover it.
 resource "aws_lambda_permission" "cloudfront_function_url" {
   statement_id           = "AllowCloudFrontServicePrincipal"
   action                 = "lambda:InvokeFunctionUrl"
   function_name          = aws_lambda_function.api.function_name
+  qualifier              = aws_lambda_alias.api_live.name
   principal              = "cloudfront.amazonaws.com"
   source_arn             = aws_cloudfront_distribution.api.arn
   function_url_auth_type = "AWS_IAM"
@@ -152,6 +197,7 @@ resource "aws_lambda_permission" "cloudfront_invoke_function" {
   statement_id  = "AllowCloudFrontServicePrincipalInvokeFunction"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.api.function_name
+  qualifier     = aws_lambda_alias.api_live.name
   principal     = "cloudfront.amazonaws.com"
   source_arn    = aws_cloudfront_distribution.api.arn
   # No function_url_auth_type here: Lambda rejects it with

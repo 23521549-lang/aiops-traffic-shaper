@@ -274,10 +274,33 @@ No secrets are involved: none of these three is confidential.
 
 ## Rollback
 
-**Code:** re-run the deploy workflow from an earlier tag. The package is built
-from the checked-out tree, so checking out `v0.1.0` and applying restores that
-exact code. There is no Lambda alias or version pinning — adding one would give
-a faster rollback and is worth doing before real traffic exists.
+**Code — seconds, not minutes.** Every deploy publishes an immutable, numbered
+Lambda version, and all traffic reaches the API through the `live` alias. To
+roll back, point the alias at an earlier version:
+
+```bash
+# what is serving right now, and what is available
+aws lambda get-alias --function-name aiops-traffic-shaper-api --name live   --query FunctionVersion
+aws lambda list-versions-by-function --function-name aiops-traffic-shaper-api   --query 'Versions[].[Version,LastModified]' --output table
+
+# roll back
+aws lambda update-alias --function-name aiops-traffic-shaper-api --name live   --function-version <N>
+
+# confirm from outside - /health reports the version that answered
+curl -s "$(terraform -chdir=terraform output -raw cloudfront_url)/health"
+```
+
+No rebuild, no CloudFront change, no Terraform. **The next `terraform apply`
+moves the alias forward again**, which is intended: rollback buys time, and the
+fix is still to revert the offending commit and deploy.
+
+Two things this does not cover. **Model rollbacks are separate** — a bad model
+is a DynamoDB item, not a Lambda version, and the validation gate is the
+defence there. **Old versions accumulate**: each keeps a ~62MB package copy
+against Lambda's 75GB per-region code storage, so roughly 1,200 deploys before
+it matters. Prune versions older than the last few with
+`aws lambda delete-function --function-name aiops-traffic-shaper-api --qualifier <N>`
+long before then.
 
 **Infrastructure:** revert the offending commit in `terraform/` and apply.
 `terraform plan` shows exactly what will change; read it before approving.

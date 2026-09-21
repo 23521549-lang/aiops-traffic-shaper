@@ -22,3 +22,8 @@ output "capacity_budget" {
   description = "Provisioned throughput against the 25/25 Always-Free pool."
   value       = "14 RCU / 20 WCU of 25 / 25 - see dynamodb.tf for the per-table split"
 }
+
+output "api_live_version" {
+  description = "Lambda version the `live` alias serves. Roll back by pointing the alias at an earlier one."
+  value       = aws_lambda_alias.api_live.function_version
+}

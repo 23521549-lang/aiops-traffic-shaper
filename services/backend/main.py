@@ -1,3 +1,5 @@
+import os
+
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
@@ -134,8 +136,17 @@ async def security_headers(request, call_next):
 @app.get("/health")
 def health():
     """Liveness only: the process started and can answer. It says nothing
-    about whether this instance can serve a real request - see /ready."""
-    return {"status": "healthy"}
+    about whether this instance can serve a real request - see /ready.
+
+    `version` is the Lambda version that actually answered. Traffic reaches
+    this function through the `live` alias, which can be repointed in seconds
+    to roll back, so "what is running?" stopped being the same question as
+    "what was last deployed?". The runtime sets AWS_LAMBDA_FUNCTION_VERSION to
+    the version behind the alias; outside Lambda there is none, and "local"
+    says so rather than inventing one. A sequence number, not a commit id -
+    nothing here helps an attacker that the version count would not."""
+    return {"status": "healthy",
+            "version": os.environ.get("AWS_LAMBDA_FUNCTION_VERSION", "local")}
 
 
 # The readiness probe describes a table rather than reading from one.
