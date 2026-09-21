@@ -102,7 +102,6 @@ Ordered by how much it will surprise you:
    is capped at 25% of the day's free-tier share, but the Control Platform
    still only shows the global total; the per-tenant counters are readable
    straight from `UsageCounters` (see the runbook).
-5. **No un-suspend endpoint.** Suspension is one-way today.
 6. **Two owners for table creation.** Terraform describes the 7 tables and
    `create_all_tables()` creates them from application code. Whichever runs
    first wins. Nobody has decided which should own it, and only a real
@@ -115,7 +114,6 @@ Ordered by how much it will surprise you:
 
 - Restore a supported local run (item 2 above) — self-contained, and everyone
   after you benefits.
-- Add an un-suspend endpoint with tests; the suspend path shows the shape.
 - Show per-tenant quota usage in the Control Platform.
 
 Each is small, has a clear finish line, and touches enough of the system to

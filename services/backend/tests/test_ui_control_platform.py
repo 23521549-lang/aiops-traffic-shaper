@@ -81,3 +81,30 @@ def test_non_admin_cannot_reach_control_platform(dynamo_resource, cognito_test_k
     resp = client.get("/admin/ui", follow_redirects=False)
     assert resp.status_code == 302
     assert resp.headers["location"] == "/ui/login"
+
+
+def test_a_suspended_tenant_can_be_reactivated_from_the_control_platform(dynamo_resource,
+                                                                       cognito_test_keys):
+    """The API grew a reactivate endpoint; without the button an operator
+    would still have to reach for curl to undo a suspension they made in the
+    browser two clicks earlier."""
+    client = _client(dynamo_resource, cognito_test_keys)
+    TenantsTable(dynamo_resource).put(tenant_id="t-1", name="Acme", status="suspended",
+                                       created_at="2026-08-21T00:00:00Z")
+    page = client.get("/admin/ui").text
+    assert 'hx-post="/admin/ui/tenants/t-1/reactivate"' in page
+
+    resp = client.post("/admin/ui/tenants/t-1/reactivate", headers=_csrf(client))
+    assert resp.status_code == 200
+    assert "Active" in resp.text
+    assert TenantsTable(dynamo_resource).get(tenant_id="t-1")["status"] == "active"
+
+
+def test_reactivate_via_ui_requires_csrf_token(dynamo_resource, cognito_test_keys):
+    """Same rule as every other state-changing UI action (Phase 4 / M7)."""
+    client = _client(dynamo_resource, cognito_test_keys)
+    TenantsTable(dynamo_resource).put(tenant_id="t-1", name="Acme", status="suspended",
+                                       created_at="2026-08-21T00:00:00Z")
+    resp = client.post("/admin/ui/tenants/t-1/reactivate")
+    assert resp.status_code == 403
+    assert TenantsTable(dynamo_resource).get(tenant_id="t-1")["status"] == "suspended"

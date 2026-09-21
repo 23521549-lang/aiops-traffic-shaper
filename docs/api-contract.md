@@ -87,6 +87,7 @@ curl -X POST "$BASE/agent/v1/telemetry"   -H "content-type: application/json"   
 | GET | /admin/v1/agents | List all agents across tenants, via `Agents.LastSeenIndex` GSI (schema.md) | Cognito JWT (admin group) | — | `AgentSummary[]` | 401, 403 |
 | GET | /admin/v1/usage | Today's + recent `UsageCounters` vs. Always-Free ceilings (Lambda 1M req / 400,000 GB-s per month, DynamoDB 25 RCU/WCU) | Cognito JWT (admin group) | — | `UsageReport` | 401, 403 |
 | POST | /admin/v1/tenants/{tenant_id}/suspend | Suspend a tenant (abuse control — protects the shared 0đ backend from one tenant's runaway traffic). Also **revokes every agent API key** the tenant holds | Cognito JWT (admin group) | — | `{"message": str, "agents_revoked": int}` | 401, 403, 404 |
+| POST | /admin/v1/tenants/{tenant_id}/reactivate | Undo a suspension. Restores the tenant, NOT its revoked agent keys — agents must re-register | Cognito JWT, group `admin` | — | `{message, note}` | 403, 404 |
 
 ## Health
 

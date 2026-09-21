@@ -178,18 +178,29 @@ class TenantsTable(_SimpleTable):
     _key_names = ("tenant_id",)
 
     def suspend(self, tenant_id: str) -> bool:
+        return self._set_status_if_exists(tenant_id, "suspended")
+
+    def reactivate(self, tenant_id: str) -> bool:
+        """Only the tenant's status. Agent keys revoked by suspend() stay
+        revoked: the reason for a suspension may be a leaked key, and giving
+        that key its access back would undo the suspension's only real
+        effect. A reactivated tenant registers fresh agents."""
+        return self._set_status_if_exists(tenant_id, "active")
+
+    def _set_status_if_exists(self, tenant_id: str, status: str) -> bool:
         """Returns False (not True/raise) if the tenant doesn't exist —
         callers turn that into a 404. Uses a ConditionExpression rather
         than a plain update_item: DynamoDB's UpdateItem CREATES the item
         if the key doesn't already exist, so an unconditional version
-        would silently create a new tenant record containing only
-        status='suspended' when given a bad tenant_id, instead of failing."""
+        would silently create a new tenant record containing only a status
+        when given a bad tenant_id, instead of failing. suspend() fell into
+        exactly that once; reactivate() shares this path so it cannot."""
         try:
             self.update(
                 key={"tenant_id": tenant_id},
                 update_expression="SET #s = :s",
                 expr_names={"#s": "status"},
-                expr_values={":s": "suspended"},
+                expr_values={":s": status},
                 condition_expression="attribute_exists(tenant_id)",
             )
             return True
@@ -232,6 +243,12 @@ class AgentsTable(_SimpleTable):
         for a token to expire (agent keys never expire on their own)."""
         revoked = 0
         for agent in self.query_by_tenant(tenant_id):
+            # Skip agents that are already dead. Counting them made the
+            # returned number describe the table rather than this suspension
+            # (production reported 2 revoked when one agent was live), and
+            # rewriting them spent a write per dead agent for nothing.
+            if agent.get("status") == "revoked":
+                continue
             self.update(
                 key={"tenant_id": tenant_id, "agent_id": agent["agent_id"]},
                 update_expression="SET #s = :s",

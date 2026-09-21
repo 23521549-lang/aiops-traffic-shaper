@@ -32,3 +32,21 @@ def suspend_tenant(tenant_id: str, resource=Depends(get_dynamo_resource)) -> dic
     # otherwise those keys keep working, since agent keys have no expiry.
     revoked = AgentsTable(resource).revoke_all_for_tenant(tenant_id)
     return {"message": f"tenant {tenant_id} suspended", "agents_revoked": revoked}
+
+
+@router.post("/admin/v1/tenants/{tenant_id}/reactivate", dependencies=[Depends(admin_auth)])
+def reactivate_tenant(tenant_id: str, resource=Depends(get_dynamo_resource)) -> dict:
+    """Undo a suspension. Until this existed suspension was one-way, short of
+    editing DynamoDB by hand.
+
+    The tenant comes back; its old agent keys do not. suspend_tenant revoked
+    them because the reason for suspending may be a leaked key, so the tenant
+    registers fresh agents to get fresh keys. The response says so, because an
+    operator reactivating a tenant will otherwise reasonably expect its agents
+    to start reporting again on their own - and they will not."""
+    if not TenantsTable(resource).reactivate(tenant_id):
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return {
+        "message": f"tenant {tenant_id} reactivated",
+        "note": "agent keys revoked at suspension stay revoked; register agents again",
+    }

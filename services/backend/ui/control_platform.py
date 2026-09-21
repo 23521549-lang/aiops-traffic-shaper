@@ -2,7 +2,12 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 
 from services.backend.api.cognito_auth import admin_auth
-from services.backend.api.routes.admin import list_agents, list_tenants, suspend_tenant
+from services.backend.api.routes.admin import (
+    list_agents,
+    list_tenants,
+    reactivate_tenant,
+    suspend_tenant,
+)
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.usage import get_usage_report
 from services.backend.ui.csrf import verify_csrf
@@ -31,5 +36,13 @@ def agents_partial(request: Request, status: str = "stale", resource=Depends(get
              dependencies=[Depends(admin_auth), Depends(verify_csrf)])
 def suspend_tenant_ui(request: Request, tenant_id: str, resource=Depends(get_dynamo_resource)):
     suspend_tenant(tenant_id, resource=resource)
+    tenants = list_tenants(resource=resource)
+    return templates.TemplateResponse(request, "_tenants_table.html", {"tenants": tenants})
+
+
+@router.post("/admin/ui/tenants/{tenant_id}/reactivate", response_class=HTMLResponse,
+             dependencies=[Depends(admin_auth), Depends(verify_csrf)])
+def reactivate_tenant_ui(request: Request, tenant_id: str, resource=Depends(get_dynamo_resource)):
+    reactivate_tenant(tenant_id, resource=resource)
     tenants = list_tenants(resource=resource)
     return templates.TemplateResponse(request, "_tenants_table.html", {"tenants": tenants})

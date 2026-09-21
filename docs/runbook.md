@@ -183,7 +183,23 @@ curl -X POST -H "Authorization: Bearer <admin-id-token>" \
 Sets tenant status to `suspended` **and revokes every agent API key it issued**.
 The response reports how many were revoked. Its agents are refused on their
 very next call, and its still-valid dashboard token cannot mint a replacement.
-There is no un-suspend endpoint — that is a gap, not a policy.
+### Reactivate a tenant
+
+```bash
+curl -X POST -H "X-Id-Token: <admin-id-token>"   -H "x-amz-content-sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"   "$(terraform -chdir=terraform output -raw cloudfront_url)/admin/v1/tenants/<tenant_id>/reactivate"
+```
+
+Or the **Reactivate** button on the Control Platform. The tenant comes back;
+**its old agent keys do not.** Suspension revoked them because the reason for
+suspending may have been a leaked key, and giving that key its access back
+would silently undo the suspension. The tenant's owner registers agents again
+to get fresh keys — tell them, because otherwise they will reasonably expect
+their agents to start reporting on their own, and they will not. Verified on
+production: the old key answers 401 after reactivation, a newly registered one
+answers 200.
+
+The `x-amz-content-sha256` header is the hash of an empty body; CloudFront
+requires it on every POST (ADR-005).
 
 ## Production procedures
 

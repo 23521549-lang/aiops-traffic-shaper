@@ -12,7 +12,17 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 OUT="${1:-dist}"
-BUILD=build/package
+
+# On WSL with the checkout on a Windows drive (/mnt/c, /mnt/d, ...), pip's
+# thousands of small writes cross the 9P bridge and Windows Defender scans each
+# one. Measured: a build that takes about eight minutes took twenty-nine. Build
+# on the Linux filesystem instead and write only the finished zip back. CI and
+# a native Linux checkout are unaffected. BUILD_DIR overrides either way.
+if [ -z "${BUILD_DIR:-}" ] && grep -qi microsoft /proc/version 2>/dev/null    && [[ "$PWD" == /mnt/* ]]; then
+  BUILD_DIR="$HOME/.cache/aiops-lambda-build/package"
+  echo "WSL with the repo on a Windows drive: building in $BUILD_DIR"
+fi
+BUILD="${BUILD_DIR:-build/package}"
 
 # MUST BUILD ON LINUX. pip resolves wheels for the machine it runs on, and
 # scipy/numpy/scikit-learn/cryptography all ship compiled binaries. Built on
@@ -51,6 +61,7 @@ echo "--- runtime dependencies ---"
 cat /tmp/runtime-reqs.txt
 
 rm -rf "$BUILD" && mkdir -p "$BUILD" "$OUT"
+OUT_ABS="$(cd "$OUT" && pwd)"
 pip install -r /tmp/runtime-reqs.txt --target "$BUILD" --quiet
 cp -r services "$BUILD/services"
 
@@ -85,6 +96,22 @@ if find "$BUILD" -name "*.so" | grep -qv -- "-linux-gnu.so$"; then
   find "$BUILD" -name "*.so" | grep -v -- "-linux-gnu.so$" | head -5 >&2
 fi
 
+# Every entry point must import from the built tree, not just the API. Three
+# functions ship from this one package - API, retrain, probe - and a missing
+# dependency in any of them is an outage that only appears once that function
+# is invoked, possibly at 18:00 UTC by a scheduler with nobody watching.
+#
+# PYTHONDONTWRITEBYTECODE is load-bearing. Without it this check writes a
+# __pycache__ for every module it imports, AFTER the __pycache__ cleanup above -
+# measured: the package went from 197MB to 225MB unzipped, halving the headroom
+# under Lambda's hard 250MB limit.
+( cd "$BUILD" && PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -c "
+import services.backend.main
+import services.backend.retrain_handler
+import services.backend.probe_handler
+" ) || { echo "ERROR: package does not import - see traceback above" >&2; exit 1; }
+echo "imports: OK (api, retrain, probe)"
+
 UNZIPPED=$(du -sm "$BUILD" | cut -f1)
 echo "--- size ---"
 echo "unzipped: ${UNZIPPED}MB (Lambda hard limit 250MB)"
@@ -98,8 +125,11 @@ fi
 
 # python -m zipfile rather than the zip binary: zip is not installed
 # everywhere, python is, and this script has to work in CI and on a laptop.
-python3 -m zipfile -c "$OUT/backend.zip" "$BUILD"/*
-ZIPPED=$(( $(stat -c%s "$OUT/backend.zip") / 1048576 ))
+# Zip from inside the build dir so the archive holds services/, fastapi/, ...
+# at its root - which is where Lambda looks - wherever BUILD happens to live.
+rm -f "$OUT_ABS/backend.zip"
+( cd "$BUILD" && python3 -m zipfile -c "$OUT_ABS/backend.zip" ./* )
+ZIPPED=$(( $(stat -c%s "$OUT_ABS/backend.zip") / 1048576 ))
 echo "zipped:   ${ZIPPED}MB"
 
 # Lambda accepts at most 50MB zipped on a DIRECT upload. This package is ~62MB
