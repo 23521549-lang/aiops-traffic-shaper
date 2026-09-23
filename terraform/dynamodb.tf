@@ -266,6 +266,54 @@ resource "aws_dynamodb_table" "usage_counters" {
   }
 }
 
+# The product's memory. Every other table here describes the present:
+# MitigationState is keyed (tenant_id, ip) so a repeat decision overwrites
+# the previous one, TTL deletes what survives, and TelemetryEvents keeps 25
+# hours sized to the training window. Nothing retained what the product had
+# DONE - which is why PRD US-6's "view recent mitigation history" has been
+# unmeetable since the schema was written.
+#
+# Three item types share this table under a sort-key prefix:
+#   mit#<hour>#<ip>  one mitigation episode per (ip, hour)
+#   agg#<hour>       one traffic rollup per hour
+#   read#            the unread marker
+# Separate tables would cost two provisioning floors for data that shares a
+# partition key, a TTL policy and every read path.
+#
+# No GSI: a GSI mirrors every write against the same account-wide 25-unit
+# pool, and every access pattern here is a sort-key range on tenant_id.
+#
+# No prevent_destroy, deliberately. The three tables that carry it hold
+# state that cannot be reconstructed; this one refills itself by waiting.
+resource "aws_dynamodb_table" "tenant_history" {
+  name           = "TenantHistory"
+  billing_mode   = "PROVISIONED"
+  read_capacity  = 2
+  write_capacity = 2
+  hash_key       = "tenant_id"
+  range_key      = "sk"
+
+  attribute {
+    name = "tenant_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  # 30 days. "Recent mitigation history" is a trust artefact, not an audit
+  # log. Enabled here rather than merely documented - this project shipped a
+  # TTL that lived in a comment for a long time before anyone turned it on.
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  deletion_protection_enabled = true
+}
+
 locals {
   all_tables = [
     aws_dynamodb_table.tenants,
@@ -275,6 +323,11 @@ locals {
     aws_dynamodb_table.models,
     aws_dynamodb_table.telemetry_events,
     aws_dynamodb_table.usage_counters,
+    # Without this line the API role gets no access to the new table and
+    # every history write fails silently through the _try_history guard in
+    # api/routes/agent.py - no errors, no data, which is the worst possible
+    # outcome for a feature whose data cannot be backfilled.
+    aws_dynamodb_table.tenant_history,
   ]
   table_arns = [for t in local.all_tables : t.arn]
   # GSIs are separate ARNs for IAM purposes; a policy granting Query on the

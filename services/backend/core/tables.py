@@ -57,6 +57,30 @@ _TABLE_SPECS = [
         # explicitly here, not an afterthought (Stage 6 needs this GSI).
         "ProvisionedThroughput": {"ReadCapacityUnits": 1, "WriteCapacityUnits": 1},
      }]},
+    # The product's memory. Everything else in this schema describes the
+    # present: MitigationState is keyed (tenant_id, ip) so a repeat decision
+    # overwrites, TTL deletes what survives, and TelemetryEvents keeps 25
+    # hours sized to the training window. Nothing retained what the product
+    # had DONE, which is why PRD US-6's "view recent mitigation history" has
+    # been unmeetable since the schema was written.
+    #
+    # One table, three item types by sort-key prefix (mit# / agg# / read#).
+    # Separate tables would cost two provisioning floors for data that
+    # shares a partition key, a TTL policy and every read path.
+    #
+    # 2 WCU: the ingest quota hard-caps the whole account at ~0.39 batches
+    # per second (core/usage.py), so the unconditional rollup write is
+    # ~0.39 WCU sustained. Episode writes scale with anomalous IPs, which
+    # the same quota bounds. No GSI - a GSI mirrors every write against the
+    # same 25-unit account pool, and every access pattern here is a
+    # sort-key range on tenant_id.
+    {"TableName": "TenantHistory", "KeySchema": [
+        {"AttributeName": "tenant_id", "KeyType": "HASH"},
+        {"AttributeName": "sk", "KeyType": "RANGE"}],
+     "AttributeDefinitions": [
+        {"AttributeName": "tenant_id", "AttributeType": "S"},
+        {"AttributeName": "sk", "AttributeType": "S"}],
+     "ProvisionedThroughput": {"ReadCapacityUnits": 2, "WriteCapacityUnits": 2}},
     {"TableName": "Whitelist", "KeySchema": [
         {"AttributeName": "tenant_id", "KeyType": "HASH"},
         {"AttributeName": "ip", "KeyType": "RANGE"}],
@@ -605,3 +629,163 @@ class UsageCountersTable(_SimpleTable):
             update_expression="ADD total_requests :one, estimated_gb_seconds :gbs",
             expr_values={":one": 1, ":gbs": estimated_gb_seconds},
         )
+
+
+class TenantHistoryTable(_SimpleTable):
+    """Mitigation episodes, hourly traffic rollups and the unread marker.
+
+    Sort keys zero-pad the epoch to 10 digits so lexicographic ordering
+    equals chronological ordering; unpadded epochs sort wrong as soon as the
+    digit count changes, and 10 digits lasts until 2286.
+    """
+
+    _table_name = "TenantHistory"
+    _key_names = ("tenant_id", "sk")
+
+    RETENTION_SECONDS = 30 * 86_400
+    HOUR = 3600
+
+    # --- keys -------------------------------------------------------------
+
+    @staticmethod
+    def episode_sk(hour_start: int, ip: str) -> str:
+        return f"mit#{int(hour_start):010d}#{ip}"
+
+    @staticmethod
+    def series_sk(hour_start: int) -> str:
+        return f"agg#{int(hour_start):010d}"
+
+    @classmethod
+    def hour_of(cls, ts: int) -> int:
+        return int(ts) // cls.HOUR * cls.HOUR
+
+    @staticmethod
+    def max_tier(episode: dict) -> int:
+        """Derived, not stored. DynamoDB update expressions have no MAX, and
+        per-tier counters carry strictly more information for the same one
+        write than a single max value would."""
+        return 2 if int(episode.get("tier2_count", 0)) else 1
+
+    # --- writes -----------------------------------------------------------
+
+    def record_decision(self, tenant_id: str, ip: str, hour_start: int, tier: int,
+                        now: int, score: float, z: float | None) -> None:
+        """One idempotent UpdateItem, no read and no condition.
+
+        Hourly rather than per-decision: MitigationState.put fires on every
+        scoring pass for an already-blocked IP and the agent flushes every
+        five seconds, so per-decision rows would reach ~720 per attacking IP
+        per hour. This collapses them into the thing a person actually wants
+        to read.
+
+        Routed through update() rather than a bare update_item because
+        `score` and `z` are floats and only update() applies
+        _to_dynamo_safe - the "Float types are not supported" error this
+        codebase has already hit twice.
+        """
+        tier = int(tier)
+        self.update(
+            key={"tenant_id": tenant_id, "sk": self.episode_sk(hour_start, ip)},
+            update_expression=(
+                "ADD tier1_count :t1, tier2_count :t2 "
+                "SET last_ts = :now, ip = :ip, hour_start = :h, "
+                "last_score = :s, last_z = :z, "
+                "first_ts = if_not_exists(first_ts, :now), #ttl = :ttl"
+            ),
+            expr_names={"#ttl": "ttl"},
+            expr_values={
+                ":t1": 1 if tier == 1 else 0,
+                ":t2": 1 if tier >= 2 else 0,
+                ":now": int(now), ":ip": ip, ":h": int(hour_start),
+                ":s": score, ":z": z,
+                ":ttl": int(hour_start) + self.RETENTION_SECONDS,
+            },
+        )
+
+    def record_traffic(self, tenant_id: str, hour_start: int, requests: int,
+                       tier1: int = 0, tier2: int = 0) -> None:
+        """One atomic ADD per telemetry batch - a constant, independent of
+        how many IPs the batch touched. Fixed-size scalars only: anything
+        that grows with request volume is the trap add_aggregate was written
+        to avoid."""
+        self.update(
+            key={"tenant_id": tenant_id, "sk": self.series_sk(hour_start)},
+            update_expression=(
+                "ADD requests :r, batches :b, tier1_decisions :t1, tier2_decisions :t2 "
+                "SET hour_start = :h, #ttl = :ttl"
+            ),
+            expr_names={"#ttl": "ttl"},
+            expr_values={":r": int(requests), ":b": 1,
+                         ":t1": int(tier1), ":t2": int(tier2),
+                         ":h": int(hour_start),
+                         ":ttl": int(hour_start) + self.RETENTION_SECONDS},
+        )
+
+    def mark_read(self, tenant_id: str, through_ts: int) -> None:
+        """Never moves backwards: two tabs, or a retried request, must not
+        re-announce what the customer has already seen."""
+        try:
+            self.update(
+                key={"tenant_id": tenant_id, "sk": "read#"},
+                update_expression="SET last_read_ts = :t",
+                condition_expression=("attribute_not_exists(sk) "
+                                      "OR last_read_ts < :t"),
+                expr_values={":t": int(through_ts)},
+            )
+        except ClientError as e:
+            if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
+                raise
+
+    # --- reads ------------------------------------------------------------
+
+    def query_episodes(self, tenant_id: str, since_ts: int, until_ts: int) -> list[dict]:
+        """Newest first - this is a log, and a person reads the top of it.
+
+        The upper bound reaches a whole hour past `until_ts` because the IP
+        suffix sorts after the hour and "#" (0x23) sorts below the digits;
+        a naive "mit#{until}#" bound silently drops every episode in the
+        final hour, which is the one the customer opened the page for.
+        """
+        from boto3.dynamodb.conditions import Key
+        lo = f"mit#{self.hour_of(since_ts):010d}#"
+        hi = f"mit#{self.hour_of(until_ts) + self.HOUR:010d}#"
+        return self._query_all_pages(
+            KeyConditionExpression=(Key("tenant_id").eq(tenant_id)
+                                    & Key("sk").between(lo, hi)),
+            ScanIndexForward=False,
+        )
+
+    def query_series(self, tenant_id: str, since_ts: int, until_ts: int,
+                     fill: bool = False) -> list[dict]:
+        """Oldest first - a chart reads left to right."""
+        from boto3.dynamodb.conditions import Key
+        lo = self.series_sk(self.hour_of(since_ts))
+        hi = self.series_sk(self.hour_of(until_ts)) + "~"
+        rows = self._query_all_pages(
+            KeyConditionExpression=(Key("tenant_id").eq(tenant_id)
+                                    & Key("sk").between(lo, hi)),
+        )
+        if not fill:
+            return rows
+        # DynamoDB has no row for an hour in which nothing happened. A chart
+        # that simply skips those hours draws a flat line across an outage
+        # instead of a hole, so the gap is filled here, once, server-side,
+        # rather than in each caller.
+        by_hour = {int(r["hour_start"]): r for r in rows}
+        out = []
+        for hour in range(self.hour_of(since_ts),
+                          self.hour_of(until_ts) + self.HOUR, self.HOUR):
+            out.append(by_hour.get(hour, {
+                "hour_start": hour, "requests": 0, "batches": 0,
+                "tier1_decisions": 0, "tier2_decisions": 0,
+            }))
+        return out
+
+    def unread_since(self, tenant_id: str, default_ts: int) -> int:
+        """`default_ts` matters: an absent marker means the tenant has never
+        looked, and treating that as epoch 0 would present a month of
+        history as new the first time the feature speaks."""
+        item = self.get(tenant_id=tenant_id, sk="read#")
+        if not item or "last_read_ts" not in item:
+            return int(default_ts)
+        return int(item["last_read_ts"])

@@ -86,16 +86,20 @@ def test_a_telemetry_batch_is_capped(dynamo_resource):
     product cannot afford to lose."""
     from services.backend.schemas.telemetry import TelemetryBatch
 
-    ok = TelemetryBatch(logs=[])
-    assert ok.logs == []
+    assert TelemetryBatch(logs=[]).logs == []
+    assert len(TelemetryBatch(logs=[_log() for _ in range(1000)]).logs) == 1000
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as exc:
         TelemetryBatch(logs=[_log() for _ in range(1001)])
+    # Assert on the REASON. Written first with a wrong field name in the
+    # helper, this test passed on a missing-field error instead - green, and
+    # proving nothing about the cap it exists to prove.
+    assert "too_long" in str(exc.value)
 
 
 def _log():
     from services.backend.schemas.telemetry import LogRecord
-    return LogRecord(remote_addr="203.0.113.4", time_local="2026-09-23T12:00:00Z",
+    return LogRecord(remote_addr="203.0.113.4", time_iso8601="2026-09-23T12:00:00Z",
                      request_method="GET", request_uri="/", status=200,
                      body_bytes_sent=100, request_time=0.01, http_user_agent="curl")
 

@@ -1,7 +1,10 @@
+import logging
 import secrets
 import time
 import uuid
 from datetime import datetime, timezone
+
+from botocore.exceptions import BotoCoreError, ClientError
 
 from fastapi import APIRouter, Depends
 
@@ -17,6 +20,7 @@ from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.tables import (
     AgentsTable,
     MitigationStateTable,
+    TenantHistoryTable,
     TelemetryEventsTable,
     WhitelistTable,
 )
@@ -32,6 +36,25 @@ from services.backend.schemas.agent_register import AgentRegisterRequest, AgentR
 from services.backend.schemas.mitigation import MitigationState
 from services.backend.schemas.telemetry import TelemetryBatch, TelemetryResponse
 
+def _try_history(fn, *args, **kwargs) -> None:
+    """Run a history write, swallow its failure, keep the request alive.
+
+    History and charts are reporting. Ingest is the product: it is the call
+    that returns the decisions a customer's nginx enforces. DynamoDB
+    throttles rather than bills when a table exceeds provisioned capacity,
+    and an attack is simultaneously when the episode write is burstiest and
+    when the agent most needs its decisions back. It is also what makes the
+    rollout order forgiving - if the Lambda ships before Terraform creates
+    the table, every batch would otherwise 500.
+    """
+    try:
+        fn(*args, **kwargs)
+    except (ClientError, BotoCoreError):
+        logger.warning("history write failed (%s); ingest continues",
+                       getattr(fn, "__name__", fn), exc_info=True)
+
+
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -88,6 +111,8 @@ def ingest_telemetry(
     now = time.time()
     touched_ips = record_batch(resource, tenant_id, batch.logs, now=now)
     bucket = _bucket_start(BUCKET_SECONDS, now)
+    history = TenantHistoryTable(resource)
+    hour_start = TenantHistoryTable.hour_of(int(now))
     whitelist = {i["ip"] for i in WhitelistTable(resource).query_by_tenant(tenant_id)}
 
     mgr = ModelManager()
@@ -124,7 +149,23 @@ def ingest_telemetry(
             # tested. See test_training_poisoning.py. One extra write, and only
             # for IPs that were actually anomalous.
             TelemetryEventsTable(resource).mark_flagged(tenant_id, v.remote_addr, bucket)
+            # The product's memory. Wrapped because this is reporting and
+            # ingest is the product: a throttled history write during an
+            # attack must not stop the agent receiving the decision it needs
+            # to enforce. See test_history_on_ingest.py.
+            _try_history(history.record_decision, tenant_id, v.remote_addr,
+                         hour_start=hour_start, tier=int(tier), now=int(now),
+                         score=score, z=state.z)
             decisions.append(state)
+
+    # One atomic ADD per batch, not per IP. This is the only unconditional
+    # write this feature adds to the ingest path, and the ingest quota caps
+    # the whole account at ~0.39 batches/second, so it is ~0.39 WCU
+    # sustained against a table provisioned at 2.
+    _try_history(history.record_traffic, tenant_id, hour_start=hour_start,
+                 requests=len(batch.logs),
+                 tier1=sum(1 for d in decisions if d.tier == 1),
+                 tier2=sum(1 for d in decisions if d.tier >= 2))
 
     return TelemetryResponse(
         received=len(batch.logs), processed_ips=len(touched_ips), decisions=decisions,
