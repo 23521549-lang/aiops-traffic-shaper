@@ -28,7 +28,15 @@ def list_mitigations(tenant_id: str = Depends(dashboard_auth),
 def list_whitelist(tenant_id: str = Depends(dashboard_auth),
                     resource=Depends(get_dynamo_resource)) -> WhitelistEntry:
     items = WhitelistTable(resource).query_by_tenant(tenant_id)
-    return WhitelistEntry(whitelisted_ips=[i["ip"] for i in items])
+    return WhitelistEntry(
+        whitelisted_ips=[i["ip"] for i in items],
+        # The form has always collected a reason and stored it; nothing ever
+        # read it back, so the field hint promised a column that could not
+        # exist. Carried here rather than in a second call because the rows
+        # are already in memory.
+        entries=[{"ip": i["ip"], "reason": i.get("reason", ""),
+                  "added_at": i.get("added_at", "")} for i in items],
+    )
 
 
 @router.post("/dashboard/v1/whitelist", dependencies=[Depends(verify_csrf_if_cookie_auth)])

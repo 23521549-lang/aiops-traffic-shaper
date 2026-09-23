@@ -10,7 +10,7 @@
   <a href="/" class="lp-brand">{{ brand.lockup(22) }}</a>
   <nav class="lp-nav" aria-label="Primary">
     <a href="#how">How it works</a>
-    <a href="#sigma">σ</a>
+    <a href="#sigma">What sigma means</a>
     <a href="#pricing">Pricing</a>
     <a href="/ui/login" class="btn btn-sm">Sign in</a>
   </nav>
@@ -194,12 +194,14 @@
 
   <div class="card">
     <h3>A flood costs us the same as a trickle.</h3>
+    <div class="table-scroll" tabindex="0" role="region" aria-label="Cost per batch by log volume">
     <table>
       <tbody>
         <tr><th scope="row">20 log lines from 10 IPs</th><td class="num">12 DynamoDB writes</td></tr>
         <tr><th scope="row">200 log lines from 10 IPs</th><td class="num">12 DynamoDB writes</td></tr>
       </tbody>
     </table>
+    </div>
     <p class="field-hint stack-sm">
       That is why this is free, and there is a test that fails if it stops
       being true.
@@ -214,8 +216,9 @@
     <li><strong>No external tenant has used it.</strong> It is deployed, the
         full loop has run end to end on production against our own demo
         tenant, and no one else has registered. You would be first.</li>
-    <li><strong>No hosted sign-in.</strong> You paste a Cognito ID token into
-        the login box. A real OAuth flow is a known gap, not an oversight.</li>
+    <li><strong>No single sign-on.</strong> You sign in with an email and a
+        password. There is no OAuth, no SAML and no SCIM, so there is no way
+        to attach this to your company directory.</li>
     <li><strong>No edge rate limiting.</strong> We dropped API Gateway to stay
         inside the free tier, and we did not get that back.</li>
     <li><strong>Throttling is coarse.</strong> At 100% of the day’s free-tier
@@ -263,9 +266,9 @@ traffic-shaper register \
 
 traffic-shaper run</code></pre>
   <p class="muted">
-    Get <code>$ID_TOKEN</code> from the console after signing in. The agent
-    writes its credentials to <code>~/.traffic-shaper/config.json</code> and
-    needs nothing else.
+    Get the token from Detection model in the console after signing in. The
+    agent writes its credentials to
+    <code>~/.traffic-shaper/config.json</code> and needs nothing else.
   </p>
   <p>
     <strong>Nothing is enforced on day one.</strong> Until your first model

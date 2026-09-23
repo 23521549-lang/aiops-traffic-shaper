@@ -51,6 +51,25 @@
       {% if stale_count %}<span class="nav-count" data-tone="alarm">{{ stale_count }} stale</span>{% endif %}
     </a>
     {% endif %}
+    <div class="sidebar-footer">
+      {# The theme was built, measured and tested, and no template ever
+         referenced the route, so no user could reach it. Three buttons in
+         one form: no script, no inline style, works with JS off. #}
+      {# Three separate forms, each posting to a URL that already carries
+         its value. A single form with named buttons would send a
+         form-encoded BODY, and a body through CloudFront's OAC needs a
+         payload hash only signed-post.js can compute. Body-less POSTs need
+         none, which is what lets this work with no script at all. #}
+      <div class="theme-toggle" role="group" aria-label="Colour theme">
+        {% for value, label in [('light', 'Light'), ('dark', 'Dark'), ('system', 'Auto')] %}
+        <form method="post"
+              action="/ui/prefs/theme?theme={{ value }}&next_url={{ request.url.path }}">
+          <button type="submit" class="theme-opt"
+                  {% if (theme or 'system') == value %}aria-pressed="true"{% endif %}>{{ label }}</button>
+        </form>
+        {% endfor %}
+      </div>
+    </div>
   </nav>
 
   <div class="main">

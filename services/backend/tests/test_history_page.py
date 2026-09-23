@@ -61,6 +61,11 @@ def test_repeated_decisions_read_as_one_episode_with_a_count(
     page = client.get("/dashboard/ui/history").text
     assert page.count("198.51.100.66") == 1
     assert "7 blocked" in page
+    # The count was printed twice, so the cell read "7 7 blocked". The
+    # assertion above passed throughout, because the substring it looks for
+    # was genuinely present. Only a screenshot showed it. Pin the whole
+    # cell, not a fragment of it.
+    assert "7 7" not in page
 
 
 def test_severity_is_shown_in_sigma_not_raw_score(dynamo_resource, cognito_test_keys):

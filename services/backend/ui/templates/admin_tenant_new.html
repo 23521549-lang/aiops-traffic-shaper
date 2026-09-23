@@ -24,8 +24,7 @@
       <input type="text" id="t-name" name="name" required
              aria-describedby="t-name-hint">
       <span class="field-hint" id="t-name-hint">
-        Shown in this console. The field whose absence 500'd both admin
-        pages when a tenant was written by hand.
+        Shown in this console and in the tenant list.
       </span>
     </div>
 
@@ -39,9 +38,13 @@
       </span>
     </div>
 
-    <p class="field-hint">
-      Tenant id: <code>{{ new_tenant_id }}</code>
-    </p>
+    <div class="field stack-md">
+      <span class="field-label">Tenant id</span>
+      <code class="field-static">{{ new_tenant_id }}</code>
+      <span class="field-hint">
+        Generated for you. The agent uses this when it registers.
+      </span>
+    </div>
 
     <button type="submit" class="btn btn-primary">Create tenant</button>
     <a href="/admin/ui/tenants" class="btn">Cancel</a>

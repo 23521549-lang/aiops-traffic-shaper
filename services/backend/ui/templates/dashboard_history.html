@@ -90,13 +90,18 @@
           <td class="num">{{ e.severity }}</td>
           {# Not a bare count: "17 decisions" alone reads like 17 separate
              attacks. The split is what shows an escalation. #}
+          {# The total and the breakdown were both printed, so a row with
+             four blocks read "4 4 blocked". Caught by looking at a
+             screenshot; the test asserted the substring "4 blocked" was
+             present, which it was. #}
           <td class="num">
-            {{ e.decisions }}
-            <span class="field-hint">
-              {%- if e.tier2 %}{{ e.tier2 }} blocked{% endif -%}
-              {%- if e.tier2 and e.tier1 %}, {% endif -%}
-              {%- if e.tier1 %}{{ e.tier1 }} slowed{% endif -%}
-            </span>
+            {%- if e.tier2 and e.tier1 -%}
+              {{ e.tier2 }} blocked, {{ e.tier1 }} slowed
+            {%- elif e.tier2 -%}
+              {{ e.tier2 }} blocked
+            {%- else -%}
+              {{ e.tier1 }} slowed
+            {%- endif -%}
           </td>
         </tr>
         {% endfor %}

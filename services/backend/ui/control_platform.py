@@ -26,7 +26,7 @@ from services.backend.api.routes.admin_usage import usage as usage_report
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.usage import _DAILY_REQUEST_CEILING, tenant_requests_today
 from services.backend.ui.csrf import CSRF_COOKIE_NAME, verify_csrf
-from services.backend.ui.presenters import humanise_age, usage_share
+from services.backend.ui.presenters import humanise_age, timestamp_pair, usage_share
 from services.backend.ui.templates_env import templates
 
 router = APIRouter()
@@ -107,15 +107,19 @@ def _tenants_ctx(resource) -> dict:
     rows = []
     for t in tenants:
         used = tenant_requests_today(resource, t.tenant_id)
-        rows.append({"tenant": t, "used": used})
+        rows.append({"tenant": t, "used": used,
+                     "registered": timestamp_pair(t.created_at)})
     return {"tenants": rows, "tenant_count": len(tenants)}
 
 
 @router.get("/admin/ui/agents", response_class=HTMLResponse,
             dependencies=[Depends(admin_auth)])
-def agents_page(request: Request, status: str = "active",
+def agents_page(request: Request, status: str = "stale",
                 resource=Depends(get_dynamo_resource)):
-    status = status if status in _FILTERS else "active"
+    # Opens on the filter the sidebar is shouting about. The page used to
+    # default to "active" while the nav said "8 stale" in red, so clicking
+    # the problem produced a blank card.
+    status = status if status in _FILTERS else "stale"
     now = datetime.now(timezone.utc)
     rows = _agent_rows(list_agents(status=status, resource=resource), now)
     return templates.TemplateResponse(request, "admin_agents.html", _shell(

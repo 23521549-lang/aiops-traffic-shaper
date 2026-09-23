@@ -158,3 +158,31 @@ def usage_share(used: int, ceiling: int) -> dict:
     pct = (used / ceiling * 100) if ceiling else 0.0
     return {"used": used, "ceiling": ceiling, "pct": pct,
             "pct_label": f"{pct:.1f}%" if pct < 10 else f"{pct:.0f}%"}
+
+
+def timestamp_pair(raw, now: datetime | None = None) -> dict:
+    """Absolute for the ticket, relative for the glance.
+
+    The Tenants table was rendering `2026-09-14T09:20:41.139654+00:00`, five
+    times, microseconds included. Nothing about a microsecond offset answers
+    a question a person has, and a raw machine timestamp on a customer-facing
+    screen reads as "nobody looked at this". `humanise_age` was already in
+    this file and already used on another page.
+
+    The exact value survives in a title attribute, because someone pasting a
+    row into a ticket does need it.
+    """
+    now = now or datetime.now(timezone.utc)
+    if not raw:
+        return {"label": "unknown", "relative": "", "exact": ""}
+    try:
+        dt = (datetime.fromtimestamp(int(raw), tz=timezone.utc)
+              if isinstance(raw, (int, float))
+              else datetime.fromisoformat(str(raw).replace("Z", "+00:00")))
+    except (ValueError, OSError):
+        return {"label": "unknown", "relative": "", "exact": str(raw)}
+    return {
+        "label": dt.strftime("%d %b %Y"),
+        "relative": humanise_age((now - dt).total_seconds()),
+        "exact": dt.isoformat(timespec="seconds"),
+    }

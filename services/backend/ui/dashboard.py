@@ -28,6 +28,7 @@ from services.backend.schemas.whitelist import WhitelistRequest
 from services.backend.ui.csrf import CSRF_COOKIE_NAME, verify_csrf
 from services.backend.ui.presenters import (
     absolute_expiry, agent_health, relative_expiry, severity_detail, tier_css, tier_label,
+    timestamp_pair,
 )
 from services.backend.ui.templates_env import templates
 
@@ -46,6 +47,17 @@ def _rows(mitigations, now):
         "score": m.score,
         "z": m.z,
     } for m in mitigations]
+
+
+def _whitelist_rows(whitelist):
+    """The form has always asked for a reason. Nothing displayed it, so the
+    field hint promised a column that did not exist."""
+    return [{
+        "ip": e.get("ip", ""),
+        "reason": e.get("reason", ""),
+        "added": timestamp_pair(e.get("added_at"))["label"],
+        "added_exact": timestamp_pair(e.get("added_at"))["exact"],
+    } for e in whitelist.entries]
 
 
 def _shell(request, tenant_id, active, **extra):
@@ -85,7 +97,8 @@ def whitelist_page(request: Request, tenant_id: str = Depends(dashboard_auth),
     whitelist = list_whitelist(tenant_id=tenant_id, resource=resource)
     return templates.TemplateResponse(request, "dashboard_whitelist.html", _shell(
         request, tenant_id, "whitelist",
-        whitelist=whitelist.whitelisted_ips, whitelist_count=len(whitelist.whitelisted_ips),
+        whitelist=_whitelist_rows(whitelist),
+        whitelist_count=len(whitelist.whitelisted_ips),
     ))
 
 
@@ -144,7 +157,7 @@ def add_whitelist_ui(request: Request, ip: str, reason: str = "",
         error = f"“{ip}” is not a valid IP address."
     whitelist = list_whitelist(tenant_id=tenant_id, resource=resource)
     return templates.TemplateResponse(request, "_whitelist_table.html", {
-        "whitelist": whitelist.whitelisted_ips, "error": error, "message": message,
+        "whitelist": _whitelist_rows(whitelist), "error": error, "message": message,
     })
 
 
@@ -155,7 +168,7 @@ def remove_whitelist_ui(request: Request, ip: str, tenant_id: str = Depends(dash
     remove_whitelist(ip, tenant_id=tenant_id, resource=resource)
     whitelist = list_whitelist(tenant_id=tenant_id, resource=resource)
     return templates.TemplateResponse(request, "_whitelist_table.html", {
-        "whitelist": whitelist.whitelisted_ips,
+        "whitelist": _whitelist_rows(whitelist),
         "message": f"{ip} removed. It will be checked like any other IP from now on.",
     })
 

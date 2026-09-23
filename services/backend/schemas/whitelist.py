@@ -16,3 +16,6 @@ class WhitelistRequest(BaseModel):
 
 class WhitelistEntry(BaseModel):
     whitelisted_ips: list[str]
+    # Kept alongside the flat id list rather than replacing it: the
+    # agent CLI and the JSON API both consume whitelisted_ips.
+    entries: list[dict] = []

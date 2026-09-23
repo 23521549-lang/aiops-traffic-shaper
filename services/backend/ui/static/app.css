@@ -793,3 +793,85 @@ input[type=text], input[type=password], select {
 }
 .err-card h1 { font-size: var(--text-xl); margin: var(--s3) 0 var(--s2); }
 .err-actions { display: flex; gap: var(--s2); justify-content: center; margin: var(--s5) 0 var(--s3); }
+
+/* --- corrections found by screenshot, not by test --------------------- */
+
+/* `.num` means "this cell holds numerals": tabular figures, right-aligned,
+ * never wrapped. A prose sentence was wearing that class, so
+ * "Far outside your normal · 6.4σ" could not wrap at ANY width and pushed
+ * the table past the viewport. On a 390px screen that carried the "Allow
+ * this IP" button off the right edge, which made the single most urgent
+ * action in the product unreachable on a phone. */
+.num { white-space: normal; }
+.num-nowrap { white-space: nowrap; }
+.severity { color: var(--text); }
+@media (max-width: 720px) { .severity { min-width: 14ch; } }
+
+/* A column flex container whose child has a min-content wider than the
+ * viewport produces page-level horizontal scroll. Block layout cannot. */
+@media (max-width: 720px) {
+  .app-shell { display: block; }
+  .sidebar, .main, .content, .card, .table-scroll { min-width: 0; max-width: 100%; }
+}
+.sigma-scale span { min-width: 0; }
+@media (max-width: 520px) {
+  .sigma-scale { font-size: 10px; }
+  .sigma-scale span { padding: 5px 6px; }
+}
+
+/* The cards barely existed: --border was 1.29:1 against --surface, so a card
+ * read as a floating rectangle rather than a bounded region. Still
+ * decorative, still far below the 3:1 that 1.4.11 asks of an interactive
+ * boundary, and test_contrast.py does not assert on it because it is never
+ * a foreground. */
+:root { --border: #d3dbe4; }
+
+/* Row hover was --bg on --surface: a 1.10:1 change. That is not a hover
+ * state, it is a rumour. --surface-sunken is already in the token set and
+ * already measured with --text-muted on it at 5.37:1. */
+tbody tr:hover { background: var(--surface-sunken); }
+tbody tr[aria-selected="true"] { background: var(--accent-subtle); }
+
+/* Carbon's md density is 40px with 14px text. The tables were at ~34px,
+ * denser than anything in Carbon except xs, on pages that were 70% empty.
+ * The problem was never density. */
+td, th[scope="row"], th { padding: 10px 12px; }
+
+/* Every console screenshot sits visibly off-centre: 28px from the sidebar
+ * and 69px from the right edge, because max-width had no auto margin. */
+.content { padding: 24px 32px 64px; max-width: 1440px; margin-inline: auto; }
+
+/* Email and Password rendered at different heights on the login card: no
+ * explicit height, so the 2px focus outline plus its offset changed the
+ * focused field's optical box. The min-width also belongs on the field, not
+ * the control, or the control cannot shrink inside a narrow form. */
+input[type=text], input[type=password], input[type=email], select {
+  height: 38px; padding: 0 12px; min-width: 0;
+}
+.field { min-width: 220px; }
+.field-label {
+  font-size: var(--text-sm); font-weight: 600; color: var(--text-muted);
+}
+.field-static {
+  font-family: var(--font-mono); font-size: var(--text-base);
+  background: var(--surface-sunken); border: 1px solid var(--border);
+  border-radius: var(--r2); padding: 8px 10px; display: inline-block;
+}
+
+/* --- theme toggle ----------------------------------------------------- */
+
+/* A complete, measured, tested dark theme shipped with no way to turn it
+ * on: the route existed, the tests passed, and zero templates referenced
+ * it. Three buttons in one form, no script, no inline style. */
+.theme-toggle {
+  display: flex; gap: 2px; padding: 2px; border-radius: var(--r2);
+  background: var(--surface-sunken); border: 1px solid var(--border);
+}
+.theme-toggle form { flex: 1; display: flex; }
+.theme-opt {
+  flex: 1; border: 0; background: transparent; color: var(--text-muted);
+  font-family: var(--font-sans); font-size: var(--text-sm); font-weight: 600;
+  padding: 6px 4px; border-radius: var(--r1); cursor: pointer;
+}
+.theme-opt[aria-pressed="true"] { background: var(--surface); color: var(--text); }
+.theme-opt:hover { color: var(--text); }

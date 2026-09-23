@@ -84,9 +84,14 @@ def landing(request: Request, id_token: str | None = Cookie(default=None)):
 
 
 @router.post("/ui/prefs/theme")
-def set_theme(response: Response, theme: str = "system",
-              next_url: str = "/"):
+def set_theme(response: Response, theme: str = "system", next_url: str = "/"):
     """Theme as a cookie, rendered by the server into `data-theme`.
+
+    The three buttons post to three URLs that carry the value in the query
+    string, so the request has no body. A form-encoded body would need
+    CloudFront's x-amz-content-sha256 payload hash (ADR-005), which only
+    signed-post.js can compute, and the whole point of this control is that
+    it works with no script at all.
 
     This is the only implementation possible under `script-src 'self'` with
     no inline script. The usual approach is a small `<script>` in `<head>`

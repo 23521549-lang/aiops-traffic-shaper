@@ -31,7 +31,10 @@
            and read back by nothing, so the Suspend button was a lever with
            no aim. #}
         <td class="num">{{ row.used }}</td>
-        <td class="num">{{ row.tenant.created_at }}</td>
+        <td class="num num-nowrap" title="{{ row.registered.exact }}">
+          {{ row.registered.label }}
+          <span class="field-hint">{{ row.registered.relative }}</span>
+        </td>
         <td class="cell-actions">
           {% if row.tenant.status == "suspended" %}
           <button type="button" class="btn btn-sm"

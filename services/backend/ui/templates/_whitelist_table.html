@@ -10,22 +10,29 @@
     <thead>
       <tr>
         <th scope="col">IP address</th>
+        <th scope="col">Reason</th>
+        <th scope="col">Added</th>
         <th scope="col"><span class="sr-only">Actions</span></th>
       </tr>
     </thead>
     <tbody>
-      {% for ip in whitelist %}
+      {% for entry in whitelist %}
       <tr>
-        <th scope="row"><code>{{ ip }}</code></th>
+        <th scope="row"><code>{{ entry.ip }}</code></th>
+        <td>
+          {%- if entry.reason -%}{{ entry.reason }}
+          {%- else -%}<span class="field-hint">No reason given</span>{%- endif -%}
+        </td>
+        <td class="num num-nowrap" title="{{ entry.added_exact }}">{{ entry.added }}</td>
         <td class="cell-actions">
           {# aria-label, not just "Remove": a screen-reader user listing the
              buttons on this page otherwise hears "Remove, Remove, Remove"
              with no way to tell them apart. #}
           <button type="button" class="btn btn-danger btn-sm"
-                  hx-delete="/dashboard/ui/whitelist/{{ ip }}"
+                  hx-delete="/dashboard/ui/whitelist/{{ entry.ip }}"
                   hx-target="#whitelist-table" hx-swap="innerHTML"
-                  hx-confirm="Remove {{ ip }} from your allowed list? It will be checked like any other IP from the next request onward, and may be slowed or blocked again within seconds."
-                  aria-label="Remove {{ ip }} from allowed list">
+                  hx-confirm="Remove {{ entry.ip }} from your allowed list? It will be checked like any other IP from the next request onward, and may be slowed or blocked again within seconds."
+                  aria-label="Remove {{ entry.ip }} from allowed list">
             Remove
           </button>
         </td>
