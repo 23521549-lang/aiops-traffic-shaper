@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from services.backend.api.cognito_auth import admin_auth
 from services.backend.core.dynamo import get_dynamo_resource
+from services.backend.ui.csrf import verify_csrf_if_cookie_auth
 from services.backend.core.tables import AgentsTable, TelemetryEventsTable, TenantsTable
 from services.backend.schemas.admin import AgentSummary, Tenant
 
@@ -36,7 +37,8 @@ def list_agents(status: str = "active", resource=Depends(get_dynamo_resource),
     return [AgentSummary(**item) for item in items]
 
 
-@router.post("/admin/v1/tenants/{tenant_id}/suspend", dependencies=[Depends(admin_auth)])
+@router.post("/admin/v1/tenants/{tenant_id}/suspend",
+             dependencies=[Depends(admin_auth), Depends(verify_csrf_if_cookie_auth)])
 def suspend_tenant(tenant_id: str, resource=Depends(get_dynamo_resource)) -> dict:
     if not TenantsTable(resource).suspend(tenant_id):
         raise HTTPException(status_code=404, detail="Tenant not found")
@@ -47,7 +49,8 @@ def suspend_tenant(tenant_id: str, resource=Depends(get_dynamo_resource)) -> dic
     return {"message": f"tenant {tenant_id} suspended", "agents_revoked": revoked}
 
 
-@router.post("/admin/v1/tenants/{tenant_id}/reactivate", dependencies=[Depends(admin_auth)])
+@router.post("/admin/v1/tenants/{tenant_id}/reactivate",
+             dependencies=[Depends(admin_auth), Depends(verify_csrf_if_cookie_auth)])
 def reactivate_tenant(tenant_id: str, resource=Depends(get_dynamo_resource)) -> dict:
     """Undo a suspension. Until this existed suspension was one-way, short of
     editing DynamoDB by hand.
@@ -66,7 +69,7 @@ def reactivate_tenant(tenant_id: str, resource=Depends(get_dynamo_resource)) -> 
 
 
 @router.post("/admin/v1/tenants/{tenant_id}/training-exclude/{ip}",
-             dependencies=[Depends(admin_auth)])
+             dependencies=[Depends(admin_auth), Depends(verify_csrf_if_cookie_auth)])
 def exclude_ip_from_training(tenant_id: str, ip: str,
                              resource=Depends(get_dynamo_resource)) -> dict:
     """Stop the nightly retrain learning from this IP's traffic.

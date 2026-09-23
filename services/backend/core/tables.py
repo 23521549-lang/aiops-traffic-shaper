@@ -1,3 +1,4 @@
+import time
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -340,6 +341,24 @@ class WhitelistTable(_SimpleTable):
 class MitigationStateTable(_SimpleTable):
     _table_name = "MitigationState"
     _key_names = ("tenant_id", "ip")
+
+    def query_active(self, tenant_id: str, now: int | None = None) -> list[dict]:
+        """Rows whose enforcement is still in force.
+
+        DynamoDB TTL deletes lazily — AWS documents "typically within 48
+        hours" of the expiry time, not at it — so an expired row stays
+        queryable long after it stopped applying. A 300-second rate limit
+        was being listed under the word "Active" for up to two days. The
+        filter is applied client-side on purpose: the rows are already in
+        memory from the tenant query, so it costs no extra read capacity,
+        and a FilterExpression would not have saved any either.
+
+        `expires_at` of 0 means "no expiry set" and is kept, rather than
+        being read as the epoch and treated as long past.
+        """
+        now = now if now is not None else int(time.time())
+        return [r for r in self.query_by_tenant(tenant_id)
+                if not r.get("expires_at") or int(r["expires_at"]) > now]
 
 
 class TelemetryEventsTable(_SimpleTable):

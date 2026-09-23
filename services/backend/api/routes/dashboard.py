@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from services.backend.api.cognito_auth import dashboard_auth
 from services.backend.core.dynamo import get_dynamo_resource
+from services.backend.ui.csrf import verify_csrf_if_cookie_auth
 from services.backend.core.tables import MitigationStateTable, ModelsTable, WhitelistTable
 from services.backend.schemas.mitigation import MitigationState
 from services.backend.schemas.whitelist import WhitelistEntry, WhitelistRequest
@@ -15,7 +16,7 @@ router = APIRouter()
 @router.get("/dashboard/v1/mitigations", response_model=list[MitigationState])
 def list_mitigations(tenant_id: str = Depends(dashboard_auth),
                       resource=Depends(get_dynamo_resource)) -> list[MitigationState]:
-    items = MitigationStateTable(resource).query_by_tenant(tenant_id)
+    items = MitigationStateTable(resource).query_active(tenant_id)
     return [MitigationState(**item) for item in items]
 
 
@@ -26,7 +27,7 @@ def list_whitelist(tenant_id: str = Depends(dashboard_auth),
     return WhitelistEntry(whitelisted_ips=[i["ip"] for i in items])
 
 
-@router.post("/dashboard/v1/whitelist")
+@router.post("/dashboard/v1/whitelist", dependencies=[Depends(verify_csrf_if_cookie_auth)])
 def add_whitelist(body: WhitelistRequest, tenant_id: str = Depends(dashboard_auth),
                    resource=Depends(get_dynamo_resource)) -> dict:
     # NOTE: docs/api-contract.md's WhitelistRequest carries a `reason`
@@ -56,7 +57,7 @@ def add_whitelist(body: WhitelistRequest, tenant_id: str = Depends(dashboard_aut
     return {"message": f"{body.ip} added to whitelist"}
 
 
-@router.delete("/dashboard/v1/whitelist/{ip}")
+@router.delete("/dashboard/v1/whitelist/{ip}", dependencies=[Depends(verify_csrf_if_cookie_auth)])
 def remove_whitelist(ip: str, tenant_id: str = Depends(dashboard_auth),
                       resource=Depends(get_dynamo_resource)) -> dict:
     table = WhitelistTable(resource)

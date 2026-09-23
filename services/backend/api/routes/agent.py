@@ -136,5 +136,5 @@ def list_decisions(
     tenant_id: str = Depends(agent_auth),
     resource=Depends(get_dynamo_resource),
 ) -> list[MitigationState]:
-    items = MitigationStateTable(resource).query_by_tenant(tenant_id)
+    items = MitigationStateTable(resource).query_active(tenant_id)
     return [MitigationState(**item) for item in items]
