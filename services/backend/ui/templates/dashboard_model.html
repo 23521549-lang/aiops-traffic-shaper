@@ -1,59 +1,57 @@
 {% extends "app_shell.html" %}
 {% block title %}Detection model · Traffic Shaper{% endblock %}
 {% block page_title %}Detection model{% endblock %}
-{% block page_subtitle %}Tenant: {{ tenant_id }}{% endblock %}
+{% block page_summary %}
+{% if model.model_ready %}version {{ model.version }} · {{ model.training_samples }} training samples · retrained nightly
+{% else %}no model yet, collecting a baseline{% endif %}
+{% endblock %}
 {% block page_content %}
 
-<div class="card">
-  <h2>Your model</h2>
+<div class="c-list">
   {% if model.model_ready %}
-  <div class="card-sub">Retrained nightly on your own traffic.</div>
-  <div class="card-grid">
-    <div class="stat">
-      <div class="stat-value">{{ model.version }}</div>
-      <div class="stat-label">Version</div>
+  <div class="c-panel">
+    <div class="c-section-label">Current model</div>
+    <div class="c-figures">
+      <div class="c-figure">
+        <div class="c-figure-value">{{ model.version }}</div>
+        <div class="c-figure-label">Version</div>
+      </div>
+      <div class="c-figure">
+        <div class="c-figure-value">{{ model.training_samples }}</div>
+        <div class="c-figure-label">Training samples</div>
+      </div>
     </div>
-    <div class="stat">
-      <div class="stat-value">{{ model.training_samples }}</div>
-      <div class="stat-label">Training samples</div>
-    </div>
+    <p class="c-summary">Trained {{ model.trained_at }}</p>
   </div>
-  <p class="card-sub flush">Trained at {{ model.trained_at }}</p>
+
+  {% if thresholds %}
+  <div class="c-panel">
+    <div class="c-section-label">Sensitivity</div>
+    <dl class="c-kv">
+      <dt>Slow a source at</dt><dd>4.0σ · score {{ "%.4f"|format(thresholds.slow) }}</dd>
+      <dt>Block a source at</dt><dd>5.0σ · score {{ "%.4f"|format(thresholds.block) }}</dd>
+    </dl>
+    <p class="c-summary">
+      These thresholds move with your traffic. Each night of retraining
+      recalculates what normal means for your site, which is why a raw
+      anomaly score is not comparable between two nights and why this product
+      reports distance from your own baseline instead.
+    </p>
+    <p class="c-summary">
+      False-positive rates for these thresholds were measured on modelled
+      traffic, not yet on live customer traffic.
+    </p>
+  </div>
+  {% endif %}
+
   {% else %}
-  {# "Shadow mode" is internal vocabulary. No customer knows what it means,
-     and the old copy gave them no idea how long it lasts. #}
-  <div class="empty-state">
-    <h3>Learning what your normal traffic looks like</h3>
+  <div class="c-empty-state">
+    <strong>Learning what your normal looks like</strong>
     <p>
-      We’re watching but not blocking yet. Until your first model is trained,
-      you see everything we see and we change nothing.
+      The product is watching and changing nothing. Until your first model is
+      trained you see everything it sees. That usually takes one night.
     </p>
   </div>
   {% endif %}
 </div>
-
-{% if thresholds %}
-<div class="card">
-  <h2>Sensitivity</h2>
-  <div class="card-sub">What “unusual” currently means for your site.</div>
-  <p>
-    We slow an IP when its behaviour is <strong>4σ</strong> outside your
-    normal, and block it at <strong>5σ</strong>. For your current model that
-    works out to an anomaly score below
-    <code>{{ "%.3f"|format(thresholds.slow) }}</code> (slowed) or
-    <code>{{ "%.3f"|format(thresholds.block) }}</code> (blocked).
-  </p>
-  <p class="field-hint">
-    These thresholds move with your traffic. Each night’s retraining
-    recalculates what normal means for your site. That is why a raw anomaly
-    score is not comparable between two nights, and why this page reports
-    distance from your own baseline instead.
-  </p>
-  <p class="field-hint">
-    False-positive rates for these thresholds were measured on modelled
-    traffic, not yet on live customer traffic.
-  </p>
-</div>
-{% endif %}
-
 {% endblock %}

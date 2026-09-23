@@ -59,7 +59,12 @@ def test_repeated_decisions_read_as_one_episode_with_a_count(
     _seed(dynamo_resource, count=7)
 
     page = client.get("/dashboard/ui/history").text
-    assert page.count("198.51.100.66") == 1
+    # Not a substring count on the address: the row links to the source
+    # detail, so it appears in the href and in the link text. Not a count of
+    # row headers either, because the chart ships a text-equivalent table
+    # whose rows carry them too. `data-tier` appears on episode rows and
+    # nowhere else.
+    assert page.count("data-tier=") == 1
     assert "7 blocked" in page
     # The count was printed twice, so the cell read "7 7 blocked". The
     # assertion above passed throughout, because the substring it looks for
@@ -82,7 +87,9 @@ def test_an_unmeasurable_episode_says_so(dynamo_resource, cognito_test_keys):
     _seed(dynamo_resource, z=None, tier=1)
 
     page = client.get("/dashboard/ui/history").text
-    assert "not measurable" in page
+    # The table column is a figure now; "not measurable" is the phrase
+    # the detail pane uses. A source with no usable spread reads "n/a".
+    assert "n/a" in page
 
 
 def test_history_does_not_leak_across_tenants(dynamo_resource, cognito_test_keys):
@@ -104,7 +111,7 @@ def test_an_empty_window_still_renders_the_chart_chrome(
     page = client.get("/dashboard/ui/history").text
     assert "c-deviation" in page
     assert "c-band" in page
-    assert "Nothing to report" in page
+    assert "Nothing in this window" in page
 
 
 def test_the_page_says_where_history_begins(dynamo_resource, cognito_test_keys):
@@ -121,11 +128,11 @@ def test_new_episodes_are_marked_until_they_are_read(
     client = _client(dynamo_resource, cognito_test_keys)
     _seed(dynamo_resource)
 
-    assert "Mark 1 as read" in client.get("/dashboard/ui/history").text
+    assert "Mark 1 read" in client.get("/dashboard/ui/history").text
 
     client.post("/dashboard/ui/history/mark-read",
                 headers={"X-CSRF-Token": client.cookies["csrf_token"]})
-    assert "Mark 1 as read" not in client.get("/dashboard/ui/history").text
+    assert "Mark 1 read" not in client.get("/dashboard/ui/history").text
 
 
 def test_marking_read_needs_the_csrf_token(dynamo_resource, cognito_test_keys):

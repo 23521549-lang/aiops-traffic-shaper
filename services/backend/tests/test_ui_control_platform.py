@@ -41,7 +41,7 @@ def test_control_platform_shows_ceiling_warning_banner(dynamo_resource, cognito_
     client = _client(dynamo_resource, cognito_test_keys)
     UsageCountersTable(dynamo_resource).put(date=_today(), total_requests=999999, estimated_gb_seconds=0.0)
     resp = client.get("/admin/ui")
-    assert "approaching today" in resp.text
+    assert "approaching the Always-Free ceiling" in resp.text
 
 
 def test_suspend_tenant_via_ui(dynamo_resource, cognito_test_keys):

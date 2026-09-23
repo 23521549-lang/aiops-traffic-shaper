@@ -1,71 +1,78 @@
 {% extends "app_shell.html" %}
 {% block title %}Overview · Traffic Shaper{% endblock %}
 {% block page_title %}Overview{% endblock %}
-{% block page_subtitle %}Publisher view{% endblock %}
+{% block page_summary %}
+{{ share.pct_label }} of today free-tier share · {{ tenant_count }} tenant{{ 's' if tenant_count != 1 }} · {{ live_count }} agent{{ 's' if live_count != 1 }} reporting
+{% endblock %}
 {% block page_content %}
 
-{% if usage.ceiling_warning %}
-<div class="alert alert-warning">
-  <strong>Usage is approaching today’s Always-Free ceiling.</strong>
-  See the breakdown below before this turns into a real AWS bill.
-</div>
-{% endif %}
+<div class="c-list">
 
-{% if live_count == 0 %}
-{# The loudest state in the product. This used to render as the grey null
-   result "No agents with this status." #}
-<div class="alert alert-danger">
-  <strong>No agents are reporting.</strong>
-  Every tenant is currently unprotected.
-</div>
-{% endif %}
+  {# Two independent alarms, both rendered. An earlier version put the cost
+     warning in an elif, so a fleet with no agents reporting silently
+     swallowed the news that the free tier was about to run out. They are not
+     alternatives to each other. #}
+  {% if live_count == 0 or usage.ceiling_warning %}
+  <div class="c-panel">
+    {% if live_count == 0 %}
+    <div class="alert alert-danger">
+      <strong>No agents are reporting.</strong>
+      Every tenant is currently unprotected.
+    </div>
+    {% endif %}
+    {% if usage.ceiling_warning %}
+    <div class="alert alert-warning">
+      <strong>Usage is approaching the Always-Free ceiling.</strong>
+      Telemetry is refused for the rest of the UTC day at 100 percent.
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
 
-<div class="card">
-  <h2>Today</h2>
-  <div class="card-sub">{{ usage.date }} · resets at midnight UTC</div>
-  <div class="card-grid">
-    <div class="stat">
-      {# Never a bare number. A count with no denominator cannot tell the
-         operator whether to worry. #}
-      <div class="stat-value">{{ share.pct_label }}</div>
-      <div class="stat-label">Of today’s free-tier share</div>
-      <div class="meter stack-sm" {% if usage.ceiling_warning %}data-tone="warn"{% endif %}
-           role="img" aria-label="{{ share.used }} of {{ share.ceiling|int }} requests used today">
-        <span data-width="{{ ((share.pct / 5)|round|int) * 5 }}"></span>
+  <div class="c-panel">
+    <div class="c-section-label">Today · {{ usage.date }} · resets at midnight UTC</div>
+    <div class="c-figures">
+      <div class="c-figure">
+        <div class="c-figure-value">{{ share.pct_label }}</div>
+        <div class="c-figure-label">Of the daily share</div>
+      </div>
+      <div class="c-figure">
+        {# Never a bare count. A number with no denominator cannot tell the
+           operator whether to worry. #}
+        <div class="c-figure-value">{{ share.used }}<span class="c-dim"> / {{ share.ceiling|int }}</span></div>
+        <div class="c-figure-label">Requests</div>
+      </div>
+      <div class="c-figure">
+        <div class="c-figure-value">{{ "%.2f"|format(usage.estimated_gb_seconds) }}</div>
+        <div class="c-figure-label">GB-seconds</div>
       </div>
     </div>
-    <div class="stat">
-      <div class="stat-value">{{ share.used }}<small> / {{ share.ceiling|int }}</small></div>
-      <div class="stat-label">Requests today</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value">{{ "%.2f"|format(usage.estimated_gb_seconds) }}</div>
-      <div class="stat-label">GB-seconds (est.)</div>
+    <div class="meter stack-sm" {% if usage.ceiling_warning %}data-tone="warn"{% endif %}
+         role="img" aria-label="{{ share.used }} of {{ share.ceiling|int }} requests used today">
+      <span data-width="{{ ((share.pct / 5)|round|int) * 5 }}"></span>
     </div>
   </div>
-</div>
 
-<div class="card">
-  <h2>Fleet</h2>
-  <div class="card-sub">Across every tenant.</div>
-  <div class="card-grid">
-    <div class="stat">
-      <div class="stat-value">{{ tenant_count }}</div>
-      <div class="stat-label">Tenants</div>
+  <div class="c-panel">
+    <div class="c-section-label">Fleet</div>
+    <div class="c-figures">
+      <div class="c-figure">
+        <div class="c-figure-value">{{ tenant_count }}</div>
+        <div class="c-figure-label">Tenants</div>
+      </div>
+      <div class="c-figure">
+        <div class="c-figure-value">{{ live_count }}</div>
+        <div class="c-figure-label">Agents reporting</div>
+      </div>
+      <div class="c-figure">
+        <div class="c-figure-value">{{ stale_count }}</div>
+        <div class="c-figure-label">Agents gone quiet</div>
+      </div>
     </div>
-    <div class="stat">
-      <div class="stat-value">{{ live_count }}</div>
-      <div class="stat-label">Agents reporting</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value">{{ stale_count }}</div>
-      <div class="stat-label">Agents gone quiet</div>
-    </div>
+    <p class="c-summary">
+      An agent counts as reporting if it made an authenticated call in the
+      last five minutes.
+    </p>
   </div>
-  <p class="card-sub flush">
-    An agent counts as reporting if it has made an authenticated call in the
-    last five minutes.
-  </p>
 </div>
-
 {% endblock %}

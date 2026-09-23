@@ -1,34 +1,33 @@
 {% extends "app_shell.html" %}
 {% block title %}Allowed IPs · Traffic Shaper{% endblock %}
 {% block page_title %}Allowed IPs{% endblock %}
-{% block page_subtitle %}Tenant: {{ tenant_id }}{% endblock %}
+{% block page_summary %}
+{{ whitelist|length }} address{{ 'es' if whitelist|length != 1 }} exempt from mitigation and from model training
+{% endblock %}
 {% block page_content %}
 
-<div class="card">
-  <div class="card-sub">
-    These are never slowed or blocked, and they are left out of model
-    training, so allowing one will not teach the system that its pattern
-    is normal.
+<div class="c-list">
+  <div class="c-panel">
+    {# data-params-in-url moves the values into the query string, so this
+       POST carries no body and needs no CloudFront payload hash. #}
+    <form class="c-form" data-params-in-url
+          hx-post="/dashboard/ui/whitelist" hx-target="#whitelist-table">
+      <div class="field">
+        <label for="wl-ip">IP address</label>
+        <input type="text" id="wl-ip" name="ip" required aria-describedby="wl-ip-hint">
+        <span class="field-hint" id="wl-ip-hint">A single IPv4 or IPv6 address</span>
+      </div>
+      <div class="field">
+        <label for="wl-reason">Reason</label>
+        <input type="text" id="wl-reason" name="reason" aria-describedby="wl-reason-hint">
+        <span class="field-hint" id="wl-reason-hint">Optional. Shown in the list below.</span>
+      </div>
+      <button type="submit" class="c-btn c-btn--primary">Add</button>
+    </form>
   </div>
-
-  <form class="form-row stack-md" data-params-in-url
-        hx-post="/dashboard/ui/whitelist" hx-target="#whitelist-table">
-    <div class="field">
-      <label for="wl-ip">IP address <span class="req" aria-hidden="true">*</span></label>
-      <input type="text" id="wl-ip" name="ip" required aria-describedby="wl-ip-hint">
-      <span class="field-hint" id="wl-ip-hint">A single IPv4 or IPv6 address, e.g. 203.0.113.4</span>
-    </div>
-    <div class="field">
-      <label for="wl-reason">Reason</label>
-      <input type="text" id="wl-reason" name="reason" aria-describedby="wl-reason-hint">
-      <span class="field-hint" id="wl-reason-hint">Optional. Shown in this list.</span>
-    </div>
-    <button type="submit" class="btn btn-primary">Add to allowed list</button>
-  </form>
 
   <div id="whitelist-table">
     {% include "_whitelist_table.html" %}
   </div>
 </div>
-
 {% endblock %}

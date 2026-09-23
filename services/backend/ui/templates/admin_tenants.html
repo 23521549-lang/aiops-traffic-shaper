@@ -1,23 +1,14 @@
 {% extends "app_shell.html" %}
 {% block title %}Tenants · Traffic Shaper{% endblock %}
 {% block page_title %}Tenants{% endblock %}
-{% block page_subtitle %}Publisher view{% endblock %}
+{% block page_summary %}
+{{ tenant_count }} registered · suspending one revokes every agent key it holds
+{% endblock %}
+{% block page_actions %}
+<a class="c-btn c-btn--primary" href="/admin/ui/tenants/new">New tenant</a>
+{% endblock %}
 {% block page_content %}
-
-<div class="card">
-  <div class="card-head">
-    <div>
-      <h2>Tenants</h2>
-      <div class="card-sub">
-        Suspending a tenant stops its agents being served and revokes their
-        keys immediately.
-      </div>
-    </div>
-    <a href="/admin/ui/tenants/new" class="btn btn-primary">New tenant</a>
-  </div>
-  <div id="tenants-table">
-    {% include "_tenants_table.html" %}
-  </div>
+<div class="c-list" id="tenants-table">
+  {% include "_tenants_table.html" %}
 </div>
-
 {% endblock %}

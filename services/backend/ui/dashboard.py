@@ -23,7 +23,7 @@ from services.backend.api.routes.dashboard import (
 )
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.tables import AgentsTable
-from services.backend.ui.charts import deviation_chart, downsample
+from services.backend.ui.charts import deviation_chart, downsample, sigma_strip
 from services.backend.schemas.whitelist import WhitelistRequest
 from services.backend.ui.csrf import CSRF_COOKIE_NAME, verify_csrf
 from services.backend.ui.presenters import (
@@ -42,10 +42,14 @@ def _rows(mitigations, now):
         "tier_label": tier_label(m.tier),
         "tier_css": tier_css(m.tier),
         "severity": severity_detail(m.z),
+        # The column is scanned, not read: a phrase belongs in the detail
+        # pane, a figure belongs in the table.
+        "sigma_short": f"{abs(m.z):.1f}σ" if m.z is not None else "n/a",
         "expires_label": relative_expiry(m.expires_at, now),
         "expires_exact": absolute_expiry(m.expires_at),
         "score": m.score,
         "z": m.z,
+        "reason": m.reason,
     } for m in mitigations]
 
 
@@ -70,23 +74,39 @@ def _shell(request, tenant_id, active, **extra):
     document.cookie."""
     ctx = {"tenant_id": tenant_id, "role": "tenant", "active": active,
            "csrf_token": request.cookies.get(CSRF_COOKIE_NAME, ""),
-           "theme": request.cookies.get("theme", "")}
+           # The console defaults to dark: it is read at 3am and it is a
+           # different place from the marketing site. The toggle still
+           # works, and both themes carry measured contrast.
+           "theme": request.cookies.get("theme") or "dark"}
     ctx.update(extra)
     return ctx
 
 
 @router.get("/dashboard/ui", response_class=HTMLResponse)
-def protection_status(request: Request, tenant_id: str = Depends(dashboard_auth),
+def protection_status(request: Request, ip: str | None = None,
+                      tenant_id: str = Depends(dashboard_auth),
                       resource=Depends(get_dynamo_resource)):
+    """The list and the selected source, side by side.
+
+    `?ip=` selects a row. A real URL rather than a client-side toggle, so it
+    deep-links, survives a refresh, works with the back button, and needs no
+    JavaScript at all.
+    """
     now = datetime.now(timezone.utc)
     mitigations = list_mitigations(tenant_id=tenant_id, resource=resource)
     # One Query on the base table's own partition key — no GSI, no scan.
     # Without it an empty mitigation list is indistinguishable from a dead
     # agent, and the page reassures the customer either way.
     health = agent_health(AgentsTable(resource).query_by_tenant(tenant_id), now)
+    rows = _rows(mitigations, now)
+    selected = next((r for r in rows if r["ip"] == ip), None)
+    worst = min((r["z"] for r in rows if r["z"] is not None), default=None)
+
     return templates.TemplateResponse(request, "dashboard_status.html", _shell(
         request, tenant_id, "status",
-        mitigations=_rows(mitigations, now), health=health,
+        mitigations=rows, health=health, selected=selected,
+        detail_open=selected is not None,
+        strip=sigma_strip(worst),
         active_count=len(mitigations),
     ))
 
@@ -185,6 +205,9 @@ def _episode_rows(episodes, now):
         "tier_label": tier_label(e.max_tier),
         "tier_css": tier_css(e.max_tier),
         "severity": severity_detail(e.last_z),
+        # The column is scanned, not read. The phrase belongs in a detail
+        # pane; a figure belongs in a table.
+        "sigma_short": f"{abs(e.last_z):.1f}σ" if e.last_z is not None else "n/a",
         "decisions": e.decisions,
         "tier1": e.tier1_count,
         "tier2": e.tier2_count,

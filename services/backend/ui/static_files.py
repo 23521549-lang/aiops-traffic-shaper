@@ -25,6 +25,7 @@ _STATIC_DIR = Path(__file__).parent / "static"
 # Filename -> media type. The key is matched exactly; nothing is globbed.
 _ASSETS = {
     "app.css": "text/css",
+    "console.css": "text/css",
     "htmx.min.js": "application/javascript",
     "signed-post.js": "application/javascript",
     "ui-status.js": "application/javascript",

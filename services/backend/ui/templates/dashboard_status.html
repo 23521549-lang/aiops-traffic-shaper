@@ -1,109 +1,156 @@
 {% extends "app_shell.html" %}
-{% block title %}Protection status · Traffic Shaper{% endblock %}
-{% block page_title %}Protection status{% endblock %}
-{% block page_subtitle %}Tenant: {{ tenant_id }}{% endblock %}
+{% import "_charts.html" as charts %}
+{% block title %}Protection · Traffic Shaper{% endblock %}
+{% block page_title %}Protection{% endblock %}
+{% block page_summary %}
+{%- if health.state == 'healthy' -%}
+{{ health.reporting }} agent{{ 's' if health.reporting != 1 }} reporting, last seen {{ health.last_seen_label }}
+{%- elif health.state == 'degraded' -%}
+no telemetry since {{ health.last_seen_label }}
+{%- else -%}
+no agent has ever reported
+{%- endif -%}
+ · {{ mitigations|length }} active
+{% endblock %}
+{% block page_actions %}
+<a class="c-btn" href="/dashboard/ui/whitelist">Allowed IPs</a>
+<a class="c-btn c-btn--primary" href="/dashboard/ui/history">History</a>
+{% endblock %}
 {% block page_content %}
+{{ charts.patterns() }}
 
-{# The healthy state of this product is EMPTY, so the empty state is the
-   most-viewed screen in the portal — and it has to tell apart three kinds of
-   nothing. The old page rendered a green tick and "your traffic looks clean"
-   for all three. #}
-{% if health.state == "never" %}
-<div class="card">
-  <div class="empty-state">
-    <h3><span class="dot dot-warn" aria-hidden="true"></span>No agent has connected yet</h3>
-    <p>
-      Nothing is being checked. Install the agent on the web server you
-      want protected and register it. Protection starts the moment the
-      first agent reports in.
-    </p>
-  </div>
-</div>
-{% elif health.state == "degraded" %}
-<div class="alert alert-warning">
-  <strong>We haven’t heard from your agent.</strong>
-  Last contact was {{ health.last_seen_label }}. Nothing is being checked
-  right now, so an empty list below does <strong>not</strong> mean your
-  traffic is clean.
-</div>
-{% endif %}
+<div class="c-list">
 
-<div class="card" id="mitigations">
-  <h2>Active mitigations</h2>
-  <div class="card-sub">
-    IPs currently slowed or blocked for your traffic. Each one lifts itself
-    automatically when its timer runs out.
-  </div>
-
-  {% if mitigations %}
-  <div class="table-scroll" tabindex="0" role="region" aria-labelledby="mitigations-caption">
-    <table>
-      <caption class="sr-only" id="mitigations-caption">Active mitigations, most severe first</caption>
-      <thead>
-        <tr>
-          <th scope="col">IP address</th>
-          <th scope="col">Action</th>
-          <th scope="col">How unusual</th>
-          <th scope="col">Ends</th>
-          <th scope="col"><span class="sr-only">Actions</span></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for m in mitigations %}
-        <tr data-tier="{{ m.tier }}">
-          <th scope="row"><code>{{ m.ip }}</code></th>
-          <td><span class="badge {{ m.tier_css }}">{{ m.tier_label }}</span></td>
-          <td class="num">{{ m.severity }}</td>
-          <td class="num" title="{{ m.expires_exact }}">{{ m.expires_label }}</td>
-          <td class="cell-actions">
-            {# Body-less POST: the IP is in the path, so htmx sends it with no
-               payload and CloudFront's OAC needs no body hash. This is the
-               "recognition rather than recall" fix — the customer no longer
-               retypes an address out of the table above into a form below. #}
-            <button type="button" class="btn btn-sm"
-                    hx-post="/dashboard/ui/whitelist/{{ m.ip }}"
-                    hx-target="#mitigations"
-                    hx-swap="outerHTML"
-                    hx-confirm="Allow {{ m.ip }}? It will stop being slowed or blocked immediately, and will be left out of future model training."
-                    aria-label="Allow {{ m.ip }} and lift this {{ m.tier_label|lower }}">
-              Allow this IP
-            </button>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% else %}
-  <div class="empty-state">
-    {% if health.state == "healthy" %}
-    <h3><span class="dot dot-ok" aria-hidden="true"></span>You’re protected. Nothing to act on.</h3>
-    <p>
-      {{ health.reporting }} agent{{ "s" if health.reporting != 1 else "" }} reporting ·
-      last checked in {{ health.last_seen_label }}.
-      Nothing has crossed your threshold.
-    </p>
-    {% else %}
-    <h3>No active mitigations</h3>
-    <p>Nothing is currently being slowed or blocked.</p>
-    {% endif %}
+  {% if health.state != 'healthy' %}
+  <div class="c-panel">
+    <div class="alert alert-warning">
+      {% if health.state == 'degraded' %}
+      <strong>No telemetry since {{ health.last_seen_label }}.</strong>
+      Nothing is being checked, so an empty list below does not mean your
+      traffic is clean.
+      {% else %}
+      <strong>No agent has connected yet.</strong>
+      Install the agent on the server you want protected and register it.
+      Protection starts the moment the first agent reports in.
+      {% endif %}
+    </div>
   </div>
   {% endif %}
 
-  {# Renders in the empty state too, so a customer with nothing blocked still
-     learns what the product will do before it does it. #}
-  <div class="sigma-scale" role="img"
-       aria-label="Scale: traffic within about 4 standard deviations of your normal is left alone; beyond 4 it is slowed; beyond 5 it is blocked.">
-    <span class="sigma-normal">your normal traffic</span>
-    <span class="sigma-limited">4σ · slowed</span>
-    <span class="sigma-blocked">5σ · blocked</span>
+  <div class="c-panel">
+    <div class="c-section-label">Current enforcement</div>
+    {{ charts.sigma_strip(strip, "Where the most extreme active source sits on the sigma scale") }}
   </div>
-  <p class="field-hint stack-sm">
-    σ (“sigma”) measures how far from normal something is in your site’s own
-    units. Nearly all ordinary activity sits within 3σ. We measure against
-    your own baseline, so a burst that is routine for a busy checkout page
-    can still be extraordinary for a documentation site.
-  </p>
+
+  {% if mitigations %}
+  <table class="c-table">
+    <caption class="sr-only">Active mitigations, most severe first</caption>
+    <thead>
+      <tr>
+        <th scope="col">Source</th>
+        <th scope="col">State</th>
+        <th scope="col">Deviation</th>
+        <th scope="col">Ends</th>
+        <th scope="col"><span class="sr-only">Actions</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in mitigations %}
+      <tr data-tier="{{ m.tier }}" {% if selected and selected.ip == m.ip %}aria-selected="true"{% endif %}>
+        <th scope="row">
+          <a href="/dashboard/ui?ip={{ m.ip }}">{{ m.ip }}</a>
+        </th>
+        <td><span class="c-state c-state--{{ 'blocked' if m.tier >= 2 else 'slowed' }}">{{ m.tier_label }}</span></td>
+        <td class="d">{{ m.sigma_short }}</td>
+        <td class="d" title="{{ m.expires_exact }}">{{ m.expires_label }}</td>
+        <td class="c-row-actions">
+          {# Body-less POST: the IP rides in the path, so CloudFront's OAC
+             needs no payload hash and htmx sends it unaided. #}
+          <button type="button" class="c-btn c-btn--sm"
+                  hx-post="/dashboard/ui/whitelist/{{ m.ip }}"
+                  hx-target="body" hx-swap="none"
+                  hx-confirm="Allow {{ m.ip }}? It stops being slowed or blocked immediately, and is left out of future model training."
+                  aria-label="Allow {{ m.ip }}">Allow</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="c-empty-state">
+    {% if health.state == 'healthy' %}
+    <strong>Nothing to act on</strong>
+    <p>
+      Nothing has crossed your threshold. The scale above shows where the
+      product acts, so a quiet list is evidence rather than an absence of it.
+    </p>
+    {% else %}
+    <strong>Nothing listed</strong>
+    <p>No source is currently being slowed or blocked.</p>
+    {% endif %}
+  </div>
+  {% endif %}
 </div>
+
+{% if selected %}
+<aside class="c-detail" aria-label="Source detail">
+  <div class="c-detail-head">
+    <div class="c-detail-id">{{ selected.ip }}</div>
+    <div>
+      <span class="c-state c-state--{{ 'blocked' if selected.tier >= 2 else 'slowed' }}">{{ selected.tier_label }}</span>
+      <span class="c-summary">{{ selected.severity }} · {{ selected.expires_label }}</span>
+    </div>
+  </div>
+
+  <div class="c-detail-body">
+    {% if selected.features %}
+    <div>
+      <div class="c-section-label">Why this source</div>
+      <table class="c-why">
+        <tbody>
+          {% for f in selected.features %}
+          <tr>
+            <th scope="row">{{ f.label }}</th>
+            <td>{{ f.value }}</td>
+            <td class="{{ 'drives' if f.drives }}">{{ f.sigma }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="c-summary">{{ selected.reads_as }}</p>
+    </div>
+    {% else %}
+    <div>
+      <div class="c-section-label">Why this source</div>
+      <p class="c-summary">
+        Per-feature breakdown needs statistics this tenant's model does not
+        carry yet. It appears after the next nightly retrain.
+      </p>
+    </div>
+    {% endif %}
+
+    <div>
+      <div class="c-section-label">Context</div>
+      <dl class="c-kv">
+        <dt>Raw score</dt><dd>{{ "%.4f"|format(selected.score) }}</dd>
+        <dt>Deviation</dt><dd>{{ selected.sigma_short }}</dd>
+        <dt>Ends</dt><dd>{{ selected.expires_exact or "no expiry" }}</dd>
+        <dt>Reason</dt><dd>{{ selected.reason }}</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="c-actions">
+    <button type="button" class="c-btn c-btn--primary"
+            hx-post="/dashboard/ui/whitelist/{{ selected.ip }}"
+            hx-target="body" hx-swap="none"
+            hx-confirm="Allow {{ selected.ip }}? It stops being slowed or blocked immediately, and is left out of future model training.">
+      Allow this source <kbd class="c-key">A</kbd>
+    </button>
+    <a class="c-btn" href="/dashboard/ui/history?ip={{ selected.ip }}">Episodes</a>
+    <a class="c-btn" href="/dashboard/ui">Close <kbd class="c-key">Esc</kbd></a>
+  </div>
+</aside>
+{% endif %}
 
 {% endblock %}

@@ -54,7 +54,7 @@ def test_the_model_page_explains_the_wait_instead_of_saying_shadow_mode(
     client = _client(dynamo_resource, cognito_test_keys)
     resp = client.get("/dashboard/ui/model")
     assert resp.status_code == 200
-    assert "Learning what your normal traffic looks like" in resp.text
+    assert "Learning what your normal looks like" in resp.text
     assert "shadow mode" not in resp.text
 
 
@@ -87,7 +87,7 @@ def test_whitelist_remove_via_ui(dynamo_resource, cognito_test_keys):
     # The address still appears once, in the confirmation sentence. What must
     # be gone is the row: the Remove button that only a listed IP has.
     assert "Remove 203.0.113.4 from allowed list" not in resp.text
-    assert "No IPs on your allowed list" in resp.text
+    assert "Nothing allowed yet" in resp.text
     assert WhitelistTable(dynamo_resource).get(tenant_id="t-1", ip="203.0.113.4") is None
 
 
@@ -117,6 +117,9 @@ def test_the_degraded_banner_reads_as_a_sentence(dynamo_resource, cognito_test_k
                                      agent_version="unknown", api_key_hash="h", status="active")
 
     page = client.get("/dashboard/ui").text
-    assert "We haven’t heard from your agent." in page
-    assert "Last contact was 2 days ago." in page
+    # Reworded with the instrument rebuild: the banner now leads with the
+    # fact rather than with an apology, and the summary line in the page
+    # header carries the same age. What must not come back is the "in ...
+    # ago" construction that a screenshot caught the first time.
+    assert "No telemetry since 2 days ago." in page
     assert "in 2 days ago" not in page

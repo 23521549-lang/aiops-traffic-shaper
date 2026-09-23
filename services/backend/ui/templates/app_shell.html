@@ -1,65 +1,70 @@
 {% extends "base.html" %}
+{% import "_brand.html" as brand %}
+{% block head %}<link rel="stylesheet" href="/ui/static/console.css">{% endblock %}
 {% block body %}
 <a class="skip-link" href="#main-content">Skip to content</a>
+
 {# The CSRF token is server-rendered into hx-headers rather than parsed out
    of document.cookie by script. htmx inherits hx-headers down the DOM, so
-   every request from inside the shell carries it — and the cookie no longer
-   needs to be script-readable to make that work. #}
-<div class="app-shell" hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'>
+   every request from inside the shell carries it, and the cookie no longer
+   needs to be script-readable. #}
+<div class="console" hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'>
 
-  {# <nav>, <main> and <header> replace three bare <div>s. The portal had no
-     landmarks at all, so a screen-reader user had no way to jump past the
-     navigation and no structural map of the page. #}
-  <nav class="sidebar" aria-label="Primary">
-    <div class="brand"><span class="brand-dot" aria-hidden="true"></span> AI Traffic Shaper</div>
+  <nav class="c-nav" aria-label="Primary">
+    <a class="c-brand" href="/">{{ brand.mark(18) }} Traffic Shaper</a>
 
-    {% if role == "tenant" %}
-    <div class="nav-group-label" id="nav-tenant">Dashboard</div>
-    <a class="nav-link" href="/dashboard/ui"
-       {% if active == 'status' %}aria-current="page"{% endif %}>
-      <span>Protection status</span>
-      {% if active_count %}<span class="nav-count" data-tone="alarm">{{ active_count }}</span>{% endif %}
-    </a>
-    <a class="nav-link" href="/dashboard/ui/history"
-       {% if active == 'history' %}aria-current="page"{% endif %}>
-      <span>History</span>
-      {% if unread_count %}<span class="nav-count" data-tone="alarm">{{ unread_count }}</span>{% endif %}
-    </a>
-    <a class="nav-link" href="/dashboard/ui/whitelist"
-       {% if active == 'whitelist' %}aria-current="page"{% endif %}>
-      <span>Allowed IPs</span>
-      {% if whitelist_count %}<span class="nav-count">{{ whitelist_count }}</span>{% endif %}
-    </a>
-    <a class="nav-link" href="/dashboard/ui/model"
-       {% if active == 'model' %}aria-current="page"{% endif %}>
-      <span>Detection model</span>
-    </a>
-    {% elif role == "admin" %}
-    <div class="nav-group-label" id="nav-admin">Control Platform</div>
-    <a class="nav-link" href="/admin/ui"
-       {% if active == 'overview' %}aria-current="page"{% endif %}>
-      <span>Overview</span>
-    </a>
-    <a class="nav-link" href="/admin/ui/tenants"
-       {% if active == 'tenants' %}aria-current="page"{% endif %}>
-      <span>Tenants</span>
-      {% if tenant_count %}<span class="nav-count">{{ tenant_count }}</span>{% endif %}
-    </a>
-    <a class="nav-link" href="/admin/ui/agents"
-       {% if active == 'agents' %}aria-current="page"{% endif %}>
-      <span>Agents</span>
-      {% if stale_count %}<span class="nav-count" data-tone="alarm">{{ stale_count }} stale</span>{% endif %}
-    </a>
-    {% endif %}
-    <div class="sidebar-footer">
-      {# The theme was built, measured and tested, and no template ever
-         referenced the route, so no user could reach it. Three buttons in
-         one form: no script, no inline style, works with JS off. #}
-      {# Three separate forms, each posting to a URL that already carries
-         its value. A single form with named buttons would send a
-         form-encoded BODY, and a body through CloudFront's OAC needs a
-         payload hash only signed-post.js can compute. Body-less POSTs need
-         none, which is what lets this work with no script at all. #}
+    <div class="c-nav-group">
+      {% if role == "tenant" %}
+      <div class="c-nav-label">Monitor</div>
+      <a class="c-nav-link" href="/dashboard/ui"
+         {% if active == 'status' %}aria-current="page"{% endif %}>
+        <span>Protection</span>
+        {% if active_count %}<span class="c-nav-count" data-tone="alarm">{{ active_count }}</span>{% endif %}
+      </a>
+      <a class="c-nav-link" href="/dashboard/ui/history"
+         {% if active == 'history' %}aria-current="page"{% endif %}>
+        <span>History</span>
+        {% if unread_count %}<span class="c-nav-count" data-tone="alarm">{{ unread_count }}</span>{% endif %}
+      </a>
+
+      <div class="c-nav-label">Control</div>
+      <a class="c-nav-link" href="/dashboard/ui/whitelist"
+         {% if active == 'whitelist' %}aria-current="page"{% endif %}>
+        <span>Allowed IPs</span>
+        {% if whitelist_count %}<span class="c-nav-count">{{ whitelist_count }}</span>{% endif %}
+      </a>
+      <a class="c-nav-link" href="/dashboard/ui/model"
+         {% if active == 'model' %}aria-current="page"{% endif %}>
+        <span>Detection model</span>
+      </a>
+
+      {% elif role == "admin" %}
+      <div class="c-nav-label">Monitor</div>
+      <a class="c-nav-link" href="/admin/ui"
+         {% if active == 'overview' %}aria-current="page"{% endif %}>
+        <span>Overview</span>
+      </a>
+      <a class="c-nav-link" href="/admin/ui/agents"
+         {% if active == 'agents' %}aria-current="page"{% endif %}>
+        <span>Agents</span>
+        {% if stale_count %}<span class="c-nav-count" data-tone="alarm">{{ stale_count }}</span>{% endif %}
+      </a>
+
+      <div class="c-nav-label">Control</div>
+      <a class="c-nav-link" href="/admin/ui/tenants"
+         {% if active == 'tenants' %}aria-current="page"{% endif %}>
+        <span>Tenants</span>
+        {% if tenant_count %}<span class="c-nav-count">{{ tenant_count }}</span>{% endif %}
+      </a>
+      {% endif %}
+    </div>
+
+    <div class="c-nav-foot">
+      {% if tenant_id %}<div class="c-tenant">{{ tenant_id }}</div>{% endif %}
+      {# Three separate forms, each posting to a URL that already carries its
+         value. A single form with named buttons would send a form-encoded
+         BODY, and a body through CloudFront's OAC needs a payload hash only
+         signed-post.js can compute. Body-less POSTs need none. #}
       <div class="theme-toggle" role="group" aria-label="Colour theme">
         {% for value, label in [('light', 'Light'), ('dark', 'Dark'), ('system', 'Auto')] %}
         <form method="post"
@@ -69,34 +74,33 @@
         </form>
         {% endfor %}
       </div>
+      <a class="c-btn c-btn--sm" href="/ui/logout">Sign out</a>
     </div>
   </nav>
 
-  <div class="main">
-    <header class="topbar">
-      <h1>{% block page_title %}{% endblock %}</h1>
-      <div class="topbar-meta">
-        <span class="topbar-sub">{% block page_subtitle %}{% endblock %}</span>
-        {# Log out was styled exactly like navigation and sat directly under
-           the last nav item, so one misclick ended the session. It is a
-           control, not a destination. #}
-        <a class="btn btn-sm" href="/ui/logout">Log out</a>
+  <div class="c-main">
+    <header class="c-header">
+      <div class="c-header-top">
+        <div>
+          <h1 class="c-title">{% block page_title %}{% endblock %}</h1>
+          {# A live summary, not a restatement of the nav item already
+             highlighted three inches to the left. #}
+          <p class="c-summary">{% block page_summary %}{% endblock %}</p>
+        </div>
+        <div class="c-header-actions">{% block page_actions %}{% endblock %}</div>
       </div>
+      {% block page_tabs %}{% endblock %}
     </header>
 
-    {# The global failure surface. interactions.js reported transport and
-       HTTP failures to console.error only, so an operator could suspend a
-       tenant, have it 403, and never find out. htmx raises
-       htmx:responseError / htmx:sendError for exactly these, and does not
-       swap a 4xx/5xx body into the page. #}
-    <div class="content">
-      <div class="alert alert-danger" id="ui-status" role="alert"
-           tabindex="-1" hidden></div>
+    {# The failure surface. The old helper reported transport and HTTP
+       failures to console.error only, so an operator could suspend a tenant,
+       have it 403, and never find out. #}
+    <div class="alert alert-danger" id="ui-status" role="alert" tabindex="-1" hidden></div>
 
-      <main id="main-content" tabindex="-1">
-        {% block page_content %}{% endblock %}
-      </main>
-    </div>
+    <main id="main-content" tabindex="-1" class="c-work"
+          {% if detail_open %}data-detail{% endif %}>
+      {% block page_content %}{% endblock %}
+    </main>
   </div>
 </div>
 

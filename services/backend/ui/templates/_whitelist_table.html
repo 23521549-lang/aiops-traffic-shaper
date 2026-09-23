@@ -4,49 +4,41 @@
 <p class="field-hint" data-live>{{ message or "" }}</p>
 
 {% if whitelist %}
-<div class="table-scroll" tabindex="0" role="region" aria-labelledby="whitelist-caption">
-  <table>
-    <caption class="sr-only" id="whitelist-caption">Allowed IP addresses</caption>
-    <thead>
-      <tr>
-        <th scope="col">IP address</th>
-        <th scope="col">Reason</th>
-        <th scope="col">Added</th>
-        <th scope="col"><span class="sr-only">Actions</span></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for entry in whitelist %}
-      <tr>
-        <th scope="row"><code>{{ entry.ip }}</code></th>
-        <td>
-          {%- if entry.reason -%}{{ entry.reason }}
-          {%- else -%}<span class="field-hint">No reason given</span>{%- endif -%}
-        </td>
-        <td class="num num-nowrap" title="{{ entry.added_exact }}">{{ entry.added }}</td>
-        <td class="cell-actions">
-          {# aria-label, not just "Remove": a screen-reader user listing the
-             buttons on this page otherwise hears "Remove, Remove, Remove"
-             with no way to tell them apart. #}
-          <button type="button" class="btn btn-danger btn-sm"
-                  hx-delete="/dashboard/ui/whitelist/{{ entry.ip }}"
-                  hx-target="#whitelist-table" hx-swap="innerHTML"
-                  hx-confirm="Remove {{ entry.ip }} from your allowed list? It will be checked like any other IP from the next request onward, and may be slowed or blocked again within seconds."
-                  aria-label="Remove {{ entry.ip }} from allowed list">
-            Remove
-          </button>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
+<table class="c-table">
+  <caption class="sr-only">Allowed IP addresses</caption>
+  <thead>
+    <tr>
+      <th scope="col">IP address</th>
+      <th scope="col">Reason</th>
+      <th scope="col">Added</th>
+      <th scope="col"><span class="sr-only">Actions</span></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for entry in whitelist %}
+    <tr>
+      <th scope="row">{{ entry.ip }}</th>
+      {# The form has always collected a reason and stored it. Nothing read
+         it back, so the field hint promised a column that did not exist. #}
+      <td>{% if entry.reason %}{{ entry.reason }}{% else %}<span class="c-dim">none given</span>{% endif %}</td>
+      <td class="d" title="{{ entry.added_exact }}">{{ entry.added }}</td>
+      <td class="c-row-actions">
+        <button type="button" class="c-btn c-btn--sm c-btn--danger"
+                hx-delete="/dashboard/ui/whitelist/{{ entry.ip }}"
+                hx-target="#whitelist-table" hx-swap="innerHTML"
+                hx-confirm="Remove {{ entry.ip }}? It will be checked like any other address from the next request onward, and may be slowed or blocked again within seconds."
+                aria-label="Remove {{ entry.ip }} from allowed list">Remove</button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
 {% else %}
-<div class="empty-state">
-  <h3>No IPs on your allowed list</h3>
+<div class="c-empty-state">
+  <strong>Nothing allowed yet</strong>
   <p>
-    You don’t need one to be protected. Add an IP when you recognise
-    something we’ve slowed or blocked, or to pre-approve your own uptime
+    You do not need an entry here to be protected. Add one when you recognise
+    something the product slowed or blocked, or to pre-approve your own uptime
     monitors and load tests before they trip the detector.
   </p>
 </div>

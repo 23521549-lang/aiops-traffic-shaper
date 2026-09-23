@@ -111,23 +111,26 @@
 
 
 {% macro sigma_strip(strip, label) %}
-<svg viewBox="0 0 {{ strip.width }} {{ strip.height }}" class="c-strip"
-     role="img" preserveAspectRatio="none" focusable="false">
-  <title>{{ label }}</title>
-  {% for x, w, css, text in strip.segments %}
-  <rect x="{{ x|round(1) }}" y="0" width="{{ w|round(1) }}" height="20" class="{{ css }}"/>
-  <text x="{{ (x + 6)|round(1) }}" y="14" class="c-seg-label">{{ text }}</text>
-  {% endfor %}
-  {% for x, text in strip.ticks %}
-  <line x1="{{ x|round(1) }}" y1="20" x2="{{ x|round(1) }}" y2="24" class="c-tick"/>
-  {% endfor %}
-  {% if strip.marker %}
-  <line x1="{{ strip.marker[0]|round(1) }}" y1="0"
-        x2="{{ strip.marker[0]|round(1) }}" y2="24" class="c-marker"/>
-  <text x="{{ strip.marker[0]|round(1) }}" y="33" text-anchor="middle"
-        class="c-marker-label">{{ strip.marker[1] }}</text>
-  {% endif %}
-</svg>
+{# HTML, not SVG. The SVG version used preserveAspectRatio="none" so the
+   bands would fill the width, which stretched the LABELS with them: at a
+   700px container the 320-unit viewBox scaled 2.2x horizontally and 1x
+   vertically, so the text came out distorted and overran the box. Flex
+   boxes stretch without touching the type. #}
+<div class="sigma" role="img" aria-label="{{ label }}">
+  <div class="sigma-bands">
+    {% for x, w, css, text in strip.segments %}
+    <div class="sigma-band {{ css }}" data-flex="{{ (w / strip.width * 100)|round|int }}">
+      <span>{{ text }}</span>
+    </div>
+    {% endfor %}
+    {% if strip.marker %}
+    <div class="sigma-marker"
+         data-at="{{ ((strip.marker[0] / strip.width) * 100)|round|int }}">
+      <span class="sigma-marker-label">{{ strip.marker[1] }}</span>
+    </div>
+    {% endif %}
+  </div>
+</div>
 {% endmacro %}
 
 
