@@ -58,6 +58,13 @@ def agent_auth(x_agent_key: str | None = Header(default=None),
     agents = AgentsTable(resource).query_by_tenant(tenant_id)
     for agent in agents:
         if agent.get("api_key_hash") == key_hash and agent.get("status") == "active":
+            # The fleet-health view is derived from this timestamp, and it
+            # used to be written once at registration and never again — so
+            # the Control Platform's "which agents are alive" card could
+            # never change. The write is conditional (see AgentsTable.touch)
+            # because last_seen_at is a GSI sort key; the agent item was
+            # already read above, so this costs no extra read.
+            AgentsTable(resource).touch(tenant_id, agent["agent_id"])
             return tenant_id
     raise HTTPException(status_code=401, detail="Invalid agent key")
 

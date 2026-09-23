@@ -54,20 +54,29 @@ def test_suspend_tenant_via_ui(dynamo_resource, cognito_test_keys):
     assert TenantsTable(dynamo_resource).get(tenant_id="t-1")["status"] == "suspended"
 
 
-def test_agents_partial_filters_by_status(dynamo_resource, cognito_test_keys):
+def test_agents_partial_filters_by_liveness(dynamo_resource, cognito_test_keys):
+    """Rewritten alongside test_admin_routes.test_list_agents_by_liveness —
+    the old version fabricated a `status="stale"` row that no code path
+    writes. Both agents below are lifecycle-active; what separates them is
+    whether they have called in."""
+    from datetime import datetime, timedelta, timezone
+
     client = _client(dynamo_resource, cognito_test_keys)
-    AgentsTable(dynamo_resource).put(tenant_id="t-1", agent_id="a-1", status="active",
-                                      last_seen_at="2026-08-21T00:00:00Z", agent_version="0.1.0")
-    AgentsTable(dynamo_resource).put(tenant_id="t-1", agent_id="a-2", status="stale",
-                                      last_seen_at="2026-08-20T00:00:00Z", agent_version="0.1.0")
+    now = datetime.now(timezone.utc)
+    AgentsTable(dynamo_resource).put(tenant_id="t-1", agent_id="a-live", status="active",
+                                      last_seen_at=(now - timedelta(seconds=10)).isoformat(),
+                                      agent_version="0.1.0")
+    AgentsTable(dynamo_resource).put(tenant_id="t-1", agent_id="a-quiet", status="active",
+                                      last_seen_at=(now - timedelta(hours=2)).isoformat(),
+                                      agent_version="0.1.0")
 
     resp_stale = client.get("/admin/ui/agents", params={"status": "stale"})
-    assert "a-2" in resp_stale.text
-    assert "a-1" not in resp_stale.text
+    assert "a-quiet" in resp_stale.text
+    assert "a-live" not in resp_stale.text
 
     resp_active = client.get("/admin/ui/agents", params={"status": "active"})
-    assert "a-1" in resp_active.text
-    assert "a-2" not in resp_active.text
+    assert "a-live" in resp_active.text
+    assert "a-quiet" not in resp_active.text
 
 
 def test_non_admin_cannot_reach_control_platform(dynamo_resource, cognito_test_keys):

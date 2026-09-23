@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from services.backend.api.cognito_auth import admin_auth
@@ -14,13 +16,24 @@ def list_tenants(resource=Depends(get_dynamo_resource)) -> list[Tenant]:
 
 
 @router.get("/admin/v1/agents", response_model=list[AgentSummary], dependencies=[Depends(admin_auth)])
-def list_agents(status: str = "stale", resource=Depends(get_dynamo_resource)) -> list[AgentSummary]:
-    # Cross-tenant listing via AgentsTable.query_by_status(), which uses
-    # the LastSeenIndex GSI — schema.md's own stated purpose for that GSI
-    # is finding e.g. stale/dead agents across every tenant, hence the
-    # "stale" default rather than trying to list "all" agents (which the
-    # GSI can't do in one query since its partition key IS status).
-    return [AgentSummary(**item) for item in AgentsTable(resource).query_by_status(status)]
+def list_agents(status: str = "active", resource=Depends(get_dynamo_resource),
+                now: datetime | None = None) -> list[AgentSummary]:
+    """Cross-tenant fleet health, one GSI query per call, no scan.
+
+    `status` is a liveness word, not the stored attribute. "active" and
+    "stale" both mean lifecycle-active and are told apart by `last_seen_at`
+    against the LastSeenIndex sort key; only "revoked" is a stored state.
+    The default used to be "stale", which matched nothing ever written, so
+    the landing view was permanently empty — see test_agent_liveness.py.
+    """
+    table = AgentsTable(resource)
+    if status == "revoked":
+        items = table.query_revoked()
+    elif status == "stale":
+        items = table.query_stale(now=now)
+    else:
+        items = table.query_live(now=now)
+    return [AgentSummary(**item) for item in items]
 
 
 @router.post("/admin/v1/tenants/{tenant_id}/suspend", dependencies=[Depends(admin_auth)])

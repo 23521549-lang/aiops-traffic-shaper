@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from botocore.exceptions import ClientError
@@ -223,17 +224,89 @@ class AgentsTable(_SimpleTable):
     _table_name = "Agents"
     _key_names = ("tenant_id", "agent_id")
 
+    # An agent is "stale" once it has gone this long without an
+    # authenticated call. Five minutes: long enough that a restart or a
+    # network blip does not raise an alarm, short enough that a dead agent
+    # is visible before the traffic it was supposed to be watching matters.
+    STALE_AFTER_SECONDS = 300
+
     def query_by_status(self, status: str) -> list[dict]:
         """Queries the LastSeenIndex GSI (provisioned in Stage 1) —
-        cross-tenant, unlike query_by_tenant(). Matches schema.md's stated
-        purpose for this GSI: letting the Control Platform list e.g. all
-        'stale' agents across every tenant without a full table scan."""
+        cross-tenant, unlike query_by_tenant(). `status` here is the
+        LIFECYCLE state, "active" or "revoked", which is what agent_auth
+        checks. It is NOT liveness: see query_live/query_stale, which slice
+        the active agents by the index's sort key."""
         from boto3.dynamodb.conditions import Key
         resp = self._table.query(
             IndexName="LastSeenIndex",
             KeyConditionExpression=Key("status").eq(status),
         )
         return resp.get("Items", [])
+
+    def _cutoff(self, now: datetime | None) -> str:
+        now = now or datetime.now(timezone.utc)
+        return (now - timedelta(seconds=self.STALE_AFTER_SECONDS)).isoformat()
+
+    def query_live(self, now: datetime | None = None) -> list[dict]:
+        """Active agents that have called in recently.
+
+        This is the query LastSeenIndex was designed for and never received:
+        its sort key is `last_seen_at`, so a range condition answers
+        "which agents are alive" across every tenant in one query, with no
+        scan and no client-side filtering."""
+        from boto3.dynamodb.conditions import Key
+        resp = self._table.query(
+            IndexName="LastSeenIndex",
+            KeyConditionExpression=(Key("status").eq("active")
+                                    & Key("last_seen_at").gte(self._cutoff(now))),
+        )
+        return resp.get("Items", [])
+
+    def query_stale(self, now: datetime | None = None) -> list[dict]:
+        """Active agents that have gone quiet — the fleet's actual alarm
+        list. Revoked agents are excluded by the partition key: revocation
+        is a decision the operator already took, not a fault to chase."""
+        from boto3.dynamodb.conditions import Key
+        resp = self._table.query(
+            IndexName="LastSeenIndex",
+            KeyConditionExpression=(Key("status").eq("active")
+                                    & Key("last_seen_at").lt(self._cutoff(now))),
+        )
+        return resp.get("Items", [])
+
+    def query_revoked(self) -> list[dict]:
+        return self.query_by_status("revoked")
+
+    def touch(self, tenant_id: str, agent_id: str, now: datetime | None = None) -> bool:
+        """Record that this agent just called in. Returns whether a write
+        happened.
+
+        Conditional on purpose. `last_seen_at` is the LastSeenIndex sort
+        key, so every update is a GSI delete-and-reinsert — about 2 WCU
+        against the 25 WCU that the Always-Free tier grants the whole
+        account, across every table (see the budget at the top of this
+        file). An agent posting telemetry every few seconds would spend
+        that allowance on a timestamp whose only consumer is a dashboard
+        refreshed by a human. Refusing the write is the normal outcome.
+
+        `attribute_exists(tenant_id)` keeps an UpdateItem from creating a
+        malformed record for an agent that was deleted mid-request —
+        DynamoDB upserts by default."""
+        now = now or datetime.now(timezone.utc)
+        try:
+            self._table.update_item(
+                Key={"tenant_id": tenant_id, "agent_id": agent_id},
+                UpdateExpression="SET last_seen_at = :now",
+                ConditionExpression=("attribute_exists(tenant_id) "
+                                     "AND last_seen_at < :cutoff"),
+                ExpressionAttributeValues={":now": now.isoformat(),
+                                           ":cutoff": self._cutoff(now)},
+            )
+            return True
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                return False
+            raise
 
     def revoke_all_for_tenant(self, tenant_id: str) -> int:
         """Phase 4 / H3: suspending a tenant must invalidate the API keys

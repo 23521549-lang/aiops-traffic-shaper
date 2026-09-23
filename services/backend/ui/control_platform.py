@@ -19,15 +19,15 @@ router = APIRouter()
 @router.get("/admin/ui", response_class=HTMLResponse, dependencies=[Depends(admin_auth)])
 def control_platform_page(request: Request, resource=Depends(get_dynamo_resource)):
     tenants = list_tenants(resource=resource)
-    agents = list_agents(status="stale", resource=resource)
+    agents = list_agents(status="active", resource=resource)
     usage = get_usage_report(resource, date=None)
     return templates.TemplateResponse(request, "control_platform.html", {
-        "tenants": tenants, "agents": agents, "agent_status": "stale", "usage": usage,
+        "tenants": tenants, "agents": agents, "agent_status": "active", "usage": usage,
     })
 
 
 @router.get("/admin/ui/agents", response_class=HTMLResponse, dependencies=[Depends(admin_auth)])
-def agents_partial(request: Request, status: str = "stale", resource=Depends(get_dynamo_resource)):
+def agents_partial(request: Request, status: str = "active", resource=Depends(get_dynamo_resource)):
     agents = list_agents(status=status, resource=resource)
     return templates.TemplateResponse(request, "_agents_table.html", {"agents": agents})
 
