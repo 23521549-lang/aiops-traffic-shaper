@@ -5,10 +5,15 @@
 {% block page_content %}
 
 <div class="card">
-  <h2>Tenants</h2>
-  <div class="card-sub">
-    Suspending a tenant stops its agents being served and revokes their keys
-    immediately.
+  <div class="card-head">
+    <div>
+      <h2>Tenants</h2>
+      <div class="card-sub">
+        Suspending a tenant stops its agents being served and revokes their
+        keys immediately.
+      </div>
+    </div>
+    <a href="/admin/ui/tenants/new" class="btn btn-primary">New tenant</a>
   </div>
   <div id="tenants-table">
     {% include "_tenants_table.html" %}

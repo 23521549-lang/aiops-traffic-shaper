@@ -243,6 +243,26 @@ class TenantsTable(_SimpleTable):
     def suspend(self, tenant_id: str) -> bool:
         return self._set_status_if_exists(tenant_id, "suspended")
 
+    def create(self, tenant_id: str, **fields) -> bool:
+        """Create, never overwrite. Returns False if the id is taken.
+
+        `put()` would silently replace an existing tenant, which for this
+        table means detaching every agent and every history row from the
+        owner they belong to. The condition is what makes the endpoint
+        safely retryable: a double-submitted form collides here and the UI
+        renders "already created" rather than making a second tenant.
+        """
+        try:
+            self._table.put_item(
+                Item=_to_dynamo_safe({"tenant_id": tenant_id, **fields}),
+                ConditionExpression="attribute_not_exists(tenant_id)",
+            )
+            return True
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                return False
+            raise
+
     def reactivate(self, tenant_id: str) -> bool:
         """Only the tenant's status. Agent keys revoked by suspend() stay
         revoked: the reason for a suspension may be a leaked key, and giving

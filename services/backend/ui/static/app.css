@@ -783,3 +783,13 @@ input[type=text], input[type=password], select {
 .login-alt summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .login-alt form { margin-top: var(--s3); }
 .login-card .lockup-stacked { margin-bottom: var(--s5); }
+
+/* --- error pages ------------------------------------------------------ */
+
+.err-card { text-align: center; max-width: 420px; }
+.err-code {
+  font-family: var(--font-mono); font-size: var(--text-3xl); font-weight: 700;
+  color: var(--text-muted); margin: 0; line-height: 1;
+}
+.err-card h1 { font-size: var(--text-xl); margin: var(--s3) 0 var(--s2); }
+.err-actions { display: flex; gap: var(--s2); justify-content: center; margin: var(--s5) 0 var(--s3); }

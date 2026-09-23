@@ -1,0 +1,51 @@
+{% extends "app_shell.html" %}
+{% block title %}New tenant — Traffic Shaper{% endblock %}
+{% block page_title %}New tenant{% endblock %}
+{% block page_subtitle %}Publisher view{% endblock %}
+{% block page_content %}
+
+<div class="card lp-narrow">
+  <h2>Create a tenant</h2>
+  <div class="card-sub">
+    This creates the tenant record and its first user. Cognito emails that
+    user a temporary password, valid for three days.
+  </div>
+
+  <div id="tenants-table"></div>
+
+  <form hx-post="/admin/ui/tenants" hx-target="#tenants-table" hx-swap="innerHTML"
+        data-params-in-url>
+    {# Minted server-side and carried here so a double submit collides on
+       attribute_not_exists rather than creating a second tenant. #}
+    <input type="hidden" name="tenant_id" value="{{ new_tenant_id }}">
+
+    <div class="field stack-md">
+      <label for="t-name">Name <span class="req" aria-hidden="true">*</span></label>
+      <input type="text" id="t-name" name="name" required
+             aria-describedby="t-name-hint">
+      <span class="field-hint" id="t-name-hint">
+        Shown in this console. The field whose absence 500'd both admin
+        pages when a tenant was written by hand.
+      </span>
+    </div>
+
+    <div class="field stack-md">
+      <label for="t-email">First user’s email <span class="req" aria-hidden="true">*</span></label>
+      <input type="text" id="t-email" name="contact_email" required
+             aria-describedby="t-email-hint">
+      <span class="field-hint" id="t-email-hint">
+        Becomes their sign-in name. They choose a real password on first
+        sign-in.
+      </span>
+    </div>
+
+    <p class="field-hint">
+      Tenant id: <code>{{ new_tenant_id }}</code>
+    </p>
+
+    <button type="submit" class="btn btn-primary">Create tenant</button>
+    <a href="/admin/ui/tenants" class="btn">Cancel</a>
+  </form>
+</div>
+
+{% endblock %}

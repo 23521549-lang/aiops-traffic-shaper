@@ -8,15 +8,20 @@ every response, and the swap target sat outside the form — so choosing
 "Stale". The control and the content it controlled disagreed permanently.
 Links carry their own state, and the URL becomes shareable.
 """
+import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
+from pydantic import ValidationError
+
 from services.backend.api.cognito_auth import admin_auth
+from services.backend.api.cognito_login import get_cognito_client
 from services.backend.api.routes.admin import (
-    list_agents, list_tenants, reactivate_tenant, suspend_tenant,
+    create_tenant, list_agents, list_tenants, reactivate_tenant, suspend_tenant,
 )
+from services.backend.schemas.admin import TenantCreateRequest
 from services.backend.api.routes.admin_usage import usage as usage_report
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.usage import _DAILY_REQUEST_CEILING, tenant_requests_today
@@ -142,4 +147,51 @@ def reactivate_tenant_ui(request: Request, tenant_id: str,
         **_tenants_ctx(resource),
         "message": (f"{tenant_id} reactivated. Agent keys stay revoked — "
                     f"its agents must register again."),
+    })
+
+
+@router.get("/admin/ui/tenants/new", response_class=HTMLResponse,
+            dependencies=[Depends(admin_auth)])
+def new_tenant_form(request: Request, resource=Depends(get_dynamo_resource)):
+    """The id is minted here and carried in a hidden field.
+
+    That is the whole idempotency story: a double-submitted form collides on
+    `attribute_not_exists` and the UI renders "already exists" rather than
+    quietly creating a second tenant. No idempotency-key table, no new
+    state.
+    """
+    return templates.TemplateResponse(request, "admin_tenant_new.html", _shell(
+        request, "tenants", resource, new_tenant_id=uuid.uuid4().hex,
+    ))
+
+
+@router.post("/admin/ui/tenants", response_class=HTMLResponse,
+             dependencies=[Depends(admin_auth), Depends(verify_csrf)])
+def create_tenant_ui(request: Request, name: str = "",
+                     contact_email: str = "",
+                     tenant_id: str = "",
+                     resource=Depends(get_dynamo_resource),
+                     cognito=Depends(get_cognito_client)):
+    # Query parameters, not a form body. The template marks this form
+    # data-params-in-url so htmx moves its values into the query string,
+    # which is what keeps the request body-less and therefore free of
+    # CloudFront's x-amz-content-sha256 requirement (ADR-005). Declaring
+    # Form(...) here would have made the template and the route disagree —
+    # a test caught exactly that.
+    error = None
+    message = None
+    try:
+        created = create_tenant(
+            TenantCreateRequest(name=name, contact_email=contact_email,
+                                tenant_id=tenant_id),
+            resource=resource, cognito=cognito)
+        message = (f"{created.tenant_id} created. A temporary password has been "
+                   f"emailed to {created.first_user_email}.")
+    except ValidationError:
+        error = "Check the name and email address."
+    except HTTPException as e:
+        error = str(e.detail)
+
+    return templates.TemplateResponse(request, "_tenants_table.html", {
+        **_tenants_ctx(resource), "message": message, "error": error,
     })
