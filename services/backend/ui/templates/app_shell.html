@@ -79,6 +79,9 @@
         </form>
         {% endfor %}
       </div>
+      <button type="button" class="c-btn c-btn--sm" data-palette-open>
+        Commands <kbd class="c-key">Ctrl K</kbd>
+      </button>
       <a class="c-btn c-btn--sm" href="/ui/logout">Sign out</a>
     </div>
   </nav>
@@ -109,6 +112,9 @@
   </div>
 </div>
 
+{% include "_palette.html" %}
+
 <script src="/ui/static/ui-status.js" defer></script>
 <script src="/ui/static/bulk-select.js" defer></script>
+<script src="/ui/static/keys.js" defer></script>
 {% endblock %}

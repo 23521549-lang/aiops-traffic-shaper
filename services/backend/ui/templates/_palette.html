@@ -1,0 +1,35 @@
+{# Every destination this role can reach, rendered with the page.
+
+   Not fetched. A palette that loads its own contents is an empty palette on
+   exactly the day it is wanted, because the network going wrong is one of
+   the things an operator opens this console to look at. The whole list is a
+   few hundred bytes and it is already in the response.
+
+   It is a menu of links, so what is in it is a statement about what this
+   session can reach. The publisher entries are not merely hidden from a
+   tenant, they are not rendered: a hidden entry is a 403 with extra steps
+   and a disclosure of what the other console contains. #}
+<dialog id="palette" class="c-palette" aria-label="Commands">
+  <div class="c-palette-box">
+    <input type="search" class="c-palette-input" data-palette-input
+           placeholder="Go to..." aria-label="Filter commands"
+           autocomplete="off" spellcheck="false">
+    <ul class="c-palette-list" data-palette-list>
+      {% if role == "tenant" %}
+      <li><a href="/dashboard/ui" data-palette-item>Protection<span class="c-dim">active sources</span></a></li>
+      <li><a href="/dashboard/ui/history" data-palette-item>History<span class="c-dim">past episodes</span></a></li>
+      <li><a href="/dashboard/ui/agents" data-palette-item>Agents<span class="c-dim">what is reporting</span></a></li>
+      <li><a href="/dashboard/ui/whitelist" data-palette-item>Allowed IPs<span class="c-dim">never slowed or blocked</span></a></li>
+      <li><a href="/dashboard/ui/model" data-palette-item>Detection model<span class="c-dim">training and thresholds</span></a></li>
+      {% elif role == "admin" %}
+      <li><a href="/admin/ui" data-palette-item>Overview<span class="c-dim">usage and fleet</span></a></li>
+      <li><a href="/admin/ui/agents?status=stale" data-palette-item>Agents gone quiet<span class="c-dim">unprotected tenants</span></a></li>
+      <li><a href="/admin/ui/agents?status=active" data-palette-item>Agents reporting</a></li>
+      <li><a href="/admin/ui/tenants" data-palette-item>Tenants<span class="c-dim">suspend and reactivate</span></a></li>
+      <li><a href="/admin/ui/tenants/new" data-palette-item>New tenant<span class="c-dim">creates its first user</span></a></li>
+      {% endif %}
+      <li><a href="/ui/logout" data-palette-item>Sign out</a></li>
+    </ul>
+    <p class="c-palette-empty" data-palette-empty hidden>Nothing matches.</p>
+  </div>
+</dialog>

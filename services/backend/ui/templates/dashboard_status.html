@@ -199,14 +199,16 @@ no agent has ever reported
   </div>
 
   <div class="c-actions">
-    <button type="button" class="c-btn c-btn--primary"
+    {# data-key is the binding, and it sits on the control so the key does
+       exactly what the button does, confirmation prompt included. #}
+    <button type="button" class="c-btn c-btn--primary" data-key="a"
             hx-post="/dashboard/ui/whitelist/{{ selected.ip }}?back=status"
             hx-target="body" hx-swap="none"
             hx-confirm="Allow {{ selected.ip }}? It stops being slowed or blocked immediately, and is left out of future model training.">
       Allow this source <kbd class="c-key">A</kbd>
     </button>
     <a class="c-btn" href="/dashboard/ui/history?ip={{ selected.ip }}">Episodes</a>
-    <a class="c-btn" href="/dashboard/ui">Close <kbd class="c-key">Esc</kbd></a>
+    <a class="c-btn" href="/dashboard/ui" data-key="Escape">Close <kbd class="c-key">Esc</kbd></a>
   </div>
 </aside>
 {% endif %}
