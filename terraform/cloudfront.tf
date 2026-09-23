@@ -47,6 +47,34 @@ data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
   name = "Managed-AllViewerExceptHostHeader"
 }
 
+# Not Managed-CachingOptimized, which pins default_ttl to 86400 and would
+# hold a stylesheet at the edge for a day after a rollback. This one obeys
+# the origin: `default_ttl = 0` means "no Cache-Control header, do not cache",
+# and `max_ttl = 300` caps what any header can ask for at the same five
+# minutes static_files.py sends. The bound survives someone editing that
+# constant upward without thinking about rollback.
+resource "aws_cloudfront_cache_policy" "static" {
+  name    = "${var.project_name}-static-assets"
+  comment = "Obeys the origin's Cache-Control, capped at five minutes (ADR-007)"
+
+  min_ttl     = 0
+  default_ttl = 0
+  max_ttl     = 300
+
+  parameters_in_cache_key_and_forwarded_to_origin {
+    # The cache key is the path and nothing else. These files are identical
+    # for every viewer, and putting the cookie in the key would give each
+    # session its own copy of a shared file - the cost of no cache, with the
+    # rollback hazard of one.
+    cookies_config { cookie_behavior = "none" }
+    headers_config { header_behavior = "none" }
+    query_strings_config { query_string_behavior = "none" }
+
+    enable_accept_encoding_gzip   = true
+    enable_accept_encoding_brotli = true
+  }
+}
+
 resource "aws_cloudfront_distribution" "api" {
   enabled         = true
   comment         = "${var.project_name} - public entrypoint"
@@ -83,6 +111,39 @@ resource "aws_cloudfront_distribution" "api" {
     # product rests on. CloudFront is here for the signing and the edge, not
     # for the cache.
     cache_policy_id          = data.aws_cloudfront_cache_policy.disabled.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
+
+    compress = true
+  }
+
+  # The one path that is identical for every viewer.
+  #
+  # Everything else here is tenant-scoped, which is why the default behavior
+  # disables caching outright. The stylesheets and scripts are not: they are
+  # the same bytes for a signed-out stranger on the landing page and for a
+  # publisher at 3am, they carry no cookie and no tenant id, and there are
+  # seven of them. Today every console page load spends five Lambda
+  # invocations fetching files that have not changed since the deploy.
+  #
+  # Cached for exactly as long as the origin says, and no longer. ADR-007
+  # chose `Cache-Control: public, max-age=300` in static_files.py for a
+  # specific reason: a cached asset does NOT roll back when the Lambda alias
+  # is repointed, so five minutes is the bound on how long a rolled-back
+  # deployment can keep serving the previous stylesheet. Setting a longer TTL
+  # here would override that and make an invalidation the only way back,
+  # which is the one step in this project the alias cannot undo.
+  ordered_cache_behavior {
+    path_pattern           = "/ui/static/*"
+    target_origin_id       = "lambda-function-url"
+    viewer_protocol_policy = "redirect-to-https"
+
+    # Read-only by construction. A POST to a stylesheet is not a request this
+    # product has, and allowing it would put an uncacheable method on a
+    # cached behavior.
+    allowed_methods = ["GET", "HEAD"]
+    cached_methods  = ["GET", "HEAD"]
+
+    cache_policy_id          = aws_cloudfront_cache_policy.static.id
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
 
     compress = true
