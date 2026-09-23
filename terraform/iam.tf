@@ -64,6 +64,14 @@ data "aws_iam_policy_document" "api_data" {
         aws_dynamodb_table.mitigation_state.arn,
         aws_dynamodb_table.telemetry_events.arn,
         aws_dynamodb_table.usage_counters.arn,
+        # Adding the table to locals.all_tables was NOT enough: that list
+        # feeds other policies, and this statement names its tables
+        # explicitly. The omission surfaced as a 500 on the history page
+        # while the history WRITES failed silently through the _try_history
+        # guard on the ingest path - no errors, no data, which is the worst
+        # shape a failure can have for a feature whose data cannot be
+        # backfilled.
+        aws_dynamodb_table.tenant_history.arn,
       ],
       [
         "${aws_dynamodb_table.agents.arn}/index/*",
