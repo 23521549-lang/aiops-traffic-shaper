@@ -149,3 +149,14 @@ def test_the_palette_is_not_on_the_public_pages(dynamo_resource, cognito_test_ke
 def test_the_palette_says_how_to_open_it(tenant):
     """An unannounced shortcut is a shortcut nobody uses."""
     assert "K" in tenant.get("/dashboard/ui").text
+
+
+def test_the_filter_box_does_not_swallow_escape(tenant):
+    """Measured in Chromium: a non-empty `input type="search"` handles
+    Escape itself, clearing the field, and the key never reaches the
+    <dialog>. The palette stayed open on the first press, which reads as a
+    dead key on the control whose whole promise is speed."""
+    html = tenant.get("/dashboard/ui").text
+    dialog = html.split('id="palette"', 1)[1].split("</dialog>", 1)[0]
+    assert 'type="search"' not in dialog
+    assert 'type="text"' in dialog

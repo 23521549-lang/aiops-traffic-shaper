@@ -11,7 +11,12 @@
    and a disclosure of what the other console contains. #}
 <dialog id="palette" class="c-palette" aria-label="Commands">
   <div class="c-palette-box">
-    <input type="search" class="c-palette-input" data-palette-input
+    {# type="text", not type="search". Chromium gives a non-empty search
+       field its own Escape behaviour - clear the box - and consumes the key
+       there, so the dialog never sees it and the palette would not close on
+       the first press. The clear affordance is worth nothing here; closing
+       reliably is worth everything. #}
+    <input type="text" class="c-palette-input" data-palette-input
            placeholder="Go to..." aria-label="Filter commands"
            autocomplete="off" spellcheck="false">
     <ul class="c-palette-list" data-palette-list>

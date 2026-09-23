@@ -1,27 +1,30 @@
 {% if agents %}
-<table class="c-table">
-  <caption class="sr-only">Agents, {{ agent_status }}</caption>
-  <thead>
-    <tr>
-      <th scope="col">Agent</th>
-      <th scope="col">Tenant</th>
-      <th scope="col">Last seen</th>
-      <th scope="col">Version</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for a in agents %}
-    <tr>
-      {# The label its owner chose, not a bare uuid. The uuid stays available
-         as the title for anyone who needs it in a ticket. #}
-      <th scope="row" title="{{ a.agent_id }}">{{ a.label }}</th>
-      <td class="d">{{ a.tenant_id }}</td>
-      <td class="d">{{ a.last_seen }}</td>
-      <td class="d">{{ a.version }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div class="c-table-scroll" tabindex="0" role="region"
+     aria-label="Agents across every tenant">
+  <table class="c-table">
+    <caption class="sr-only">Agents, {{ agent_status }}</caption>
+    <thead>
+      <tr>
+        <th scope="col">Agent</th>
+        <th scope="col">Tenant</th>
+        <th scope="col">Last seen</th>
+        <th scope="col">Version</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in agents %}
+      <tr>
+        {# The label its owner chose, not a bare uuid. The uuid stays available
+           as the title for anyone who needs it in a ticket. #}
+        <th scope="row" title="{{ a.agent_id }}">{{ a.label }}</th>
+        <td class="d">{{ a.tenant_id }}</td>
+        <td class="d">{{ a.last_seen }}</td>
+        <td class="d">{{ a.version }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% else %}
 {# The empty state depends entirely on WHICH filter is empty. An empty
    "active" list is the worst news in the product; an empty "stale" list is

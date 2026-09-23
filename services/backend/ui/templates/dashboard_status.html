@@ -9,8 +9,7 @@
 no telemetry since {{ health.last_seen_label }}
 {%- else -%}
 no agent has ever reported
-{%- endif -%}
- · {{ mitigations|length }} active
+{%- endif %} · {{ mitigations|length }} active
 {% endblock %}
 {% block page_actions %}
 <a class="c-btn" href="/dashboard/ui/whitelist">Allowed IPs</a>
@@ -70,50 +69,53 @@ no agent has ever reported
   <form data-bulk-form data-params-in-url
         hx-post="/dashboard/ui/whitelist/bulk" hx-target="body" hx-swap="none"
         hx-confirm="Allow every selected source? They stop being slowed or blocked immediately, and are left out of future model training.">
-  <table class="c-table">
-    <caption class="sr-only">Active mitigations, most severe first</caption>
-    <thead>
-      <tr>
-        <th scope="col" class="c-check">
-          <input type="checkbox" data-bulk-master
-                 aria-label="Select every source listed">
-        </th>
-        <th scope="col">Source</th>
-        <th scope="col">State</th>
-        <th scope="col">Deviation</th>
-        <th scope="col">Ends</th>
-        <th scope="col"><span class="sr-only">Actions</span></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for m in mitigations %}
-      <tr data-tier="{{ m.tier }}" {% if selected and selected.ip == m.ip %}aria-selected="true"{% endif %}>
-        <td class="c-check">
-          <input type="checkbox" name="ip" value="{{ m.ip }}" data-bulk-row
-                 aria-label="Select {{ m.ip }}">
-        </td>
-        <th scope="row">
-          <a href="/dashboard/ui?ip={{ m.ip }}">{{ m.ip }}</a>
-        </th>
-        <td><span class="c-state c-state--{{ 'blocked' if m.tier >= 2 else 'slowed' }}">{{ m.tier_label }}</span></td>
-        <td class="d">{{ m.sigma_short }}</td>
-        <td class="d" title="{{ m.expires_exact }}">{{ m.expires_label }}</td>
-        <td class="c-row-actions">
-          {# Body-less POST: the IP rides in the path, so CloudFront's OAC
-             needs no payload hash and htmx sends it unaided. `back=status`
-             is what makes the click visible: hx-swap="none" discards the
-             response, so without it the row stayed here, still labelled
-             Blocked, until someone thought to reload. #}
-          <button type="button" class="c-btn c-btn--sm"
-                  hx-post="/dashboard/ui/whitelist/{{ m.ip }}?back=status"
-                  hx-target="body" hx-swap="none"
-                  hx-confirm="Allow {{ m.ip }}? It stops being slowed or blocked immediately, and is left out of future model training."
-                  aria-label="Allow {{ m.ip }}">Allow</button>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="c-table-scroll" tabindex="0" role="region"
+       aria-label="Active mitigations">
+    <table class="c-table">
+      <caption class="sr-only">Active mitigations, most severe first</caption>
+      <thead>
+        <tr>
+          <th scope="col" class="c-check">
+            <input type="checkbox" data-bulk-master
+                   aria-label="Select every source listed">
+          </th>
+          <th scope="col">Source</th>
+          <th scope="col">State</th>
+          <th scope="col">Deviation</th>
+          <th scope="col">Ends</th>
+          <th scope="col"><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in mitigations %}
+        <tr data-tier="{{ m.tier }}" {% if selected and selected.ip == m.ip %}aria-selected="true"{% endif %}>
+          <td class="c-check">
+            <input type="checkbox" name="ip" value="{{ m.ip }}" data-bulk-row
+                   aria-label="Select {{ m.ip }}">
+          </td>
+          <th scope="row">
+            <a href="/dashboard/ui?ip={{ m.ip }}">{{ m.ip }}</a>
+          </th>
+          <td><span class="c-state c-state--{{ 'blocked' if m.tier >= 2 else 'slowed' }}">{{ m.tier_label }}</span></td>
+          <td class="d">{{ m.sigma_short }}</td>
+          <td class="d" title="{{ m.expires_exact }}">{{ m.expires_label }}</td>
+          <td class="c-row-actions">
+            {# Body-less POST: the IP rides in the path, so CloudFront's OAC
+               needs no payload hash and htmx sends it unaided. `back=status`
+               is what makes the click visible: hx-swap="none" discards the
+               response, so without it the row stayed here, still labelled
+               Blocked, until someone thought to reload. #}
+            <button type="button" class="c-btn c-btn--sm"
+                    hx-post="/dashboard/ui/whitelist/{{ m.ip }}?back=status"
+                    hx-target="body" hx-swap="none"
+                    hx-confirm="Allow {{ m.ip }}? It stops being slowed or blocked immediately, and is left out of future model training."
+                    aria-label="Allow {{ m.ip }}">Allow</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 
   {# Sticky, so selecting a row near the bottom of a long list does not push
      that row out from under the pointer that just selected it. Hidden until

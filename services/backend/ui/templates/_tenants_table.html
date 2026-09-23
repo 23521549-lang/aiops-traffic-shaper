@@ -2,58 +2,61 @@
 <p class="field-hint" data-live>{{ message or "" }}</p>
 
 {% if tenants %}
-<table class="c-table">
-  <caption class="sr-only">Registered tenants</caption>
-  <thead>
-    <tr>
-      <th scope="col">Tenant</th>
-      <th scope="col">Status</th>
-      <th scope="col">Requests today</th>
-      <th scope="col">Registered</th>
-      <th scope="col"><span class="sr-only">Actions</span></th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for row in tenants %}
-    <tr {% if selected and selected.tenant.tenant_id == row.tenant.tenant_id %}aria-selected="true"{% endif %}>
-      <th scope="row">
-        <a href="/admin/ui/tenants?id={{ row.tenant.tenant_id }}">{{ row.tenant.tenant_id }}</a>
-        {% if row.tenant.name %}<span class="c-dim">{{ row.tenant.name }}</span>{% endif %}
-      </th>
-      <td>
-        {% if row.tenant.status == "suspended" %}
-        <span class="c-state c-state--blocked">Suspended</span>
-        {% elif row.tenant.status == "active" %}
-        <span class="c-state c-state--clear">Active</span>
-        {% else %}
-        <span class="c-state c-state--slowed">{{ row.tenant.status }}</span>
-        {% endif %}
-      </td>
-      {# Per-tenant usage was already written on every accepted batch and read
-         back by nothing, so the Suspend button was a lever with no aim. #}
-      <td class="d">{{ row.used }}</td>
-      <td class="d" title="{{ row.registered.exact }}">
-        {{ row.registered.label }} <span class="c-dim">{{ row.registered.relative }}</span>
-      </td>
-      <td class="c-row-actions">
-        {% if row.tenant.status == "suspended" %}
-        <button type="button" class="c-btn c-btn--sm"
-                hx-post="/admin/ui/tenants/{{ row.tenant.tenant_id }}/reactivate"
-                hx-target="#tenants-table" hx-swap="innerHTML"
-                hx-confirm="Reactivate {{ row.tenant.tenant_id }}? Its agent keys stay revoked, so its agents must register again before they are served."
-                aria-label="Reactivate tenant {{ row.tenant.tenant_id }}">Reactivate</button>
-        {% else %}
-        <button type="button" class="c-btn c-btn--sm c-btn--danger"
-                hx-post="/admin/ui/tenants/{{ row.tenant.tenant_id }}/suspend"
-                hx-target="#tenants-table" hx-swap="innerHTML"
-                hx-confirm="Suspend {{ row.tenant.tenant_id }}? Its agents stop being served immediately and every one of its API keys is revoked."
-                aria-label="Suspend tenant {{ row.tenant.tenant_id }}">Suspend</button>
-        {% endif %}
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div class="c-table-scroll" tabindex="0" role="region"
+     aria-label="Registered tenants">
+  <table class="c-table">
+    <caption class="sr-only">Registered tenants</caption>
+    <thead>
+      <tr>
+        <th scope="col">Tenant</th>
+        <th scope="col">Status</th>
+        <th scope="col">Requests today</th>
+        <th scope="col">Registered</th>
+        <th scope="col"><span class="sr-only">Actions</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in tenants %}
+      <tr {% if selected and selected.tenant.tenant_id == row.tenant.tenant_id %}aria-selected="true"{% endif %}>
+        <th scope="row">
+          <a href="/admin/ui/tenants?id={{ row.tenant.tenant_id }}">{{ row.tenant.tenant_id }}</a>
+          {% if row.tenant.name %}<span class="c-dim">{{ row.tenant.name }}</span>{% endif %}
+        </th>
+        <td>
+          {% if row.tenant.status == "suspended" %}
+          <span class="c-state c-state--blocked">Suspended</span>
+          {% elif row.tenant.status == "active" %}
+          <span class="c-state c-state--clear">Active</span>
+          {% else %}
+          <span class="c-state c-state--slowed">{{ row.tenant.status }}</span>
+          {% endif %}
+        </td>
+        {# Per-tenant usage was already written on every accepted batch and read
+           back by nothing, so the Suspend button was a lever with no aim. #}
+        <td class="d">{{ row.used }}</td>
+        <td class="d" title="{{ row.registered.exact }}">
+          {{ row.registered.label }} <span class="c-dim">{{ row.registered.relative }}</span>
+        </td>
+        <td class="c-row-actions">
+          {% if row.tenant.status == "suspended" %}
+          <button type="button" class="c-btn c-btn--sm"
+                  hx-post="/admin/ui/tenants/{{ row.tenant.tenant_id }}/reactivate"
+                  hx-target="#tenants-table" hx-swap="innerHTML"
+                  hx-confirm="Reactivate {{ row.tenant.tenant_id }}? Its agent keys stay revoked, so its agents must register again before they are served."
+                  aria-label="Reactivate tenant {{ row.tenant.tenant_id }}">Reactivate</button>
+          {% else %}
+          <button type="button" class="c-btn c-btn--sm c-btn--danger"
+                  hx-post="/admin/ui/tenants/{{ row.tenant.tenant_id }}/suspend"
+                  hx-target="#tenants-table" hx-swap="innerHTML"
+                  hx-confirm="Suspend {{ row.tenant.tenant_id }}? Its agents stop being served immediately and every one of its API keys is revoked."
+                  aria-label="Suspend tenant {{ row.tenant.tenant_id }}">Suspend</button>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% else %}
 <div class="c-empty-state">
   <strong>No tenants yet</strong>

@@ -140,16 +140,22 @@ def agent_health(agents: list[dict], now: datetime | None = None,
 
 
 def humanise_age(seconds: float) -> str:
+    """Two of these four branches used to ignore the plural, so "1 minutes
+    ago" and "1 seconds ago" shipped on the agents table, the page header
+    and the fleet view at once. One helper, every timestamp in the product.
+    """
     seconds = int(seconds)
     if seconds < 60:
-        return f"{max(seconds, 1)} seconds ago"
+        return _count(max(seconds, 1), "second")
     if seconds < 3600:
-        return f"{seconds // 60} minutes ago"
+        return _count(seconds // 60, "minute")
     if seconds < 86400:
-        hours = seconds // 3600
-        return f"{hours} hour{'s' if hours != 1 else ''} ago"
-    days = seconds // 86400
-    return f"{days} day{'s' if days != 1 else ''} ago"
+        return _count(seconds // 3600, "hour")
+    return _count(seconds // 86400, "day")
+
+
+def _count(n: int, unit: str) -> str:
+    return f"{n} {unit}{'' if n == 1 else 's'} ago"
 
 
 def usage_share(used: int, ceiling: int) -> dict:
@@ -192,6 +198,30 @@ def timestamp_pair(raw, now: datetime | None = None) -> dict:
 
 # `unique_uri_ratio` is a column in a dataframe. "Distinct URLs" is something
 # a person reading an incident at 3am can act on.
+# The value stored on a mitigation, and what a customer should read. The
+# detail pane printed `behavioral_anomaly` under "Reason", in a pane whose
+# whole job is explaining an enforcement decision to a person. Every other
+# machine name in this product is mapped to words before it is displayed.
+REASON_LABELS = {
+    "behavioral_anomaly": "Traffic unlike your baseline",
+    "manual_block": "Blocked by hand",
+    "whitelisted": "On your allowed list",
+}
+
+
+def reason_label(reason: str | None) -> str:
+    """Unknown values are made readable rather than hidden.
+
+    A reason this map has not met yet is still better shown than swallowed:
+    an operator reading "Rate limit exceeded" can act on it, and an operator
+    reading nothing at all cannot tell whether the field is empty or the
+    page is broken.
+    """
+    if not reason:
+        return "not recorded"
+    return REASON_LABELS.get(reason) or reason.replace("_", " ").capitalize()
+
+
 FEATURE_LABELS = {
     "request_rate": "Request rate",
     "error_ratio": "Error ratio",

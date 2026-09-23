@@ -52,25 +52,28 @@
       {% endif %}
 
       {% if selected.agents %}
-      <table class="c-table">
-        <caption class="sr-only">Agents registered to this tenant</caption>
-        <thead>
-          <tr>
-            <th scope="col">Agent</th>
-            <th scope="col">State</th>
-            <th scope="col">Last seen</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for a in selected.agents %}
-          <tr>
-            <th scope="row" title="{{ a.agent_id }}">{{ a.label }}</th>
-            <td><span class="c-state c-state--{{ a.state }}">{{ a.state_label }}</span></td>
-            <td class="d" title="{{ a.last_seen_exact }}">{{ a.last_seen }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="c-table-scroll" tabindex="0" role="region"
+           aria-label="Agents registered to this tenant">
+        <table class="c-table">
+          <caption class="sr-only">Agents registered to this tenant</caption>
+          <thead>
+            <tr>
+              <th scope="col">Agent</th>
+              <th scope="col">State</th>
+              <th scope="col">Last seen</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in selected.agents %}
+            <tr>
+              <th scope="row" title="{{ a.agent_id }}">{{ a.label }}</th>
+              <td><span class="c-state c-state--{{ a.state }}">{{ a.state_label }}</span></td>
+              <td class="d" title="{{ a.last_seen_exact }}">{{ a.last_seen }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
       {% endif %}
     </div>
   </div>

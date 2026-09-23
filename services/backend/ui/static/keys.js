@@ -110,21 +110,25 @@
     /* The dispatcher. Case-insensitive for letters, exact for named keys,
      * and it only ever clicks something already on the page - so the key
      * does precisely what the control beside the hint does, including its
-     * confirmation prompt. */
+     * confirmation prompt.
+     *
+     * A scan rather than a built selector. Interpolating a key name into
+     * an attribute selector needs escaping, the escaping needed a regular
+     * expression, and that expression shipped malformed: the browser threw
+     * the WHOLE file out and the palette stopped opening from its shortcut
+     * and from its button at once. A loop needs no escaping to get wrong. */
     var key = evt.key;
-    var target = document.querySelector('[data-key="' + cssEscape(key) + '"]')
-      || (key.length === 1
-          ? document.querySelector('[data-key="' + cssEscape(key.toLowerCase()) + '"]')
-          : null);
+    var bound = document.querySelectorAll("[data-key]");
+    var target = null;
+    for (var i = 0; i < bound.length; i++) {
+      var want = bound[i].getAttribute("data-key");
+      if (want === key || (key.length === 1 && want === key.toLowerCase())) {
+        target = bound[i];
+        break;
+      }
+    }
     if (!target) return;
     evt.preventDefault();
     target.click();
   });
-
-  function cssEscape(value) {
-    // Only ever a key name, so quoting the handful of characters an
-    // attribute selector cares about is enough, and this runs on browsers
-    // without CSS.escape.
-    return String(value).replace(/["\]/g, "\$&");
-  }
 })();

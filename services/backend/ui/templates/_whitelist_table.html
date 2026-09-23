@@ -4,35 +4,38 @@
 <p class="field-hint" data-live>{{ message or "" }}</p>
 
 {% if whitelist %}
-<table class="c-table">
-  <caption class="sr-only">Allowed IP addresses</caption>
-  <thead>
-    <tr>
-      <th scope="col">IP address</th>
-      <th scope="col">Reason</th>
-      <th scope="col">Added</th>
-      <th scope="col"><span class="sr-only">Actions</span></th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for entry in whitelist %}
-    <tr>
-      <th scope="row">{{ entry.ip }}</th>
-      {# The form has always collected a reason and stored it. Nothing read
-         it back, so the field hint promised a column that did not exist. #}
-      <td>{% if entry.reason %}{{ entry.reason }}{% else %}<span class="c-dim">none given</span>{% endif %}</td>
-      <td class="d" title="{{ entry.added_exact }}">{{ entry.added }}</td>
-      <td class="c-row-actions">
-        <button type="button" class="c-btn c-btn--sm c-btn--danger"
-                hx-delete="/dashboard/ui/whitelist/{{ entry.ip }}"
-                hx-target="#whitelist-table" hx-swap="innerHTML"
-                hx-confirm="Remove {{ entry.ip }}? It will be checked like any other address from the next request onward, and may be slowed or blocked again within seconds."
-                aria-label="Remove {{ entry.ip }} from allowed list">Remove</button>
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div class="c-table-scroll" tabindex="0" role="region"
+     aria-label="Allowed addresses">
+  <table class="c-table">
+    <caption class="sr-only">Allowed IP addresses</caption>
+    <thead>
+      <tr>
+        <th scope="col">IP address</th>
+        <th scope="col">Reason</th>
+        <th scope="col">Added</th>
+        <th scope="col"><span class="sr-only">Actions</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in whitelist %}
+      <tr>
+        <th scope="row">{{ entry.ip }}</th>
+        {# The form has always collected a reason and stored it. Nothing read
+           it back, so the field hint promised a column that did not exist. #}
+        <td>{% if entry.reason %}{{ entry.reason }}{% else %}<span class="c-dim">none given</span>{% endif %}</td>
+        <td class="d" title="{{ entry.added_exact }}">{{ entry.added }}</td>
+        <td class="c-row-actions">
+          <button type="button" class="c-btn c-btn--sm c-btn--danger"
+                  hx-delete="/dashboard/ui/whitelist/{{ entry.ip }}"
+                  hx-target="#whitelist-table" hx-swap="innerHTML"
+                  hx-confirm="Remove {{ entry.ip }}? It will be checked like any other address from the next request onward, and may be slowed or blocked again within seconds."
+                  aria-label="Remove {{ entry.ip }} from allowed list">Remove</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% else %}
 <div class="c-empty-state">
   <strong>Nothing allowed yet</strong>

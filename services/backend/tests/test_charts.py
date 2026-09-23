@@ -127,7 +127,7 @@ def test_the_marker_lands_where_the_sigma_says():
 
 def test_the_segments_tile_the_whole_strip_without_gaps():
     strip = sigma_strip()
-    edges = [(x, x + w) for x, w, _, _ in strip.segments]
+    edges = [(seg[0], seg[0] + seg[1]) for seg in strip.segments]
     assert edges[0][0] == pytest.approx(0)
     assert edges[-1][1] == pytest.approx(strip.width)
     for (_, end), (start, _) in zip(edges, edges[1:]):

@@ -38,39 +38,42 @@
   <div id="unread-note"></div>
 
   {% if episodes %}
-  <table class="c-table">
-    <caption class="sr-only">Mitigation episodes, newest first</caption>
-    <thead>
-      <tr>
-        <th scope="col">Source</th>
-        <th scope="col">Hour</th>
-        <th scope="col">State</th>
-        <th scope="col">Deviation</th>
-        <th scope="col">Decisions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for e in episodes %}
-      <tr data-tier="{{ e.tier }}">
-        <th scope="row">
-          <a href="/dashboard/ui?ip={{ e.ip }}">{{ e.ip }}</a>
-          {% if e.is_new %}<kbd>new</kbd>{% endif %}
-        </th>
-        <td class="d">{{ e.hour }} <span class="c-dim">{{ e.span }}</span></td>
-        <td><span class="c-state c-state--{{ 'blocked' if e.tier >= 2 else 'slowed' }}">{{ e.tier_label }}</span></td>
-        <td class="d">{{ e.sigma_short }}</td>
-        {# The total and the breakdown were both printed, so four blocks read
-           "4 4 blocked". Only a screenshot showed it: the test asserted the
-           substring "4 blocked", which was genuinely present. #}
-        <td class="d">
-          {%- if e.tier2 and e.tier1 -%}{{ e.tier2 }} blocked, {{ e.tier1 }} slowed
-          {%- elif e.tier2 -%}{{ e.tier2 }} blocked
-          {%- else -%}{{ e.tier1 }} slowed{%- endif -%}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="c-table-scroll" tabindex="0" role="region"
+       aria-label="Past episodes">
+    <table class="c-table">
+      <caption class="sr-only">Mitigation episodes, newest first</caption>
+      <thead>
+        <tr>
+          <th scope="col">Source</th>
+          <th scope="col">Hour</th>
+          <th scope="col">State</th>
+          <th scope="col">Deviation</th>
+          <th scope="col">Decisions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in episodes %}
+        <tr data-tier="{{ e.tier }}">
+          <th scope="row">
+            <a href="/dashboard/ui?ip={{ e.ip }}">{{ e.ip }}</a>
+            {% if e.is_new %}<kbd>new</kbd>{% endif %}
+          </th>
+          <td class="d">{{ e.hour }} <span class="c-dim">{{ e.span }}</span></td>
+          <td><span class="c-state c-state--{{ 'blocked' if e.tier >= 2 else 'slowed' }}">{{ e.tier_label }}</span></td>
+          <td class="d">{{ e.sigma_short }}</td>
+          {# The total and the breakdown were both printed, so four blocks read
+             "4 4 blocked". Only a screenshot showed it: the test asserted the
+             substring "4 blocked", which was genuinely present. #}
+          <td class="d">
+            {%- if e.tier2 and e.tier1 -%}{{ e.tier2 }} blocked, {{ e.tier1 }} slowed
+            {%- elif e.tier2 -%}{{ e.tier2 }} blocked
+            {%- else -%}{{ e.tier1 }} slowed{%- endif -%}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% else %}
   <div class="c-empty-state">
     <strong>Nothing in this window</strong>

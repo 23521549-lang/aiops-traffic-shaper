@@ -39,6 +39,9 @@
 
 {% macro deviation(chart, title, desc) %}
 <figure class="chart">
+  {# `c-deviation` names which chart this is. It carries no appearance -
+     `.chart svg` in app.css does the sizing - and two tests use it to assert
+     that the page is showing the product's own chart rather than an image. #}
   <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" class="c-deviation"
        role="img" preserveAspectRatio="xMidYMid meet" focusable="false">
     <title>{{ title }}</title>
@@ -118,9 +121,13 @@
    boxes stretch without touching the type. #}
 <div class="sigma" role="img" aria-label="{{ label }}">
   <div class="sigma-bands">
-    {% for x, w, css, text in strip.segments %}
+    {% for x, w, css, text, short in strip.segments %}
     <div class="sigma-band {{ css }}" data-flex="{{ (w / strip.width * 100)|round|int }}">
-      <span>{{ text }}</span>
+      {# Both labels are rendered and CSS picks one. Swapping them in
+         JavaScript would leave the band blank until the script ran, on the
+         one element of this page that has to be right immediately. #}
+      <span class="sigma-long">{{ text }}</span>
+      <span class="sigma-short" aria-hidden="true">{{ short }}</span>
     </div>
     {% endfor %}
     {% if strip.marker %}

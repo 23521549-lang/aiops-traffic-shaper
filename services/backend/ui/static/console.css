@@ -323,8 +323,26 @@ kbd {
     justify-content: space-between; gap: 8px;
     border-right: 0; border-bottom: 1px solid var(--border); overflow: visible;
   }
-  .c-nav-group { display: flex; gap: 2px; overflow-x: auto; padding: 6px; }
-  .c-nav-label, .c-nav-foot { display: none; }
+  /* min-width: 0 is the load-bearing half. A flex item defaults to
+   * min-width: auto and so never shrinks below its own content, which meant
+   * the overflow-x below never engaged: measured at 390px, Allowed IPs
+   * ended at x=410 and Detection model at x=488, both past the screen with
+   * no way to scroll to them. Allowed IPs is where a customer lifts a block
+   * on a real visitor. */
+  .c-nav-group { display: flex; gap: 2px; overflow-x: auto; padding: 6px; min-width: 0; }
+  .c-nav-label { display: none; }
+
+  /* Not display: none. Sign out lives here, and hiding the whole footer
+   * left a phone with no way to end a session. The bulky parts go instead:
+   * a theme toggle and a keyboard-shortcut button are conveniences, and a
+   * phone has no keyboard to shortcut. */
+  .c-nav-foot {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 12px 6px 0; border-top: 0; flex: 0 0 auto;
+  }
+  .c-nav-foot .theme-toggle,
+  .c-nav-foot .c-tenant,
+  .c-nav-foot [data-palette-open] { display: none; }
   .c-nav-link { border-left: 0; border-bottom: 2px solid transparent; padding: 6px 10px; }
   .c-nav-link[aria-current="page"] { border-left: 0; border-bottom-color: var(--accent); }
   .c-brand { border-bottom: 0; padding: 10px 12px; }
@@ -335,245 +353,6 @@ kbd {
   .c-detail { border-left: 0; border-top: 1px solid var(--border); display: block; }
   .c-table thead { position: static; }
 }
-
-
-/* --- the sigma scale -------------------------------------------------- */
-
-/* Proportions come from data, and CSP blocks inline style attributes, so
- * the width and the marker position are data attributes matched by rules.
- * Whole percents: the bar is 700px wide at most, so a 1% step is 7px, finer
- * than the eye resolves on a band chart. */
-.sigma { padding: 2px 0 18px; }
-.sigma-bands {
-  display: flex; position: relative; height: 26px;
-  border-radius: 3px; overflow: visible;
-}
-.sigma-band {
-  display: flex; align-items: center; min-width: 0; overflow: hidden;
-  font-family: var(--font-mono); font-size: 10px; font-weight: 600;
-  letter-spacing: .06em; text-transform: uppercase;
-}
-.sigma-band span { padding: 0 8px; white-space: nowrap; }
-.sigma-band:first-child { border-radius: 3px 0 0 3px; }
-.sigma-band:last-child { border-radius: 0 3px 3px 0; }
-.c-seg--normal { background: var(--tier-normal-bg); color: var(--tier-normal); }
-.c-seg--limited { background: var(--tier-limited-bg); color: var(--tier-limited); }
-.c-seg--blocked { background: var(--tier-blocked-bg); color: var(--tier-blocked); }
-
-/* The live marker: where the most extreme active source actually sits. */
-.sigma-marker {
-  position: absolute; top: -3px; bottom: -6px; width: 2px;
-  background: var(--text); transform: translateX(-1px);
-}
-.sigma-marker-label {
-  position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
-  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
-  color: var(--text); white-space: nowrap; padding-top: 2px;
-}
-
-.sigma-band[data-flex="0"] { flex: 0; }
-.sigma-band[data-flex="1"] { flex: 1; }
-.sigma-band[data-flex="2"] { flex: 2; }
-.sigma-band[data-flex="3"] { flex: 3; }
-.sigma-band[data-flex="4"] { flex: 4; }
-.sigma-band[data-flex="5"] { flex: 5; }
-.sigma-band[data-flex="6"] { flex: 6; }
-.sigma-band[data-flex="7"] { flex: 7; }
-.sigma-band[data-flex="8"] { flex: 8; }
-.sigma-band[data-flex="9"] { flex: 9; }
-.sigma-band[data-flex="10"] { flex: 10; }
-.sigma-band[data-flex="11"] { flex: 11; }
-.sigma-band[data-flex="12"] { flex: 12; }
-.sigma-band[data-flex="13"] { flex: 13; }
-.sigma-band[data-flex="14"] { flex: 14; }
-.sigma-band[data-flex="15"] { flex: 15; }
-.sigma-band[data-flex="16"] { flex: 16; }
-.sigma-band[data-flex="17"] { flex: 17; }
-.sigma-band[data-flex="18"] { flex: 18; }
-.sigma-band[data-flex="19"] { flex: 19; }
-.sigma-band[data-flex="20"] { flex: 20; }
-.sigma-band[data-flex="21"] { flex: 21; }
-.sigma-band[data-flex="22"] { flex: 22; }
-.sigma-band[data-flex="23"] { flex: 23; }
-.sigma-band[data-flex="24"] { flex: 24; }
-.sigma-band[data-flex="25"] { flex: 25; }
-.sigma-band[data-flex="26"] { flex: 26; }
-.sigma-band[data-flex="27"] { flex: 27; }
-.sigma-band[data-flex="28"] { flex: 28; }
-.sigma-band[data-flex="29"] { flex: 29; }
-.sigma-band[data-flex="30"] { flex: 30; }
-.sigma-band[data-flex="31"] { flex: 31; }
-.sigma-band[data-flex="32"] { flex: 32; }
-.sigma-band[data-flex="33"] { flex: 33; }
-.sigma-band[data-flex="34"] { flex: 34; }
-.sigma-band[data-flex="35"] { flex: 35; }
-.sigma-band[data-flex="36"] { flex: 36; }
-.sigma-band[data-flex="37"] { flex: 37; }
-.sigma-band[data-flex="38"] { flex: 38; }
-.sigma-band[data-flex="39"] { flex: 39; }
-.sigma-band[data-flex="40"] { flex: 40; }
-.sigma-band[data-flex="41"] { flex: 41; }
-.sigma-band[data-flex="42"] { flex: 42; }
-.sigma-band[data-flex="43"] { flex: 43; }
-.sigma-band[data-flex="44"] { flex: 44; }
-.sigma-band[data-flex="45"] { flex: 45; }
-.sigma-band[data-flex="46"] { flex: 46; }
-.sigma-band[data-flex="47"] { flex: 47; }
-.sigma-band[data-flex="48"] { flex: 48; }
-.sigma-band[data-flex="49"] { flex: 49; }
-.sigma-band[data-flex="50"] { flex: 50; }
-.sigma-band[data-flex="51"] { flex: 51; }
-.sigma-band[data-flex="52"] { flex: 52; }
-.sigma-band[data-flex="53"] { flex: 53; }
-.sigma-band[data-flex="54"] { flex: 54; }
-.sigma-band[data-flex="55"] { flex: 55; }
-.sigma-band[data-flex="56"] { flex: 56; }
-.sigma-band[data-flex="57"] { flex: 57; }
-.sigma-band[data-flex="58"] { flex: 58; }
-.sigma-band[data-flex="59"] { flex: 59; }
-.sigma-band[data-flex="60"] { flex: 60; }
-.sigma-band[data-flex="61"] { flex: 61; }
-.sigma-band[data-flex="62"] { flex: 62; }
-.sigma-band[data-flex="63"] { flex: 63; }
-.sigma-band[data-flex="64"] { flex: 64; }
-.sigma-band[data-flex="65"] { flex: 65; }
-.sigma-band[data-flex="66"] { flex: 66; }
-.sigma-band[data-flex="67"] { flex: 67; }
-.sigma-band[data-flex="68"] { flex: 68; }
-.sigma-band[data-flex="69"] { flex: 69; }
-.sigma-band[data-flex="70"] { flex: 70; }
-.sigma-band[data-flex="71"] { flex: 71; }
-.sigma-band[data-flex="72"] { flex: 72; }
-.sigma-band[data-flex="73"] { flex: 73; }
-.sigma-band[data-flex="74"] { flex: 74; }
-.sigma-band[data-flex="75"] { flex: 75; }
-.sigma-band[data-flex="76"] { flex: 76; }
-.sigma-band[data-flex="77"] { flex: 77; }
-.sigma-band[data-flex="78"] { flex: 78; }
-.sigma-band[data-flex="79"] { flex: 79; }
-.sigma-band[data-flex="80"] { flex: 80; }
-.sigma-band[data-flex="81"] { flex: 81; }
-.sigma-band[data-flex="82"] { flex: 82; }
-.sigma-band[data-flex="83"] { flex: 83; }
-.sigma-band[data-flex="84"] { flex: 84; }
-.sigma-band[data-flex="85"] { flex: 85; }
-.sigma-band[data-flex="86"] { flex: 86; }
-.sigma-band[data-flex="87"] { flex: 87; }
-.sigma-band[data-flex="88"] { flex: 88; }
-.sigma-band[data-flex="89"] { flex: 89; }
-.sigma-band[data-flex="90"] { flex: 90; }
-.sigma-band[data-flex="91"] { flex: 91; }
-.sigma-band[data-flex="92"] { flex: 92; }
-.sigma-band[data-flex="93"] { flex: 93; }
-.sigma-band[data-flex="94"] { flex: 94; }
-.sigma-band[data-flex="95"] { flex: 95; }
-.sigma-band[data-flex="96"] { flex: 96; }
-.sigma-band[data-flex="97"] { flex: 97; }
-.sigma-band[data-flex="98"] { flex: 98; }
-.sigma-band[data-flex="99"] { flex: 99; }
-.sigma-band[data-flex="100"] { flex: 100; }
-
-.sigma-marker[data-at="0"] { left: 0%; }
-.sigma-marker[data-at="1"] { left: 1%; }
-.sigma-marker[data-at="2"] { left: 2%; }
-.sigma-marker[data-at="3"] { left: 3%; }
-.sigma-marker[data-at="4"] { left: 4%; }
-.sigma-marker[data-at="5"] { left: 5%; }
-.sigma-marker[data-at="6"] { left: 6%; }
-.sigma-marker[data-at="7"] { left: 7%; }
-.sigma-marker[data-at="8"] { left: 8%; }
-.sigma-marker[data-at="9"] { left: 9%; }
-.sigma-marker[data-at="10"] { left: 10%; }
-.sigma-marker[data-at="11"] { left: 11%; }
-.sigma-marker[data-at="12"] { left: 12%; }
-.sigma-marker[data-at="13"] { left: 13%; }
-.sigma-marker[data-at="14"] { left: 14%; }
-.sigma-marker[data-at="15"] { left: 15%; }
-.sigma-marker[data-at="16"] { left: 16%; }
-.sigma-marker[data-at="17"] { left: 17%; }
-.sigma-marker[data-at="18"] { left: 18%; }
-.sigma-marker[data-at="19"] { left: 19%; }
-.sigma-marker[data-at="20"] { left: 20%; }
-.sigma-marker[data-at="21"] { left: 21%; }
-.sigma-marker[data-at="22"] { left: 22%; }
-.sigma-marker[data-at="23"] { left: 23%; }
-.sigma-marker[data-at="24"] { left: 24%; }
-.sigma-marker[data-at="25"] { left: 25%; }
-.sigma-marker[data-at="26"] { left: 26%; }
-.sigma-marker[data-at="27"] { left: 27%; }
-.sigma-marker[data-at="28"] { left: 28%; }
-.sigma-marker[data-at="29"] { left: 29%; }
-.sigma-marker[data-at="30"] { left: 30%; }
-.sigma-marker[data-at="31"] { left: 31%; }
-.sigma-marker[data-at="32"] { left: 32%; }
-.sigma-marker[data-at="33"] { left: 33%; }
-.sigma-marker[data-at="34"] { left: 34%; }
-.sigma-marker[data-at="35"] { left: 35%; }
-.sigma-marker[data-at="36"] { left: 36%; }
-.sigma-marker[data-at="37"] { left: 37%; }
-.sigma-marker[data-at="38"] { left: 38%; }
-.sigma-marker[data-at="39"] { left: 39%; }
-.sigma-marker[data-at="40"] { left: 40%; }
-.sigma-marker[data-at="41"] { left: 41%; }
-.sigma-marker[data-at="42"] { left: 42%; }
-.sigma-marker[data-at="43"] { left: 43%; }
-.sigma-marker[data-at="44"] { left: 44%; }
-.sigma-marker[data-at="45"] { left: 45%; }
-.sigma-marker[data-at="46"] { left: 46%; }
-.sigma-marker[data-at="47"] { left: 47%; }
-.sigma-marker[data-at="48"] { left: 48%; }
-.sigma-marker[data-at="49"] { left: 49%; }
-.sigma-marker[data-at="50"] { left: 50%; }
-.sigma-marker[data-at="51"] { left: 51%; }
-.sigma-marker[data-at="52"] { left: 52%; }
-.sigma-marker[data-at="53"] { left: 53%; }
-.sigma-marker[data-at="54"] { left: 54%; }
-.sigma-marker[data-at="55"] { left: 55%; }
-.sigma-marker[data-at="56"] { left: 56%; }
-.sigma-marker[data-at="57"] { left: 57%; }
-.sigma-marker[data-at="58"] { left: 58%; }
-.sigma-marker[data-at="59"] { left: 59%; }
-.sigma-marker[data-at="60"] { left: 60%; }
-.sigma-marker[data-at="61"] { left: 61%; }
-.sigma-marker[data-at="62"] { left: 62%; }
-.sigma-marker[data-at="63"] { left: 63%; }
-.sigma-marker[data-at="64"] { left: 64%; }
-.sigma-marker[data-at="65"] { left: 65%; }
-.sigma-marker[data-at="66"] { left: 66%; }
-.sigma-marker[data-at="67"] { left: 67%; }
-.sigma-marker[data-at="68"] { left: 68%; }
-.sigma-marker[data-at="69"] { left: 69%; }
-.sigma-marker[data-at="70"] { left: 70%; }
-.sigma-marker[data-at="71"] { left: 71%; }
-.sigma-marker[data-at="72"] { left: 72%; }
-.sigma-marker[data-at="73"] { left: 73%; }
-.sigma-marker[data-at="74"] { left: 74%; }
-.sigma-marker[data-at="75"] { left: 75%; }
-.sigma-marker[data-at="76"] { left: 76%; }
-.sigma-marker[data-at="77"] { left: 77%; }
-.sigma-marker[data-at="78"] { left: 78%; }
-.sigma-marker[data-at="79"] { left: 79%; }
-.sigma-marker[data-at="80"] { left: 80%; }
-.sigma-marker[data-at="81"] { left: 81%; }
-.sigma-marker[data-at="82"] { left: 82%; }
-.sigma-marker[data-at="83"] { left: 83%; }
-.sigma-marker[data-at="84"] { left: 84%; }
-.sigma-marker[data-at="85"] { left: 85%; }
-.sigma-marker[data-at="86"] { left: 86%; }
-.sigma-marker[data-at="87"] { left: 87%; }
-.sigma-marker[data-at="88"] { left: 88%; }
-.sigma-marker[data-at="89"] { left: 89%; }
-.sigma-marker[data-at="90"] { left: 90%; }
-.sigma-marker[data-at="91"] { left: 91%; }
-.sigma-marker[data-at="92"] { left: 92%; }
-.sigma-marker[data-at="93"] { left: 93%; }
-.sigma-marker[data-at="94"] { left: 94%; }
-.sigma-marker[data-at="95"] { left: 95%; }
-.sigma-marker[data-at="96"] { left: 96%; }
-.sigma-marker[data-at="97"] { left: 97%; }
-.sigma-marker[data-at="98"] { left: 98%; }
-.sigma-marker[data-at="99"] { left: 99%; }
-.sigma-marker[data-at="100"] { left: 100%; }
 
 
 /* --- forms, panels, small text ---------------------------------------- */
@@ -712,3 +491,64 @@ kbd {
 
 .c-palette-empty { margin: 0; padding: 12px 16px; color: var(--text-muted); font-size: var(--text-sm); }
 .c-palette-empty[hidden] { display: none; }
+
+/* --- tables that are wider than the screen ----------------------------- */
+
+/* Measured at 390px: the mitigation table is 519px wide and the Allow
+ * button sits from x=463 to x=507. The console shell is `height: 100vh;
+ * overflow: hidden`, so without this there is nothing to scroll and the
+ * button is simply gone - the second time that button has left the screen,
+ * by a completely different route from the first.
+ *
+ * focusable (tabindex="0" in the markup) because a region only a pointer
+ * can enter is unreachable by keyboard, which is the same bug in different
+ * clothes. */
+.c-table-scroll { overflow-x: auto; }
+
+/* The sticky header inside a scroll container sticks to that container, so
+ * it keeps working. overflow-x alone would make the browser treat the
+ * vertical axis as auto too and break it. */
+.c-table-scroll { overflow-y: visible; }
+
+.c-table-scroll:focus-visible {
+  outline: 2px solid var(--focus-ring); outline-offset: -2px;
+}
+
+/* --- the credential block and short forms ------------------------------ */
+
+/* The one place the product shows a secret. Monospace, selectable, and
+ * allowed to scroll rather than wrap: a wrapped key pasted out of a browser
+ * carries a newline into a shell. */
+.c-code {
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: var(--font-mono); font-size: var(--text-base);
+  color: var(--text);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* A machine name is short. The input used to stretch the full width of the
+ * page, which reads as an invitation to type a paragraph into a field that
+ * wants "web-01". */
+.c-form-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+.c-form-row .field { display: grid; gap: 4px; }
+.c-form-row input { width: 260px; max-width: 100%; }
+
+/* Band labels that survive a phone.
+ *
+ * At 390px the outer two bands are about 70px wide and the word was being
+ * sliced mid-letter: "4σ SLOWE", "5σ BLOCK". A cut word reads as a broken
+ * page. The figure alone reads as a scale, which is what the band is for.
+ * Both labels are in the markup and CSS picks one, so the band is never
+ * blank waiting for script. */
+@media (max-width: 860px) {
+  /* Nav items scroll rather than wrap. Two-line items make the strip as
+   * tall as the page header for no gain. */
+  .c-nav-link { white-space: nowrap; }
+}
+/* The hint sits after the button in source order and belongs under both. */
+.c-form-row .field-hint { flex-basis: 100%; margin: 0; }

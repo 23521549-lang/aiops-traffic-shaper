@@ -43,25 +43,6 @@ traffic-shaper run</code></pre>
   </div>
   {% endif %}
 
-  <div class="c-panel">
-    <div class="c-section-label">Add an agent</div>
-    {% if error %}<p class="field-error" role="alert">{{ error }}</p>{% endif %}
-    {# Body-less: the label rides in the query string, so this POST needs no
-       CloudFront payload hash (ADR-005). #}
-    <form class="c-form-row" data-params-in-url
-          hx-post="/dashboard/ui/agents" hx-target="body" hx-swap="innerHTML">
-      <div class="field">
-        <label for="agent-label">Machine name</label>
-        <input type="text" id="agent-label" name="label" required
-               placeholder="web-01" aria-describedby="agent-label-hint">
-        <span class="field-hint" id="agent-label-hint">
-          What you will want to read when this one goes quiet at 3am.
-        </span>
-      </div>
-      <button type="submit" class="c-btn c-btn--primary">Add an agent</button>
-    </form>
-  </div>
-
   {% if quiet_count %}
   <div class="c-panel">
     <div class="alert alert-warning">
@@ -73,31 +54,34 @@ traffic-shaper run</code></pre>
   {% endif %}
 
   {% if agents %}
-  <table class="c-table">
-    <caption class="sr-only">Your agents, most recently seen first</caption>
-    <thead>
-      <tr>
-        <th scope="col">Agent</th>
-        <th scope="col">State</th>
-        <th scope="col">Last seen</th>
-        <th scope="col">Version</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for a in agents %}
-      <tr {% if selected and selected.agent_id == a.agent_id %}aria-selected="true"{% endif %}>
-        {# The label its owner chose. The uuid stays in the title for anyone
-           who needs to paste it into a ticket. #}
-        <th scope="row" title="{{ a.agent_id }}">
-          <a href="/dashboard/ui/agents?id={{ a.agent_id }}">{{ a.label }}</a>
-        </th>
-        <td><span class="c-state c-state--{{ a.state }}">{{ a.state_label }}</span></td>
-        <td class="d" title="{{ a.last_seen_exact }}">{{ a.last_seen }}</td>
-        <td class="d">{{ a.version }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="c-table-scroll" tabindex="0" role="region"
+       aria-label="Your agents">
+    <table class="c-table">
+      <caption class="sr-only">Your agents, most recently seen first</caption>
+      <thead>
+        <tr>
+          <th scope="col">Agent</th>
+          <th scope="col">State</th>
+          <th scope="col">Last seen</th>
+          <th scope="col">Version</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in agents %}
+        <tr {% if selected and selected.agent_id == a.agent_id %}aria-selected="true"{% endif %}>
+          {# The label its owner chose. The uuid stays in the title for anyone
+             who needs to paste it into a ticket. #}
+          <th scope="row" title="{{ a.agent_id }}">
+            <a href="/dashboard/ui/agents?id={{ a.agent_id }}">{{ a.label }}</a>
+          </th>
+          <td><span class="c-state c-state--{{ a.state }}">{{ a.state_label }}</span></td>
+          <td class="d" title="{{ a.last_seen_exact }}">{{ a.last_seen }}</td>
+          <td class="d">{{ a.version }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% else %}
   <div class="c-empty-state">
     <strong>No agent has registered</strong>
@@ -109,6 +93,31 @@ traffic-shaper run</code></pre>
     </p>
   </div>
   {% endif %}
+
+  {# Last, deliberately. Adding an agent is an occasional errand;
+     a quiet machine is why someone opened this page, and the form
+     used to sit on top of that news. #}
+  <div class="c-panel">
+    <div class="c-section-label">Add an agent</div>
+    {% if error %}<p class="field-error" role="alert">{{ error }}</p>{% endif %}
+    {# Body-less: the label rides in the query string, so this POST needs no
+       CloudFront payload hash (ADR-005). #}
+    <form class="c-form-row" data-params-in-url
+          hx-post="/dashboard/ui/agents" hx-target="body" hx-swap="innerHTML">
+      <div class="field">
+        <label for="agent-label">Machine name</label>
+        <input type="text" id="agent-label" name="label" required
+               placeholder="web-01" aria-describedby="agent-label-hint">
+      </div>
+      <button type="submit" class="c-btn c-btn--primary">Add</button>
+      {# Below the row, not inside the field: inside, it dragged the submit
+         button a line down from the input it belongs to. The association is
+         by id, which works from anywhere in the document. #}
+      <span class="field-hint" id="agent-label-hint">
+        What you will want to read when this one goes quiet at 3am.
+      </span>
+    </form>
+  </div>
 </div>
 
 {% if selected %}

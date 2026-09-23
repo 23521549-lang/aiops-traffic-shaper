@@ -31,8 +31,8 @@ from services.backend.schemas.whitelist import WhitelistRequest
 from services.backend.ui.csrf import CSRF_COOKIE_NAME, verify_csrf
 from services.backend.ui.hx import hx_return
 from services.backend.ui.presenters import (
-    absolute_expiry, agent_health, agent_state, decompose, relative_expiry,
-    severity_detail,
+    absolute_expiry, agent_health, agent_state, decompose, reason_label,
+    relative_expiry, severity_detail,
     tier_css, tier_label,
     timestamp_pair,
 )
@@ -55,7 +55,9 @@ def _rows(mitigations, now):
         "expires_exact": absolute_expiry(m.expires_at),
         "score": m.score,
         "z": m.z,
-        "reason": m.reason,
+        # Words, not the stored value. The pane exists to explain a
+        # decision to a person, and it was printing behavioral_anomaly.
+        "reason": reason_label(m.reason),
         "features": m.features,
     } for m in mitigations]
 
