@@ -48,3 +48,26 @@ def test_example_access_log_carries_every_field_the_collector_needs():
     for field in ("$remote_addr", "$request", "$status", "$body_bytes_sent",
                   "$request_time", "$http_user_agent"):
         assert field in log_format, f"{field} missing from the example log_format"
+
+
+def test_the_example_log_format_emits_exactly_what_the_reader_needs():
+    """The two ends of the same pipe, and they had never matched.
+
+    The shipped format emitted $time_local and one "$request" field holding
+    method, URI and protocol together, while the backend schema wants
+    time_iso8601 and a separate method and URI. A customer following this
+    file produced a log the product could not parse into its own schema, and
+    nothing here would have noticed, because nothing read the log at all.
+    """
+    from services.agent.logsource import FIELDS
+
+    conf = (_EXAMPLE_DIR / "nginx.conf").read_text()
+    for field in FIELDS:
+        assert f'"{field}"' in conf, f"the example log_format never emits {field}"
+
+
+def test_the_example_log_format_escapes_its_values():
+    """Without escape=json a request URI carrying a quote or a newline
+    breaks the line, and the reader drops every request in it."""
+    conf = (_EXAMPLE_DIR / "nginx.conf").read_text()
+    assert "log_format aiops escape=json" in conf

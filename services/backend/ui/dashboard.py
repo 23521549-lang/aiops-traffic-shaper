@@ -17,6 +17,7 @@ from fastapi.responses import HTMLResponse, Response
 from pydantic import ValidationError
 
 from services.backend.api.cognito_auth import dashboard_auth
+from services.backend.api.routes.agent import register_agent
 from services.backend.api.routes.dashboard import (
     add_whitelist, list_history, list_mitigations, list_own_agents, list_series,
     list_whitelist, mark_history_read, model_status, remove_whitelist,
@@ -25,6 +26,7 @@ from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.tables import AgentsTable
 from services.backend.ml.model import ModelManager
 from services.backend.ui.charts import deviation_chart, downsample, sigma_strip
+from services.backend.schemas.agent_register import AgentRegisterRequest
 from services.backend.schemas.whitelist import WhitelistRequest
 from services.backend.ui.csrf import CSRF_COOKIE_NAME, verify_csrf
 from services.backend.ui.hx import hx_return
@@ -163,17 +165,27 @@ def agents_page(request: Request, id: str | None = None,
     id guessed from another tenant finds nothing rather than finding
     somebody else's machine.
     """
+    return _agents_page(request, tenant_id, resource, selected_id=id)
+
+
+def _agents_page(request, tenant_id, resource, selected_id=None,
+                 created=None, error=None, label=""):
     now = datetime.now(timezone.utc)
     rows = [agent_state(a.model_dump(), now)
             for a in list_own_agents(tenant_id=tenant_id, resource=resource)]
-    selected = next((r for r in rows if r["agent_id"] == id), None)
+    selected = next((r for r in rows if r["agent_id"] == selected_id), None)
     live = sum(1 for r in rows if r["state"] == "live")
 
     return templates.TemplateResponse(request, "dashboard_agents.html", _shell(
         request, tenant_id, "agents",
         agents=rows, selected=selected, detail_open=selected is not None,
         live_count=live, quiet_count=sum(1 for r in rows if r["state"] == "quiet"),
-        agent_count=len(rows),
+        agent_count=len(rows), created=created, error=error,
+        new_label=label,
+        # The command on screen has to point at THIS deployment. Read from
+        # the request rather than configured, so it is right on the laptop,
+        # on the Lambda URL and behind CloudFront without three settings.
+        backend_url=str(request.base_url).rstrip("/"),
     ))
 
 
@@ -224,6 +236,48 @@ def bulk_allow_ui(ip: list[str] = Query(default=[]),
     return Response(status_code=200, headers={
         "HX-Redirect": f"/dashboard/ui?allowed={allowed}&skipped={len(wanted) - allowed}",
     })
+
+
+@router.post("/dashboard/ui/agents", response_class=HTMLResponse,
+             dependencies=[Depends(verify_csrf)])
+def add_agent_ui(request: Request, label: str = "",
+                 tenant_id: str = Depends(dashboard_auth),
+                 resource=Depends(get_dynamo_resource)):
+    """Mint an agent from the console.
+
+    This replaces an instruction that pointed at nothing. The landing page
+    told new customers to "get the token from Detection model in the
+    console", and no page in the console has ever shown a token, so there
+    was no path from signing up to being protected.
+
+    A token was never the right answer anyway: it is a bearer credential for
+    the whole account, it would have to be read off a screen and pasted
+    through a shell history, and it expires within the hour. The console is
+    already authenticated as this tenant, so it calls the same registration
+    route the CLI calls and hands back the one credential the agent needs.
+
+    Nothing new is minted and nothing new is stored: `register_agent` is the
+    existing route, unchanged, including the suspended-tenant check that
+    stops a session outliving its suspension.
+    """
+    label = label.strip()
+    error = None
+    created = None
+    if not label:
+        # The only thing that will ever tell its owner which machine went
+        # quiet. A blank one produces a fleet of indistinguishable rows.
+        error = "Give the machine a name you will recognise later."
+    else:
+        try:
+            created = register_agent(AgentRegisterRequest(agent_label=label),
+                                     tenant_id=tenant_id, resource=resource)
+        except ValidationError:
+            error = "That name cannot be used."
+        except HTTPException as e:
+            error = str(e.detail)
+
+    return _agents_page(request, tenant_id, resource, created=created,
+                        error=error, label=label)
 
 
 @router.get("/dashboard/ui/whitelist", response_class=HTMLResponse)

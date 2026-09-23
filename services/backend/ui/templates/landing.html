@@ -259,16 +259,25 @@
   <h2>Install</h2>
   <pre class="lp-code"><code>pip install traffic-shaper-agent
 
-traffic-shaper register \
+traffic-shaper connect \
   --backend-url https://&lt;your-deployment&gt; \
-  --token "$ID_TOKEN" \
-  --label web-01
+  --tenant-id &lt;from the console&gt; \
+  --agent-id &lt;from the console&gt; \
+  --api-key &lt;from the console&gt;
 
 traffic-shaper run</code></pre>
   <p class="muted">
-    Get the token from Detection model in the console after signing in. The
-    agent writes its credentials to
-    <code>~/.traffic-shaper/config.json</code> and needs nothing else.
+    Sign in, open Agents, and add one. The console prints that command with
+    your values already filled in. The key is shown once, because only its
+    hash is stored. The agent writes its credentials to
+    <code>~/.aiops-agent/config.json</code>, owner-readable only, and needs
+    nothing else.
+  </p>
+  <p class="muted">
+    It reads your nginx access log, which has to be in the JSON format shown
+    in <code>config/nginx/nginx.conf</code>: the agent needs the request
+    method and URI as separate fields, and combined format does not carry
+    them that way.
   </p>
   <p>
     <strong>Nothing is enforced on day one.</strong> Until your first model

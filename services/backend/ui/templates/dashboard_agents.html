@@ -16,6 +16,52 @@ nothing registered yet
 
 <div class="c-list">
 
+  {% if created %}
+  {# Shown once. The key is stored hashed, so there is no second chance to
+     display it, and an operator who assumes they can come back for it loses
+     the machine's credential. Saying so is part of the control. #}
+  <div class="c-panel">
+    <div class="alert alert-ok" role="status">
+      <strong>Agent created.</strong>
+      Its key is shown once, here, and cannot be shown again.
+    </div>
+    <div class="c-section-label">Run this on the machine you want protected</div>
+    {# `connect`, not `register`. Registration is what just happened, here,
+       against this session. The machine is only handed the result. #}
+    <pre class="c-code"><code>traffic-shaper connect \
+  --backend-url {{ backend_url }} \
+  --tenant-id {{ created.tenant_id }} \
+  --agent-id {{ created.agent_id }} \
+  --api-key {{ created.api_key }}
+
+traffic-shaper run</code></pre>
+    <p class="c-summary">
+      The agent writes these to <code>~/.aiops-agent/config.json</code> with
+      owner-only permissions and needs nothing else. Nothing is enforced
+      until the first model is trained, which takes one night.
+    </p>
+  </div>
+  {% endif %}
+
+  <div class="c-panel">
+    <div class="c-section-label">Add an agent</div>
+    {% if error %}<p class="field-error" role="alert">{{ error }}</p>{% endif %}
+    {# Body-less: the label rides in the query string, so this POST needs no
+       CloudFront payload hash (ADR-005). #}
+    <form class="c-form-row" data-params-in-url
+          hx-post="/dashboard/ui/agents" hx-target="body" hx-swap="innerHTML">
+      <div class="field">
+        <label for="agent-label">Machine name</label>
+        <input type="text" id="agent-label" name="label" required
+               placeholder="web-01" aria-describedby="agent-label-hint">
+        <span class="field-hint" id="agent-label-hint">
+          What you will want to read when this one goes quiet at 3am.
+        </span>
+      </div>
+      <button type="submit" class="c-btn c-btn--primary">Add an agent</button>
+    </form>
+  </div>
+
   {% if quiet_count %}
   <div class="c-panel">
     <div class="alert alert-warning">

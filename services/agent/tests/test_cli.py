@@ -26,7 +26,10 @@ def test_register_success_saves_config(tmp_path, monkeypatch):
     assert "Registered agent a-1" in result.output
     saved = json.loads(config_path.read_text())
     assert saved == {"backend_url": "http://backend", "tenant_id": "t-1",
-                      "agent_id": "a-1", "api_key": "raw-key"}
+                      "agent_id": "a-1", "api_key": "raw-key",
+                      # Recorded here so `run` needs no arguments on the
+                      # machine that was registered.
+                      "access_log": "/var/log/nginx/access.log"}
 
 
 def test_register_backend_error_exits_nonzero(tmp_path, monkeypatch):
