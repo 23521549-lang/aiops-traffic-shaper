@@ -23,12 +23,21 @@ router = APIRouter()
 _STATIC_DIR = Path(__file__).parent / "static"
 
 # Filename -> media type. The key is matched exactly; nothing is globbed.
+#
+# Adding a <script src> to a template is one edit and adding it here is a
+# second, in another file, and for a while nothing connected them. Two
+# scripts shipped referenced-but-not-served, and the failure is silent in
+# the worst way: the page renders, the markup is all there, and the feature
+# is dead because the browser got a 404. test_static_assets.py now compares
+# this dict against every template, in both directions.
 _ASSETS = {
     "app.css": "text/css",
     "console.css": "text/css",
     "htmx.min.js": "application/javascript",
     "signed-post.js": "application/javascript",
     "ui-status.js": "application/javascript",
+    "bulk-select.js": "application/javascript",
+    "keys.js": "application/javascript",
 }
 
 CACHE_CONTROL = "public, max-age=300"
