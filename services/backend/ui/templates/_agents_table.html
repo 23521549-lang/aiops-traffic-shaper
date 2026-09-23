@@ -1,22 +1,44 @@
 {% if agents %}
-<table>
-  <thead><tr><th>Tenant</th><th>Agent</th><th>Version</th><th>Status</th><th>Last seen</th></tr></thead>
-  <tbody>
-    {% for a in agents %}
-    <tr>
-      <td><code>{{ a.tenant_id }}</code></td>
-      <td><code>{{ a.agent_id }}</code></td>
-      <td>{{ a.agent_version or "—" }}</td>
-      <td>
-        {% if a.status == "stale" %}<span class="badge badge-warning">Stale</span>
-        {% elif a.status == "revoked" %}<span class="badge badge-danger">Revoked</span>
-        {% else %}<span class="badge badge-success">Active</span>{% endif %}
-      </td>
-      <td>{{ a.last_seen_at }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div class="table-scroll" tabindex="0" role="region" aria-labelledby="agents-caption">
+  <table>
+    <caption class="sr-only" id="agents-caption">Agents, {{ agent_status }}</caption>
+    <thead>
+      <tr>
+        <th scope="col">Agent</th>
+        <th scope="col">Tenant</th>
+        <th scope="col">Last seen</th>
+        <th scope="col">Version</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in agents %}
+      <tr>
+        {# The label its owner chose, not a bare uuid. The uuid stays
+           available as the title for anyone who needs it in a ticket. #}
+        <th scope="row" title="{{ a.agent_id }}">{{ a.label }}</th>
+        <td><code>{{ a.tenant_id }}</code></td>
+        <td class="num">{{ a.last_seen }}</td>
+        <td class="num">{{ a.version }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% else %}
-<div class="empty-state">No agents with this status.</div>
+{# The empty state depends entirely on WHICH filter is empty. An empty
+   "Active" list is the worst news in the product; an empty "Stale" list is
+   the best. They used to render identically, in grey, as "No agents with
+   this status." #}
+<div class="empty-state">
+  {% if agent_status == "active" %}
+  <h3><span class="dot dot-bad" aria-hidden="true"></span>No agents are reporting</h3>
+  <p>Every tenant is currently unprotected.</p>
+  {% elif agent_status == "stale" %}
+  <h3><span class="dot dot-ok" aria-hidden="true"></span>No agents have gone quiet</h3>
+  <p>Every registered agent has checked in within the last five minutes.</p>
+  {% else %}
+  <h3>No revoked agents</h3>
+  <p>Agent keys are revoked when their tenant is suspended.</p>
+  {% endif %}
+</div>
 {% endif %}

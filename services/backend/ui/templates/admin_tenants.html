@@ -1,0 +1,18 @@
+{% extends "app_shell.html" %}
+{% block title %}Tenants — AI Traffic Shaper{% endblock %}
+{% block page_title %}Tenants{% endblock %}
+{% block page_subtitle %}Publisher view{% endblock %}
+{% block page_content %}
+
+<div class="card">
+  <h2>Tenants</h2>
+  <div class="card-sub">
+    Suspending a tenant stops its agents being served and revokes their keys
+    immediately.
+  </div>
+  <div id="tenants-table">
+    {% include "_tenants_table.html" %}
+  </div>
+</div>
+
+{% endblock %}

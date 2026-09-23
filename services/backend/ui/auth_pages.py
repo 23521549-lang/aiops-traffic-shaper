@@ -1,20 +1,11 @@
-from pathlib import Path
-
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from services.backend.api.cognito_auth import _decode_and_verify, get_jwks
 from services.backend.ui.csrf import CSRF_COOKIE_NAME, new_csrf_token
 from services.backend.ui.templates_env import templates
 
 router = APIRouter()
-
-_STATIC_DIR = Path(__file__).parent / "static"
-
-
-@router.get("/ui/static/interactions.js")
-def interactions_js():
-    return FileResponse(_STATIC_DIR / "interactions.js", media_type="application/javascript")
 
 
 @router.get("/ui/login", response_class=HTMLResponse)
@@ -47,11 +38,13 @@ def login_submit(request: Request, id_token: str = Form(...), jwks: dict = Depen
     # enforce TLS) — tests use an https:// TestClient base_url so this
     # cookie still round-trips locally without weakening it for real use.
     response.set_cookie("id_token", id_token, httponly=True, samesite="lax", secure=True, max_age=3600)
-    # M7: deliberately NOT httponly — the page's own script has to read this
-    # to echo it back in the X-CSRF-Token header. That is safe precisely
-    # because it is not a credential: it proves the request came from our own
-    # page, while id_token (which IS the credential) stays httpOnly.
-    response.set_cookie(CSRF_COOKIE_NAME, new_csrf_token(), httponly=False,
+    # M7 introduced this as NOT httponly, because the hand-written helper
+    # read it out of document.cookie to echo into the X-CSRF-Token header.
+    # htmx takes it from a server-rendered hx-headers attribute instead
+    # (ADR-007), so the exposure bought nothing and is now closed. It was
+    # never a credential — but a token no script can read cannot be
+    # exfiltrated by one either.
+    response.set_cookie(CSRF_COOKIE_NAME, new_csrf_token(), httponly=True,
                         samesite="lax", secure=True, max_age=3600)
     return response
 

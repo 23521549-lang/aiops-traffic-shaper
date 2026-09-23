@@ -1,0 +1,59 @@
+{% extends "app_shell.html" %}
+{% block title %}Detection model — AI Traffic Shaper{% endblock %}
+{% block page_title %}Detection model{% endblock %}
+{% block page_subtitle %}Tenant: {{ tenant_id }}{% endblock %}
+{% block page_content %}
+
+<div class="card">
+  <h2>Your model</h2>
+  {% if model.model_ready %}
+  <div class="card-sub">Retrained nightly on your own traffic.</div>
+  <div class="card-grid">
+    <div class="stat">
+      <div class="stat-value">{{ model.version }}</div>
+      <div class="stat-label">Version</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">{{ model.training_samples }}</div>
+      <div class="stat-label">Training samples</div>
+    </div>
+  </div>
+  <p class="card-sub flush">Trained at {{ model.trained_at }}</p>
+  {% else %}
+  {# "Shadow mode" is internal vocabulary. No customer knows what it means,
+     and the old copy gave them no idea how long it lasts. #}
+  <div class="empty-state">
+    <h3>Learning what your normal traffic looks like</h3>
+    <p>
+      We’re watching but not blocking yet. Until your first model is trained,
+      you see everything we see and we change nothing.
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+{% if thresholds %}
+<div class="card">
+  <h2>Sensitivity</h2>
+  <div class="card-sub">What “unusual” currently means for your site.</div>
+  <p>
+    We slow an IP when its behaviour is <strong>4σ</strong> outside your
+    normal, and block it at <strong>5σ</strong>. For your current model that
+    works out to an anomaly score below
+    <code>{{ "%.3f"|format(thresholds.slow) }}</code> (slowed) or
+    <code>{{ "%.3f"|format(thresholds.block) }}</code> (blocked).
+  </p>
+  <p class="field-hint">
+    These thresholds move with your traffic — each night’s retraining
+    recalculates what normal means for your site. That is why a raw anomaly
+    score is not comparable between two nights, and why this page reports
+    distance from your own baseline instead.
+  </p>
+  <p class="field-hint">
+    False-positive rates for these thresholds were measured on modelled
+    traffic, not yet on live customer traffic.
+  </p>
+</div>
+{% endif %}
+
+{% endblock %}

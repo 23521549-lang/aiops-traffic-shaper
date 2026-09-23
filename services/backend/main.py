@@ -16,6 +16,7 @@ from services.backend.ui.auth_pages import router as ui_auth_router
 from services.backend.ui.control_platform import router as ui_control_platform_router
 from services.backend.ui.csrf import CsrfError
 from services.backend.ui.dashboard import router as ui_dashboard_router
+from services.backend.ui.static_files import router as ui_static_router
 
 app = FastAPI()
 app.include_router(agent_router)
@@ -25,6 +26,7 @@ app.include_router(admin_router)
 app.include_router(ui_auth_router)
 app.include_router(ui_dashboard_router)
 app.include_router(ui_control_platform_router)
+app.include_router(ui_static_router)
 
 _UI_PAGE_PREFIXES = ("/dashboard/ui", "/admin/ui")
 
@@ -118,11 +120,15 @@ _SECURITY_HEADERS = {
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
     "Content-Security-Policy": (
         "default-src 'self'; "
-        # The UI's only script is /ui/static/interactions.js, served from this
-        # same origin — no inline script, so no 'unsafe-inline' here. The
-        # inline <style> block in base.html is why style-src needs it.
+        # Every script is same-origin under /ui/static/ and there is no
+        # inline script anywhere, so no 'unsafe-inline' on either directive.
         "script-src 'self'; "
-        "style-src 'self' 'unsafe-inline'; "
+        # Tightened from 'self' 'unsafe-inline' (ADR-007). The only reason
+        # it was ever loose was base.html's 116-line inline <style>, which
+        # now lives in /ui/static/app.css. htmx would have re-opened it by
+        # injecting its own indicator styles, so it is configured with
+        # includeIndicatorStyles:false and those rules ship in app.css too.
+        "style-src 'self'; "
         "img-src 'self' data:; "
         "frame-ancestors 'none'; "
         "base-uri 'self'; "

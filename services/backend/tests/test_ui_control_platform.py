@@ -29,7 +29,7 @@ def test_control_platform_shows_all_tenants(dynamo_resource, cognito_test_keys):
                                        created_at="2026-08-21T00:00:00Z")
     TenantsTable(dynamo_resource).put(tenant_id="t-2", name="Globex", status="active",
                                        created_at="2026-08-21T00:00:00Z")
-    resp = client.get("/admin/ui")
+    resp = client.get("/admin/ui/tenants")
     assert resp.status_code == 200
     assert "Acme" in resp.text
     assert "Globex" in resp.text
@@ -100,7 +100,7 @@ def test_a_suspended_tenant_can_be_reactivated_from_the_control_platform(dynamo_
     client = _client(dynamo_resource, cognito_test_keys)
     TenantsTable(dynamo_resource).put(tenant_id="t-1", name="Acme", status="suspended",
                                        created_at="2026-08-21T00:00:00Z")
-    page = client.get("/admin/ui").text
+    page = client.get("/admin/ui/tenants").text
     assert 'hx-post="/admin/ui/tenants/t-1/reactivate"' in page
 
     resp = client.post("/admin/ui/tenants/t-1/reactivate", headers=_csrf(client))

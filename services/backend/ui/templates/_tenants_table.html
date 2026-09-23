@@ -1,35 +1,64 @@
+<p class="field-hint" data-live>{{ message or "" }}</p>
+
 {% if tenants %}
-<table>
-  <thead><tr><th>Tenant</th><th>Name</th><th>Status</th><th>Created</th><th></th></tr></thead>
-  <tbody>
-    {% for t in tenants %}
-    <tr>
-      <td><code>{{ t.tenant_id }}</code></td>
-      <td>{{ t.name }}</td>
-      <td>{% if t.status == "suspended" %}<span class="badge badge-danger">Suspended</span>
-          {% else %}<span class="badge badge-success">Active</span>{% endif %}</td>
-      <td>{{ t.created_at }}</td>
-      <td style="text-align: right;">
-        {% if t.status != "suspended" %}
-        <button class="btn btn-danger btn-sm"
-                hx-post="/admin/ui/tenants/{{ t.tenant_id }}/suspend"
-                hx-target="#tenants-table" hx-swap="innerHTML"
-                hx-confirm="Suspend {{ t.tenant_id }}? Its agents will stop being served.">
-          Suspend
-        </button>
-        {% else %}
-        <button class="btn btn-sm"
-                hx-post="/admin/ui/tenants/{{ t.tenant_id }}/reactivate"
-                hx-target="#tenants-table" hx-swap="innerHTML"
-                hx-confirm="Reactivate {{ t.tenant_id }}? Its old agent keys stay revoked - it must register agents again.">
-          Reactivate
-        </button>
-        {% endif %}
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div class="table-scroll" tabindex="0" role="region" aria-labelledby="tenants-caption">
+  <table>
+    <caption class="sr-only" id="tenants-caption">Registered tenants</caption>
+    <thead>
+      <tr>
+        <th scope="col">Tenant</th>
+        <th scope="col">Status</th>
+        <th scope="col">Requests today</th>
+        <th scope="col">Registered</th>
+        <th scope="col"><span class="sr-only">Actions</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in tenants %}
+      <tr>
+        <th scope="row">
+          <code>{{ row.tenant.tenant_id }}</code>
+          {% if row.tenant.name %}<span class="field-hint">{{ row.tenant.name }}</span>{% endif %}
+        </th>
+        <td>
+          {% if row.tenant.status == "suspended" %}
+          <span class="badge badge-danger">Suspended</span>
+          {% else %}
+          <span class="badge badge-success">Active</span>
+          {% endif %}
+        </td>
+        {# Per-tenant usage was already being written on every accepted batch
+           and read back by nothing, so the Suspend button was a lever with
+           no aim. #}
+        <td class="num">{{ row.used }}</td>
+        <td class="num">{{ row.tenant.created_at }}</td>
+        <td class="cell-actions">
+          {% if row.tenant.status == "suspended" %}
+          <button type="button" class="btn btn-sm"
+                  hx-post="/admin/ui/tenants/{{ row.tenant.tenant_id }}/reactivate"
+                  hx-target="#tenants-table" hx-swap="innerHTML"
+                  hx-confirm="Reactivate {{ row.tenant.tenant_id }}? Its agent keys stay revoked, so its agents must register again before they are served."
+                  aria-label="Reactivate tenant {{ row.tenant.tenant_id }}">
+            Reactivate
+          </button>
+          {% else %}
+          <button type="button" class="btn btn-danger btn-sm"
+                  hx-post="/admin/ui/tenants/{{ row.tenant.tenant_id }}/suspend"
+                  hx-target="#tenants-table" hx-swap="innerHTML"
+                  hx-confirm="Suspend {{ row.tenant.tenant_id }}? Its agents stop being served immediately and every one of its API keys is revoked."
+                  aria-label="Suspend tenant {{ row.tenant.tenant_id }}">
+            Suspend
+          </button>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% else %}
-<div class="empty-state">No tenants registered yet.</div>
+<div class="empty-state">
+  <h3>No tenants yet</h3>
+  <p>A tenant appears here the first time one of its agents registers with a valid token.</p>
+</div>
 {% endif %}

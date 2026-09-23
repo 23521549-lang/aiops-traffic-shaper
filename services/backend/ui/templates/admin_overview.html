@@ -1,0 +1,71 @@
+{% extends "app_shell.html" %}
+{% block title %}Overview — AI Traffic Shaper{% endblock %}
+{% block page_title %}Overview{% endblock %}
+{% block page_subtitle %}Publisher view{% endblock %}
+{% block page_content %}
+
+{% if usage.ceiling_warning %}
+<div class="alert alert-warning">
+  <strong>Usage is approaching today’s Always-Free ceiling.</strong>
+  See the breakdown below before this turns into a real AWS bill.
+</div>
+{% endif %}
+
+{% if live_count == 0 %}
+{# The loudest state in the product. This used to render as the grey null
+   result "No agents with this status." #}
+<div class="alert alert-danger">
+  <strong>No agents are reporting.</strong>
+  Every tenant is currently unprotected.
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Today</h2>
+  <div class="card-sub">{{ usage.date }} · resets at midnight UTC</div>
+  <div class="card-grid">
+    <div class="stat">
+      {# Never a bare number. A count with no denominator cannot tell the
+         operator whether to worry. #}
+      <div class="stat-value">{{ share.pct_label }}</div>
+      <div class="stat-label">Of today’s free-tier share</div>
+      <div class="meter stack-sm" {% if usage.ceiling_warning %}data-tone="warn"{% endif %}
+           role="img" aria-label="{{ share.used }} of {{ share.ceiling|int }} requests used today">
+        <span data-width="{{ ((share.pct / 5)|round|int) * 5 }}"></span>
+      </div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">{{ share.used }}<small> / {{ share.ceiling|int }}</small></div>
+      <div class="stat-label">Requests today</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">{{ "%.2f"|format(usage.estimated_gb_seconds) }}</div>
+      <div class="stat-label">GB-seconds (est.)</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Fleet</h2>
+  <div class="card-sub">Across every tenant.</div>
+  <div class="card-grid">
+    <div class="stat">
+      <div class="stat-value">{{ tenant_count }}</div>
+      <div class="stat-label">Tenants</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">{{ live_count }}</div>
+      <div class="stat-label">Agents reporting</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">{{ stale_count }}</div>
+      <div class="stat-label">Agents gone quiet</div>
+    </div>
+  </div>
+  <p class="card-sub flush">
+    An agent counts as reporting if it has made an authenticated call in the
+    last five minutes.
+  </p>
+</div>
+
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "app_shell.html" %}
+{% block title %}Agents — AI Traffic Shaper{% endblock %}
+{% block page_title %}Agents{% endblock %}
+{% block page_subtitle %}Publisher view{% endblock %}
+{% block page_content %}
+
+<div class="card">
+  <h2>Agents</h2>
+  <div class="card-sub">
+    Liveness comes from when each agent last made an authenticated call.
+  </div>
+
+  {# Links, not a <select>. The dropdown was a form, the old helper reset
+     every form on every response, and the swap target sat outside it — so
+     the control snapped back to its default after every use. A link carries
+     its own state and the URL can be shared into an incident thread. #}
+  <div class="filter-tabs" role="group" aria-label="Filter agents by status">
+    {% for f in filters %}
+    <a class="filter-tab" href="/admin/ui/agents?status={{ f }}"
+       {% if agent_status == f %}aria-current="true"{% endif %}>{{ f|capitalize }}</a>
+    {% endfor %}
+  </div>
+
+  <div id="agents-table">
+    {% include "_agents_table.html" %}
+  </div>
+</div>
+
+{% endblock %}

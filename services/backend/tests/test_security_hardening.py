@@ -40,14 +40,21 @@ def test_json_api_also_carries_security_headers(dynamo_resource, cognito_test_ke
     assert resp.headers["X-Content-Type-Options"] == "nosniff"
 
 
-def test_csp_allows_the_pages_own_inline_styles_and_external_script(dynamo_resource,
-                                                                    cognito_test_keys):
-    """The UI uses an inline <style> block and an external /ui/static script;
-    a CSP that forbids either would silently break the pages."""
+def test_csp_permits_no_inline_script_or_style_at_all(dynamo_resource, cognito_test_keys):
+    """Tightened in ADR-007. `style-src` used to carry 'unsafe-inline' for one
+    reason: base.html held 116 lines of inline <style>. That CSS now lives in
+    /ui/static/app.css, every one-off inline style="" attribute in the
+    templates became a class, and htmx is configured with
+    includeIndicatorStyles:false so it does not inject a <style> of its own.
+
+    This asserts the stronger policy on purpose. If someone reintroduces an
+    inline style, this test is how they find out — the browser would simply
+    ignore it, which is far harder to notice."""
     csp = _client(dynamo_resource, cognito_test_keys).get("/ui/login").headers["Content-Security-Policy"]
-    assert "style-src 'self' 'unsafe-inline'" in csp
-    assert "script-src 'self'" in csp
-    assert "'unsafe-inline'" not in csp.split("script-src")[1].split(";")[0]
+    assert "style-src 'self';" in csp
+    assert "script-src 'self';" in csp
+    assert "'unsafe-inline'" not in csp
+    assert "'unsafe-eval'" not in csp
 
 
 # --- M8: unauthenticated traffic must not burn the free-tier ceiling -----
@@ -107,9 +114,11 @@ def _logged_in(dynamo_resource, cognito_test_keys, claims):
     return client
 
 
-def test_login_issues_a_js_readable_csrf_cookie(dynamo_resource, cognito_test_keys):
-    """Double-submit needs the token readable by the page's own script, unlike
-    the id_token cookie which stays httpOnly."""
+def test_login_issues_an_httponly_csrf_cookie(dynamo_resource, cognito_test_keys):
+    """It used to be script-readable, because the hand-written helper parsed
+    document.cookie to echo the token back. htmx reads it from a
+    server-rendered hx-headers attribute instead (ADR-007), so the double
+    submit still works with the cookie closed to script — strictly better."""
     client = _client(dynamo_resource, cognito_test_keys)
     resp = client.post("/ui/login",
                        data={"id_token": sign_test_token(cognito_test_keys["private_pem"],
@@ -117,7 +126,7 @@ def test_login_issues_a_js_readable_csrf_cookie(dynamo_resource, cognito_test_ke
                        follow_redirects=False)
     assert "csrf_token" in resp.cookies
     set_cookie = [h for h in resp.headers.get_list("set-cookie") if h.startswith("csrf_token=")][0]
-    assert "HttpOnly" not in set_cookie
+    assert "HttpOnly" in set_cookie
     assert "Secure" in set_cookie
 
 
@@ -141,7 +150,7 @@ def test_ui_state_change_with_mismatched_csrf_token_is_rejected(dynamo_resource,
 
 def test_ui_state_change_with_matching_csrf_token_succeeds(dynamo_resource, cognito_test_keys):
     client = _logged_in(dynamo_resource, cognito_test_keys, {"custom:tenant_id": "t-1"})
-    resp = client.post("/dashboard/ui/whitelist", data={"ip": "203.0.113.4"},
+    resp = client.post("/dashboard/ui/whitelist?ip=203.0.113.4",
                        headers={"X-CSRF-Token": client.cookies["csrf_token"]})
     assert resp.status_code == 200
     assert "203.0.113.4" in resp.text

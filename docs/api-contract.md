@@ -206,9 +206,16 @@ Stage 9 added server-rendered HTML pages served by the same Lambda:
 `/admin/ui*`. They are listed here only so nobody mistakes them for missing
 API: they return HTML, authenticate via the `id_token` cookie, and their
 state-changing requests additionally require a CSRF double-submit token
-(`X-CSRF-Token` echoing the `csrf_token` cookie). The JSON API deliberately has
-no CSRF requirement — a cross-site form cannot set an `Authorization` header,
-and demanding a token there would break the agent CLI for no security gain.
+(`X-CSRF-Token` echoing the `csrf_token` cookie).
+
+The JSON API used to be described here as needing no CSRF requirement, because
+"a cross-site form cannot set an `Authorization` header". That was wrong:
+`dashboard_auth` and `admin_auth` also accept the `id_token` **cookie**, so a
+browser session authenticates against `/dashboard/v1/*` and `/admin/v1/*` too.
+State-changing JSON routes now use `verify_csrf_if_cookie_auth`, which exempts
+any caller presenting its credential in a header — the agent CLI, curl, and the
+portal's own `X-Id-Token` fetches — and requires the double-submit token from a
+caller authenticating by cookie alone.
 
 *Contract verified against the implementation on 2026-08-24 (Phase 6 gate row
 2). The four drifts found — telemetry 429/403, register 403, decisions 403, and

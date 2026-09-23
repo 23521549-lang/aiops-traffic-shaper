@@ -46,7 +46,7 @@ This rules out the old stack's core pieces: self-managed Kubernetes on EC2
 | State: tenants, agents, telemetry, mitigation state, whitelist, usage counters | DynamoDB | Always Free forever (25GB + 25 RCU/WCU); replaces Redis (which needed a persistent server) |
 | ML model storage | DynamoDB item, `Binary` attribute, gzip-compressed joblib dump | Verified by measurement (see below) — no S3/EFS needed, both of which are 12-month-only |
 | Scheduled retraining | EventBridge scheduled rule → Lambda | No separate charge for a basic scheduled rule invoking Lambda |
-| Auth (agent registration, dashboard login, control-platform login) | Amazon Cognito | Always Free forever, 50,000 MAUs |
+| Auth (agent registration, dashboard login, control-platform login) | Amazon Cognito | Free tier **10,000 MAUs**, verified against the pricing page 2026-09-23. Corrected from the 50,000 written here originally: that figure predates AWS's November 2024 restructuring of Cognito into Lite/Essentials/Plus, which cut the free allowance five-fold. This pool is on **Essentials** (10,000 MAU free, then $0.015/MAU) with 2 users, so the decision stands — but the number it rested on had been wrong for nearly two years. |
 | Dashboard + Control Platform UI | Server-rendered HTML/JS returned directly by a Lambda Function URL | Avoids S3 static hosting (12-month-only); no separate hosting component needed |
 | Agent (installed on the end user's own system) | New component, thin telemetry forwarder | Runs on the *tenant's* infra, not the publisher's — out of scope for the 0đ constraint (PRD) |
 
