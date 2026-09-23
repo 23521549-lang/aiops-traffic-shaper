@@ -1,0 +1,155 @@
+{# SVG chart macros.
+
+   Geometry comes from services/backend/ui/charts.py as numbers; this file
+   turns it into markup. Two rules hold throughout and both are load-bearing:
+
+   1. Geometry in presentation attributes, colour in `class`. `style=` is
+      blocked by `style-src 'self'`; x/y/width/points/d/fill are not CSS and
+      the policy does not touch them. Colour still goes through a class so
+      the chart themes, prints and follows a future high-contrast mode
+      instead of freezing one hex into the markup.
+   2. Every chart is role="img" with a <title> and a <desc>, AND is followed
+      by a .sr-only table of the same numbers. An SVG with only an
+      aria-label is one whose values a screen-reader user cannot read — and
+      keeping the numbers in the HTML is also what lets the tenant-isolation
+      assertions keep meaning something on charted data.
+#}
+
+{% macro patterns() %}
+{# Redundant encoding for the tier, as markup rather than CSS: solid for
+   normal, 45-degree hatch for slowed, cross-hatch for blocked. Survives
+   greyscale printing, a screenshot pasted into a ticket, and the ~8% of men
+   with a red-green deficiency for whom amber and red are nearly one pill. #}
+<svg width="0" height="0" aria-hidden="true" focusable="false" class="c-defs">
+  <defs>
+    <pattern id="c-hatch" width="6" height="6" patternUnits="userSpaceOnUse"
+             patternTransform="rotate(45)">
+      <rect width="6" height="6" class="c-hatch-bg"/>
+      <line x1="0" y1="0" x2="0" y2="6" class="c-hatch-line"/>
+    </pattern>
+    <pattern id="c-cross" width="6" height="6" patternUnits="userSpaceOnUse">
+      <rect width="6" height="6" class="c-cross-bg"/>
+      <line x1="0" y1="0" x2="0" y2="6" class="c-cross-line"/>
+      <line x1="0" y1="0" x2="6" y2="0" class="c-cross-line"/>
+    </pattern>
+  </defs>
+</svg>
+{% endmacro %}
+
+
+{% macro deviation(chart, title, desc) %}
+<figure class="chart">
+  <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" class="c-deviation"
+       role="img" preserveAspectRatio="xMidYMid meet" focusable="false">
+    <title>{{ title }}</title>
+    <desc>{{ desc }}</desc>
+
+    {# The calm band: 0 to the slow-down threshold. Drawn first so
+       everything else sits on top of it. #}
+    {% if chart.band %}
+    <rect x="{{ chart.pad_left }}" y="{{ chart.band[0]|round(1) }}"
+          width="{{ chart.plot_width }}"
+          height="{{ (chart.band[1] - chart.band[0])|round(1) }}" class="c-band"/>
+    {% endif %}
+
+    {% for y, label in chart.ticks %}
+    <text x="{{ chart.pad_left - 6 }}" y="{{ (y + 3)|round(1) }}"
+          text-anchor="end" class="c-axis-label">{{ label }}</text>
+    {% endfor %}
+
+    {% for rule in chart.rules %}
+    <line x1="{{ chart.pad_left }}" y1="{{ rule.y|round(1) }}"
+          x2="{{ chart.pad_left + chart.plot_width }}" y2="{{ rule.y|round(1) }}"
+          class="{{ rule.css }}"/>
+    {% endfor %}
+
+    {% for bar in chart.bars %}
+    <rect x="{{ bar.x|round(1) }}" y="{{ bar.y|round(1) }}"
+          width="{{ bar.width|round(1) }}" height="{{ bar.height|round(1) }}"
+          rx="1" class="{{ bar.css }}"/>
+    {% if bar.clipped %}
+    {# Drawn cut, echoing the mark: the bar is off the top of the scale and
+       the gap says so rather than a silently truncated column. #}
+    <rect x="{{ bar.x|round(1) }}" y="{{ chart.pad_top }}"
+          width="{{ bar.width|round(1) }}" height="3" class="c-overflow"/>
+    {% endif %}
+    {% endfor %}
+
+    {% for x, label in chart.anchors %}
+    <text x="{{ x|round(1) }}" y="{{ chart.height - 6 }}"
+          text-anchor="{{ 'start' if loop.first else ('end' if loop.last else 'middle') }}"
+          class="c-axis-label c-dense-only">{{ label }}</text>
+    {% endfor %}
+
+    {% if not chart.bars and chart.empty_message %}
+    <text x="{{ chart.pad_left + chart.plot_width / 2 }}"
+          y="{{ chart.pad_top + chart.plot_height / 2 }}"
+          text-anchor="middle" class="c-empty">{{ chart.empty_message }}</text>
+    {% endif %}
+  </svg>
+
+  {% if chart.caption %}<figcaption class="chart-caption">{{ chart.caption }}</figcaption>{% endif %}
+
+  {% if chart.rows %}
+  <table class="sr-only">
+    <caption>{{ title }}</caption>
+    <thead><tr><th scope="col">When</th><th scope="col">Most unusual source</th></tr></thead>
+    <tbody>
+      {% for when, value in chart.rows %}
+      <tr><th scope="row">{{ when }}</th><td>{{ value }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</figure>
+{% endmacro %}
+
+
+{% macro sigma_strip(strip, label) %}
+<svg viewBox="0 0 {{ strip.width }} {{ strip.height }}" class="c-strip"
+     role="img" preserveAspectRatio="none" focusable="false">
+  <title>{{ label }}</title>
+  {% for x, w, css, text in strip.segments %}
+  <rect x="{{ x|round(1) }}" y="0" width="{{ w|round(1) }}" height="20" class="{{ css }}"/>
+  <text x="{{ (x + 6)|round(1) }}" y="14" class="c-seg-label">{{ text }}</text>
+  {% endfor %}
+  {% for x, text in strip.ticks %}
+  <line x1="{{ x|round(1) }}" y1="20" x2="{{ x|round(1) }}" y2="24" class="c-tick"/>
+  {% endfor %}
+  {% if strip.marker %}
+  <line x1="{{ strip.marker[0]|round(1) }}" y1="0"
+        x2="{{ strip.marker[0]|round(1) }}" y2="24" class="c-marker"/>
+  <text x="{{ strip.marker[0]|round(1) }}" y="33" text-anchor="middle"
+        class="c-marker-label">{{ strip.marker[1] }}</text>
+  {% endif %}
+</svg>
+{% endmacro %}
+
+
+{% macro stack(bars, label) %}
+{% if bars %}
+<svg viewBox="0 0 320 10" class="c-stackbar" role="img"
+     preserveAspectRatio="none" focusable="false">
+  <title>{{ label }}</title>
+  {% for b in bars %}
+  <rect x="{{ b.x|round(1) }}" y="0" width="{{ b.width|round(1) }}" height="10"
+        class="{{ b.css }}"/>
+  {% endfor %}
+</svg>
+<ul class="c-legend">
+  {% for b in bars %}
+  <li><span class="c-swatch {{ b.css }}" aria-hidden="true"></span>{{ b.count }} {{ b.label }}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endmacro %}
+
+
+{% macro spark(points, label) %}
+{% if points %}
+<svg viewBox="0 0 80 20" class="c-spark" role="img" focusable="false"
+     preserveAspectRatio="none"><title>{{ label }}</title>
+  <polyline points="{{ points }}" class="c-spark-line" fill="none"/>
+</svg>
+{% endif %}
+{% endmacro %}

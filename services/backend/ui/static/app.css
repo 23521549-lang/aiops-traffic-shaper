@@ -528,3 +528,110 @@ input[type=text], input[type=password], select {
 .meter > span[data-width="90"], .progress > span[data-width="90"] { width: 90%; }
 .meter > span[data-width="95"], .progress > span[data-width="95"] { width: 95%; }
 .meter > span[data-width="100"], .progress > span[data-width="100"] { width: 100%; }
+
+/* --- charts ----------------------------------------------------------- */
+
+/* Colour lives here, geometry lives in the markup. SVG presentation
+ * attributes (x, y, width, points, d) are not CSS so CSP does not touch
+ * them; fill and stroke go through a class so every chart themes, prints
+ * and follows a future high-contrast mode instead of freezing a hex. */
+
+.chart { margin: 0; }
+.chart svg { width: 100%; height: auto; display: block; }
+.chart-caption {
+  font-size: var(--text-sm); color: var(--text-muted); margin-top: var(--s2);
+}
+.c-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+.c-band { fill: var(--tier-normal-bg); }
+.c-rule { stroke: var(--border-interactive); stroke-width: 1; stroke-dasharray: 3 3; }
+.c-axis-label {
+  fill: var(--text-muted); font-size: 10px; font-family: var(--font-mono);
+}
+.c-empty { fill: var(--text-muted); font-size: 12px; font-family: var(--font-sans); }
+
+.c-bar--normal { fill: var(--tier-normal); opacity: .55; }
+.c-bar--limited { fill: var(--tier-limited); }
+.c-bar--blocked { fill: var(--tier-blocked); }
+.c-overflow { fill: var(--tier-blocked); }
+
+.c-hatch-bg { fill: var(--tier-limited-bg); }
+.c-hatch-line { stroke: var(--tier-limited); stroke-width: 2; }
+.c-cross-bg { fill: var(--tier-blocked-bg); }
+.c-cross-line { stroke: var(--tier-blocked); stroke-width: 1.5; }
+
+/* --- sigma strip ------------------------------------------------------ */
+
+.c-strip { width: 100%; height: 34px; }
+.c-seg--normal { fill: var(--tier-normal-bg); }
+.c-seg--limited { fill: var(--tier-limited-bg); }
+.c-seg--blocked { fill: var(--tier-blocked-bg); }
+.c-seg-label {
+  font-size: 9px; font-weight: 600; font-family: var(--font-sans);
+  fill: var(--text-muted);
+}
+.c-tick { stroke: var(--border-interactive); stroke-width: 1; }
+.c-marker { stroke: var(--text); stroke-width: 2; }
+.c-marker-label {
+  font-size: 9px; font-family: var(--font-mono); font-weight: 700; fill: var(--text);
+}
+
+/* --- stacked bar ------------------------------------------------------ */
+
+.c-stackbar { width: 100%; height: 10px; border-radius: var(--r-pill); overflow: hidden; }
+.c-stack--normal { fill: var(--tier-normal); }
+.c-stack--limited { fill: var(--tier-limited); }
+.c-stack--blocked { fill: var(--tier-blocked); }
+.c-legend {
+  list-style: none; padding: 0; margin: var(--s2) 0 0;
+  display: flex; gap: var(--s4); flex-wrap: wrap;
+  font-size: var(--text-sm); color: var(--text-muted);
+}
+.c-legend li { display: flex; align-items: center; gap: var(--s1); }
+.c-swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.c-swatch.c-stack--normal { background: var(--tier-normal); }
+.c-swatch.c-stack--limited { background: var(--tier-limited); }
+.c-swatch.c-stack--blocked { background: var(--tier-blocked); }
+
+.c-spark { width: 80px; height: 20px; }
+.c-spark-line { stroke: var(--accent); stroke-width: 1.5; }
+
+/* At phone width the per-bucket time labels are unreadable before they are
+ * unhelpful, so they go rather than being shrunk. The bars stay. */
+@media (max-width: 520px) {
+  .c-dense-only { display: none; }
+}
+
+/* --- brand ------------------------------------------------------------ */
+
+.mark { width: 20px; height: 20px; flex-shrink: 0; }
+.mark-baseline path, .mark-baseline rect { fill: currentColor; }
+/* The tip is the product: an anomaly separated from its baseline, drawn as
+ * an absence. It is brand, not status — the one place the "accent never
+ * carries state" rule is suspended, because the mark is not in the state
+ * machine. */
+.mark-tip path, .mark-tip rect { fill: var(--accent); }
+.on-ink .mark-tip path, .on-ink .mark-tip rect { fill: var(--brand-cyan); }
+
+.wordmark {
+  font: 600 15px/1 var(--font-sans);
+  letter-spacing: .10em; text-transform: uppercase; white-space: nowrap;
+}
+.wordmark span { font-weight: 400; color: var(--text-muted); }
+.on-ink .wordmark span { color: var(--ink-muted); }
+.lockup { display: flex; align-items: center; gap: 10px; }
+.lockup-stacked { flex-direction: column; gap: 14px; text-align: center; }
+.lockup-stacked .mark { width: 44px; height: 44px; }
+
+/* --- ink field -------------------------------------------------------- */
+
+/* Where the product argues for itself: the hero, the sigma explanation, the
+ * login card. The console never uses it, so the two read as different
+ * places rather than one long page. */
+.on-ink {
+  background: var(--ink); color: var(--ink-fg);
+}
+.on-ink .muted { color: var(--ink-muted); }
+.on-ink a { color: var(--brand-cyan); }
+.on-ink .c-axis-label, .on-ink .c-empty { fill: var(--ink-muted); }
+.on-ink .c-rule, .on-ink .c-tick { stroke: var(--ink-muted); }

@@ -1,0 +1,58 @@
+{# The mark: five bars of ordinary traffic, one of them cut in two.
+
+   The gap is the product. It is simultaneously traffic being shaped, an
+   anomaly separated from its baseline, and the enforcement threshold drawn
+   as an absence rather than a line. Geometric rather than a squiggle, so it
+   survives 16px; the floating tip gives an asymmetric silhouette that
+   survives being one colour.
+
+   It is also honest about what the product measures — heights, per source,
+   against each other. Not a shield, not a padlock, not a globe with arcs.
+
+   Inline SVG because `default-src 'self'` reaches no external origin and an
+   icon font would be a second request for one glyph. Rects rather than the
+   equivalent path data: shorter, and the rounded corners come from rx.
+#}
+{% macro mark(size=20, cls="") %}
+<svg viewBox="0 0 32 32" class="mark {{ cls }}" width="{{ size }}" height="{{ size }}"
+     role="img" aria-label="Traffic Shaper" focusable="false">
+  <g class="mark-baseline">
+    <rect x="1" y="18" width="4" height="13" rx="1.5"/>
+    <rect x="7" y="21" width="4" height="10" rx="1.5"/>
+    <rect x="13" y="16" width="4" height="15" rx="1.5"/>
+    <rect x="19" y="14" width="4" height="17" rx="1.5"/>
+    <rect x="25" y="20" width="4" height="11" rx="1.5"/>
+  </g>
+  <g class="mark-tip">
+    <rect x="19" y="1" width="4" height="9" rx="1.5"/>
+  </g>
+</svg>
+{% endmacro %}
+
+{# The wordmark is inline SVG mark + HTML text, never outlined letterforms.
+   Outlined letters cannot inherit the type scale, cannot be selected or
+   found with Ctrl-F, need their own <title> to be read aloud, and want a
+   second set of paths at every size the hinting breaks at. The brand
+   character lives in the setting, which CSS can fully express.
+
+   "AI" is dropped from the displayed lockup deliberately: it is the least
+   differentiated word available in 2026, and this product's actual
+   differentiator is the two that follow. The full name stays in <title>,
+   the manifest and every document. #}
+{% macro lockup(size=20, stacked=false) %}
+<span class="lockup {{ 'lockup-stacked' if stacked }}">
+  {{ mark(size) }}
+  <span class="wordmark">Traffic <span>Shaper</span></span>
+</span>
+{% endmacro %}
+
+{# The one letterform authored by hand, because it is used standalone: as a
+   footer bullet, as the prefix on every sigma figure, and as the loading
+   glyph. Stroke-based so it holds at any weight. #}
+{% macro sigma(size=16) %}
+<svg viewBox="0 0 32 32" width="{{ size }}" height="{{ size }}" class="glyph-sigma"
+     aria-hidden="true" focusable="false">
+  <path d="M29 10H17.5A9 9 0 1 0 25 23" fill="none" stroke="currentColor"
+        stroke-width="3" stroke-linecap="round"/>
+</svg>
+{% endmacro %}
