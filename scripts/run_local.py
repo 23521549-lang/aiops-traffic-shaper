@@ -209,10 +209,40 @@ def main() -> None:
 
     session = start_session(seed_model=not args.no_model, demo=args.demo)
     base = f"http://127.0.0.1:{args.port}"
+
+    # One-click sign-in, registered HERE and nowhere else.
+    #
+    # Every restart of this harness mints a fresh signing key, so every
+    # token it printed before is dead. Copying a 700-character string out of
+    # a terminal after each restart is friction that produced exactly one
+    # outcome: "why can't I log in?".
+    #
+    # This route exists only on the object run_local.py is holding. It is
+    # not in services/backend, it is not in the Lambda package, and no test
+    # or deployment can reach it. The credentials it hands out are signed by
+    # a key that was generated in this process and dies with it.
+    from fastapi.responses import RedirectResponse
+
+    @session.app.get("/dev/login/{role}", include_in_schema=False)
+    def _dev_login(role: str):
+        token = session.admin_token if role == "admin" else session.owner_token
+        destination = "/admin/ui" if role == "admin" else "/dashboard/ui"
+        response = RedirectResponse(url=destination, status_code=302)
+        response.set_cookie("id_token", token, httponly=True, samesite="lax",
+                            secure=False, max_age=43_200)
+        response.set_cookie("csrf_token", secrets.token_urlsafe(32), httponly=True,
+                            samesite="lax", secure=False, max_age=43_200)
+        return response
     print(f"""
 AI Traffic Shaper - LOCAL. In-process DynamoDB, no AWS, no network.
 
-  UI login      {base}/ui/login   (paste a token below)
+  Landing       {base}/
+  Sign in as tenant  {base}/dev/login/owner
+  Sign in as admin   {base}/dev/login/admin
+
+  Those two links log you straight in. Open one and you are done; the
+  cookie lasts 12 hours or until this process exits.
+
   Health        {base}/ready
 
   Tenant owner  {session.owner_token}
