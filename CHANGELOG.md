@@ -2,6 +2,49 @@
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.0] — 2026-09-23 — detection that holds up
+
+Four defects in the product's core - the part that decides whether traffic is
+an attack. All four were found by watching one attacker's score on the live
+deployment across two days, and every fix is measured rather than argued.
+
+### Fixed
+
+- **An attacker could train the model to accept them.** The nightly retrain
+  learned from every telemetry bucket in its 25-hour window, including the
+  buckets it had just judged hostile. Measured over 20 baselines: with three
+  copies of an attack in the training data, IsolationForest stopped finding it
+  unusual in **20 of 20** cases - three identical points are a cluster, and a
+  cluster is not an outlier. Confirmed on production, not only in a lab: an
+  attack that scored -0.204 on 2026-09-21 drew **no decision at all** two days
+  later. A bucket that produces a decision is now flagged, and training skips
+  flagged buckets.
+- **Whitelisted IPs were never excluded from training**, though
+  `docs/architecture.md` said they were and the retrain role had been granted
+  whitelist reads since Stage 7 for exactly that. Only the code was missing.
+- **Anomaly tiers were absolute numbers against a relative score**
+  ([ADR-006](docs/adr/006-score-calibration.md)). `decision_function` is
+  calibrated against each model's own training set, so one attack scored
+  -0.204, -0.105 and -0.092 against three models of the same tenant, crossing
+  the fixed -0.1 line in between. Tiers are now measured in standard
+  deviations from the model's own training mean: 20/20 detection against
+  14/20, for 0.27% false positives on held-out normal traffic. The old tier-2
+  threshold of -0.3 turned out to be **unreachable** - the hard-block path had
+  never once been able to fire, and now has.
+- **Every cold start read the 238KB model item twice**, about 120 RCU of a
+  25 RCU/second account budget: `ModelManager.load` called `model_exists()`
+  and then `load_model()`, and `model_exists` fetched the whole item. One read
+  now returns the model and its score distribution together.
+
+### Added
+
+- `POST /admin/v1/tenants/{id}/training-exclude/{ip}` - the way out of a
+  poisoned model. Flagging at decision time prevents poisoning but cannot cure
+  it: a poisoned model stops detecting the attack, so it stops flagging it,
+  and the next retrain learns it again. This breaks that loop. It is the exact
+  inverse of the whitelist, which exempts an IP from mitigation rather than
+  from training.
+
 ## [0.3.0] — 2026-09-21 — operational maturity
 
 The v0.3 upgrade programme: seven items, each verified on production rather
