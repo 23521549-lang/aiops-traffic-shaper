@@ -1,31 +1,56 @@
 {% extends "base.html" %}
-{% block title %}Sign in — AI Traffic Shaper{% endblock %}
+{% import "_brand.html" as brand %}
+{% block title %}Sign in — Traffic Shaper{% endblock %}
 {% block body %}
 <div class="login-page">
   <div class="card login-card">
-    <div class="brand"><span class="brand-dot" aria-hidden="true"></span> AI Traffic Shaper</div>
+    {{ brand.lockup(24, stacked=true) }}
     <h1>Sign in</h1>
 
     {# role="alert" AND tabindex="-1": the alert role announces it, and
-       signed-post.js moves focus here afterwards. A live region that is
-       inserted along with its own document is never announced, which is why
-       the previous version — which replaced document.documentElement on a
+       signed-post.js moves focus here afterwards. A live region inserted
+       along with its own document is never announced, which is why the
+       previous version — which replaced document.documentElement on a
        failed sign-in — produced complete silence for a screen-reader user
        at the front door of the product. #}
     <div class="alert alert-danger" data-login-error role="alert" tabindex="-1"
          {% if not error %}hidden{% endif %}>{{ error or "" }}</div>
 
+    {# The one POST in the product that must carry a real body: a password
+       in a query string lands in access logs, Referer headers and browser
+       history. data-signed-post routes it through the shim that computes
+       the payload hash CloudFront's OAC requires. #}
     <form method="post" action="/ui/login" data-signed-post>
       <div class="field login-field">
-        <label for="id_token">ID token <span class="req" aria-hidden="true">*</span></label>
-        <input type="password" id="id_token" name="id_token" required
-               autocomplete="off" aria-describedby="id_token-hint">
-        <span class="field-hint" id="id_token-hint">
-          Paste the Cognito ID token for your account.
-        </span>
+        <label for="email">Email <span class="req" aria-hidden="true">*</span></label>
+        <input type="email" id="email" name="email" autocomplete="username"
+               autofocus required>
+      </div>
+      <div class="field login-field">
+        <label for="password">Password <span class="req" aria-hidden="true">*</span></label>
+        <input type="password" id="password" name="password"
+               autocomplete="current-password" required>
       </div>
       <button type="submit" class="btn btn-primary login-submit">Sign in</button>
     </form>
+
+    {# Kept, not featured. The agent CLI's published `register --token`
+       workflow hands out an ID token, so removing this would break an
+       install flow that is already documented. #}
+    <details class="login-alt">
+      <summary>Sign in with an ID token instead</summary>
+      <form method="post" action="/ui/login" data-signed-post>
+        <div class="field login-field">
+          <label for="id_token">Cognito ID token</label>
+          <input type="password" id="id_token" name="id_token"
+                 autocomplete="off" aria-describedby="id_token-hint">
+          <span class="field-hint" id="id_token-hint">
+            For the agent CLI and for scripted access.
+          </span>
+        </div>
+        <button type="submit" class="btn login-submit">Sign in with token</button>
+      </form>
+    </details>
   </div>
 </div>
 <script src="/ui/static/signed-post.js" defer></script>

@@ -87,6 +87,38 @@ data "aws_iam_policy_document" "api_data" {
   }
 }
 
+# The API Lambda had ZERO Cognito permissions until password login existed;
+# the only cognito-idp grant anywhere in this repo was in the CI OIDC module.
+#
+# Two actions, and the omissions are the point:
+#   NOT AdminSetUserPassword   - a compromised request-path Lambda could
+#                                then take over any account in the pool,
+#                                including the publisher's own admin.
+#   NOT AdminUpdateUserAttributes - the closest thing to a tenant-isolation
+#                                bypass in the Cognito API surface, since
+#                                custom:tenant_id is what every dashboard
+#                                query is scoped by.
+#   NOT AdminDeleteUser / AdminDisableUser - nothing needs them.
+#
+# Same least-privilege reasoning the DynamoDB policy already follows, where
+# DeleteItem is granted on exactly two tables and nothing else.
+data "aws_iam_policy_document" "api_cognito" {
+  statement {
+    sid = "SignInOnBehalfOfUsers"
+    actions = [
+      "cognito-idp:InitiateAuth",
+      "cognito-idp:RespondToAuthChallenge",
+    ]
+    resources = [aws_cognito_user_pool.main.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "api_cognito" {
+  name   = "${var.project_name}-api-cognito"
+  role   = aws_iam_role.api.id
+  policy = data.aws_iam_policy_document.api_cognito.json
+}
+
 resource "aws_iam_role_policy" "api_data" {
   name   = "${var.project_name}-api-data"
   role   = aws_iam_role.api.id

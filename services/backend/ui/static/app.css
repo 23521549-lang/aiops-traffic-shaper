@@ -774,3 +774,12 @@ input[type=text], input[type=password], select {
 .card-head > div:first-child { min-width: 0; }
 .card-head .card-sub { margin-bottom: 0; }
 .card-head .filter-tabs { margin-bottom: 0; }
+
+.login-alt { margin-top: var(--s5); border-top: 1px solid var(--border); padding-top: var(--s3); }
+.login-alt summary {
+  cursor: pointer; font-size: var(--text-base); color: var(--text-muted);
+  font-weight: 600;
+}
+.login-alt summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.login-alt form { margin-top: var(--s3); }
+.login-card .lockup-stacked { margin-bottom: var(--s5); }
