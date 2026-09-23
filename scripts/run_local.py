@@ -120,7 +120,7 @@ def _seed_model(resource) -> None:
         raise RuntimeError("seed model was not trained - too little synthetic data")
 
 
-def start_session(seed_model: bool = True) -> LocalSession:
+def start_session(seed_model: bool = True, demo: bool = False) -> LocalSession:
     if os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
         sys.exit("run_local.py refuses to run inside a Lambda function.")
 
@@ -173,6 +173,13 @@ def start_session(seed_model: bool = True) -> LocalSession:
     if seed_model:
         _seed_model(resource)
 
+    if demo:
+        # Populated, degraded and empty states all exist in this product;
+        # a fresh install only shows one of them, which makes the portal
+        # impossible to judge by looking at it.
+        from scripts.demo_seed import seed as _demo_seed
+        _demo_seed(resource, TENANT_ID)
+
     return LocalSession(
         app=app, tenant_id=TENANT_ID,
         owner_token=_sign(private_pem, {"custom:tenant_id": TENANT_ID,
@@ -189,6 +196,10 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--no-model", action="store_true",
                         help="start without a trained model (shadow mode)")
+    parser.add_argument("--demo", action="store_true",
+                        help="seed realistic data: five tenants, eight agents in "
+                             "every liveness state, mitigations across both tiers, "
+                             "a whitelist, and usage past the free-tier warning line")
     args = parser.parse_args()
 
     try:
@@ -196,7 +207,7 @@ def main() -> None:
     except ImportError:
         sys.exit("uvicorn is not installed: pip install -r services/backend/requirements.txt")
 
-    session = start_session(seed_model=not args.no_model)
+    session = start_session(seed_model=not args.no_model, demo=args.demo)
     base = f"http://127.0.0.1:{args.port}"
     print(f"""
 AI Traffic Shaper - LOCAL. In-process DynamoDB, no AWS, no network.
