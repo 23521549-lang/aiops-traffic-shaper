@@ -63,9 +63,18 @@ that shape is load-bearing.
 
 | Score | Tier | Action | TTL |
 |---|---|---|---|
-| ≥ −0.1 | 0 — normal | nothing | — |
-| < −0.1 | 1 — rate limit | nginx `geo` map entry | 300s |
-| < −0.3 | 2 — hard block | nginx `deny` + iptables DROP | 3600s |
+| ≥ −4σ | 0 — normal | nothing | — |
+| < −4σ | 1 — rate limit | nginx `geo` map entry | 300s |
+| < −5σ | 2 — hard block | nginx `deny` + iptables DROP | 3600s |
+
+σ is the standard deviation of the scores this model gave its own training
+data, stored with it as `score_std`. The thresholds were absolute constants
+(−0.1, −0.3) until 2026-09-23; `decision_function` is calibrated against each
+model's own training set, so a constant meant something different for every
+model and for every tenant. Measured: the same attack scored −0.204, −0.105
+and −0.092 against three models of one tenant, and −0.3 turned out to be
+unreachable — the hard-block tier had never fired. Full measurements in
+[ADR-006](adr/006-score-calibration.md).
 
 Whitelisted IPs are skipped before scoring, and are also excluded from
 training data — otherwise a whitelisted crawler teaches the model that

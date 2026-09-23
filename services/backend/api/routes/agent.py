@@ -14,10 +14,20 @@ from services.backend.api.dependencies import (
     hash_api_key,
 )
 from services.backend.core.dynamo import get_dynamo_resource
-from services.backend.core.tables import AgentsTable, MitigationStateTable, WhitelistTable
+from services.backend.core.tables import (
+    AgentsTable,
+    MitigationStateTable,
+    TelemetryEventsTable,
+    WhitelistTable,
+)
 from services.backend.core.usage import record_tenant_ingest
-from services.backend.ml.feature_engineering import compute_features_for_ip, record_batch
-from services.backend.ml.model import AnomalyTier, ModelManager, classify_score
+from services.backend.ml.feature_engineering import (
+    BUCKET_SECONDS,
+    _bucket_start,
+    compute_features_for_ip,
+    record_batch,
+)
+from services.backend.ml.model import AnomalyTier, ModelManager, classify
 from services.backend.schemas.agent_register import AgentRegisterRequest, AgentRegisterResponse
 from services.backend.schemas.mitigation import MitigationState
 from services.backend.schemas.telemetry import TelemetryBatch, TelemetryResponse
@@ -73,7 +83,11 @@ def ingest_telemetry(
     # not spend the quota that refused it.
     record_tenant_ingest(resource, tenant_id)
 
-    touched_ips = record_batch(resource, tenant_id, batch.logs)
+    # `now` is passed rather than left to default so the route knows which
+    # bucket was just written, and can flag exactly that one below.
+    now = time.time()
+    touched_ips = record_batch(resource, tenant_id, batch.logs, now=now)
+    bucket = _bucket_start(BUCKET_SECONDS, now)
     whitelist = {i["ip"] for i in WhitelistTable(resource).query_by_tenant(tenant_id)}
 
     mgr = ModelManager()
@@ -88,7 +102,7 @@ def ingest_telemetry(
         if vector is None:
             continue
         for v, score in mgr.score_vectors([vector]):
-            tier = classify_score(score)
+            tier = classify(score, mgr.stats)
             if tier == AnomalyTier.NORMAL:
                 continue
             state = MitigationState(
@@ -97,6 +111,13 @@ def ingest_telemetry(
                 expires_at=int(time.time()) + _TTL_SECONDS[tier],
             )
             MitigationStateTable(resource).put(tenant_id=tenant_id, **state.model_dump())
+            # Keep this bucket out of the nightly retrain. Training on traffic
+            # this system just judged hostile is how an attacker teaches the
+            # model to accept them: three flagged buckets in the 25-hour window
+            # were enough to flip a caught attacker to NORMAL in every baseline
+            # tested. See test_training_poisoning.py. One extra write, and only
+            # for IPs that were actually anomalous.
+            TelemetryEventsTable(resource).mark_flagged(tenant_id, v.remote_addr, bucket)
             decisions.append(state)
 
     return TelemetryResponse(

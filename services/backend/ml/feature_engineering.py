@@ -28,6 +28,12 @@ class FeatureVector:
         return {n: getattr(self, n) for n in ["remote_addr", *FEATURE_NAMES, "sample_size"]}
 
 
+# One source of truth for the bucket width. The telemetry route has to flag the
+# exact bucket record_batch just wrote to, and a second literal 5 somewhere
+# would put the flag on a different bucket the day either one changed.
+BUCKET_SECONDS = 5
+
+
 def _bucket_start(bucket_seconds: int, at: float) -> int:
     return int(at // bucket_seconds) * bucket_seconds
 
@@ -64,7 +70,7 @@ def _vector_from_counts(
     )
 
 
-def record_batch(resource, tenant_id: str, logs: list, bucket_seconds: int = 5,
+def record_batch(resource, tenant_id: str, logs: list, bucket_seconds: int = BUCKET_SECONDS,
                   now: float | None = None) -> set[str]:
     now = now if now is not None else time.time()
     bucket = _bucket_start(bucket_seconds, now)
@@ -100,7 +106,7 @@ def record_batch(resource, tenant_id: str, logs: list, bucket_seconds: int = 5,
     return touched
 
 
-def compute_features_for_ip(resource, tenant_id: str, ip: str, bucket_seconds: int = 5,
+def compute_features_for_ip(resource, tenant_id: str, ip: str, bucket_seconds: int = BUCKET_SECONDS,
                              min_requests_threshold: int = 3,
                              now: float | None = None) -> "FeatureVector | None":
     """Sliding-window counter: current bucket's full count plus a weighted
@@ -135,8 +141,10 @@ def compute_features_for_ip(resource, tenant_id: str, ip: str, bucket_seconds: i
     )
 
 
-def collect_training_vectors(resource, tenant_id: str, bucket_seconds: int = 5,
-                              min_requests_threshold: int = 3, since_ts: int = 0) -> list[list[float]]:
+def collect_training_vectors(resource, tenant_id: str, bucket_seconds: int = BUCKET_SECONDS,
+                              min_requests_threshold: int = 3, since_ts: int = 0,
+                              exclude_ips: set[str] | frozenset[str] = frozenset(),
+                              ) -> list[list[float]]:
     """Gathers this tenant's accumulated telemetry buckets (via the
     TenantIndex GSI, Stage 7) and turns each into one independent training
     sample — unlike compute_features_for_ip()'s real-time blended window,
@@ -146,6 +154,23 @@ def collect_training_vectors(resource, tenant_id: str, bucket_seconds: int = 5,
     items = TelemetryEventsTable(resource).query_since(tenant_id, since_ts)
     vectors: list[list[float]] = []
     for item in items:
+        # Two exclusions, and both are about what "normal" is allowed to mean.
+        #
+        # A flagged bucket is traffic this system already judged hostile. Train
+        # on it and the attacker teaches the model to accept them - measured:
+        # three flagged buckets in the window flipped a caught attacker to
+        # NORMAL in 20 of 20 baselines (test_training_poisoning.py).
+        #
+        # A whitelisted IP is traffic an operator vouched for, which is exactly
+        # why it may look nothing like organic traffic - a health checker, a
+        # partner's crawler. docs/architecture.md has always said the whitelist
+        # is excluded "from mitigation AND from training", and the retrain role
+        # has been granted whitelist reads since Stage 7 for this. Only the
+        # code was missing.
+        if item.get("flagged"):
+            continue
+        if item.get("ip", "") in exclude_ips:
+            continue
         vec = _vector_from_counts(
             item.get("ip", ""), bucket_seconds, min_requests_threshold,
             request_count=int(item.get("request_count", 0)),

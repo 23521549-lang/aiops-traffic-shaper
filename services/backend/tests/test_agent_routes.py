@@ -148,7 +148,11 @@ def test_telemetry_anomaly_decision_has_real_ttl_expiry(dynamo_resource):
         def decision_function(self, X):
             return np.full(len(X), -0.5)  # well past HARD_BLOCK's -0.3 threshold
 
-    ModelManager._cache["t-1"] = _AlwaysHardBlock()
+    # The cache holds (model, stats): tiers are measured in standard
+    # deviations from the training mean, so the stats travel with the
+    # model. None here means "no usable spread" and the classifier falls
+    # back to the absolute thresholds, which is what this stub wants.
+    ModelManager._cache["t-1"] = (_AlwaysHardBlock(), None)
     try:
         logs = [{
             "time_iso8601": "2026-08-21T00:00:00Z", "remote_addr": "6.6.6.6",

@@ -144,3 +144,33 @@ def test_suspension_reports_only_the_keys_it_actually_revoked(dynamo_resource,
     resp = client.post("/admin/v1/tenants/t-1/suspend", headers=_admin(cognito_test_keys))
 
     assert resp.json()["agents_revoked"] == 1
+
+
+def test_admin_can_exclude_an_ip_from_training(dynamo_resource, cognito_test_keys):
+    """The operator's lever out of a poisoned model. Flags every telemetry
+    bucket the IP has so the next retrain ignores it. The inverse of the
+    whitelist: that exempts an IP from mitigation, this from training."""
+    from services.backend.core.tables import TelemetryEventsTable
+    from services.backend.ml.feature_engineering import record_batch
+
+    client = _client(dynamo_resource, cognito_test_keys)
+
+    class _L:
+        remote_addr, request_method, request_uri = "9.9.9.9", "GET", "/x"
+        status, body_bytes_sent, request_time, http_user_agent = "200", "10", "0.01", "ua"
+
+    record_batch(dynamo_resource, "t-1", [_L()] * 3, now=1000.0)
+
+    resp = client.post("/admin/v1/tenants/t-1/training-exclude/9.9.9.9",
+                       headers=_admin(cognito_test_keys))
+
+    assert resp.status_code == 200
+    assert resp.json()["buckets_excluded"] == 1
+    assert TelemetryEventsTable(dynamo_resource).get_bucket("t-1#9.9.9.9", 1000)["flagged"] is True
+
+
+def test_training_exclude_requires_admin(dynamo_resource, cognito_test_keys):
+    client = _client(dynamo_resource, cognito_test_keys)
+    resp = client.post("/admin/v1/tenants/t-1/training-exclude/9.9.9.9",
+                       headers=_owner(cognito_test_keys))
+    assert resp.status_code == 403

@@ -81,7 +81,11 @@ def _force_anomaly(tenant_id="t-1"):
         def decision_function(self, X):
             return np.full(len(X), -0.5)  # well past HARD_BLOCK's -0.3 threshold
 
-    ModelManager._cache[tenant_id] = _AlwaysHardBlock()
+    # The cache holds (model, stats): tiers are measured in standard
+    # deviations from the training mean, so the stats travel with the
+    # model. None here means "no usable spread" and the classifier falls
+    # back to the absolute thresholds, which is what this stub wants.
+    ModelManager._cache[tenant_id] = (_AlwaysHardBlock(), None)
 
 
 def _registered_collector(backend, tenant_id="t-1"):

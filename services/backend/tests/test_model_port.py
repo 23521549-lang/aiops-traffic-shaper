@@ -26,13 +26,16 @@ def test_model_manager_only_reads_dynamodb_once_across_warm_calls(dynamo_resourc
 
     ModelManager._cache.clear()  # simulate a fresh cold start
     read_count = {"n": 0}
-    original = registry.load_model
+    original = registry.load_model_and_stats
 
     def _counting_load(*a, **kw):
         read_count["n"] += 1
         return original(*a, **kw)
 
-    monkeypatch.setattr(registry, "load_model", _counting_load)
+    # load_model_and_stats, not load_model: the manager fetches the blob and
+    # the score distribution in ONE GetItem now, because it needs both to tier
+    # a score and the item is the most expensive read in the system.
+    monkeypatch.setattr(registry, "load_model_and_stats", _counting_load)
 
     mgr1 = ModelManager()
     mgr1.load(dynamo_resource, "t-1")

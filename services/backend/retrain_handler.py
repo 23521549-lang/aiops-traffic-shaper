@@ -5,7 +5,7 @@ from dataclasses import asdict, replace
 
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.log_level import apply_log_level
-from services.backend.core.tables import TenantsTable
+from services.backend.core.tables import TenantsTable, WhitelistTable
 from services.backend.ml import registry
 from services.backend.ml.feature_engineering import collect_training_vectors
 from services.backend.ml.registry import ModelMetadata
@@ -28,7 +28,8 @@ def retrain_tenant(resource, tenant_id: str) -> ModelMetadata | None:
     failure means. The in-process loop isolates it; a Lambda worker lets it
     propagate so the invocation counts as an error, Lambda's async retry
     tries again, and the retrain-failed alarm sees it."""
-    vectors = collect_training_vectors(resource, tenant_id)
+    whitelisted = {i["ip"] for i in WhitelistTable(resource).query_by_tenant(tenant_id)}
+    vectors = collect_training_vectors(resource, tenant_id, exclude_ips=whitelisted)
 
     if len(vectors) < MIN_TRAINING_SAMPLES:
         logger.info("Skipping retrain: tenant=%s samples=%d (need %d)",

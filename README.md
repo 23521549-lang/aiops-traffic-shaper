@@ -58,9 +58,13 @@ flowchart LR
    the backend, authenticated with a per-agent API key.
 2. The backend aggregates it into one item per *(tenant, IP, 5-second bucket)*
    and computes 7 behavioural features per source IP.
-3. A per-tenant IsolationForest scores each feature vector. Score below −0.1
-   means **Tier 1, rate limit** (300s); below −0.3 means **Tier 2, hard block**
-   (3600s). Above that, nothing happens.
+3. A per-tenant IsolationForest scores each feature vector. The score is
+   measured in **standard deviations below that model's own training mean**:
+   below −4σ means **Tier 1, rate limit** (300s); below −5σ means **Tier 2,
+   hard block** (3600s). Fixed thresholds were tried first and did not work —
+   the same attack scored −0.204, −0.105 and −0.092 against three models of
+   the same tenant, crossing the old −0.1 line in between
+   ([ADR-006](docs/adr/006-score-calibration.md)).
 4. Decisions return in the same HTTP response. The agent applies them through
    every enforcement adapter available and removes them itself when the TTL
    expires — nothing else ever will.

@@ -313,6 +313,62 @@ class TelemetryEventsTable(_SimpleTable):
             },
         )
 
+    def mark_flagged(self, tenant_id: str, ip: str, bucket_start_ts: int) -> None:
+        """Record that this bucket was judged hostile, so the nightly retrain
+        skips it.
+
+        Without this the attacker trains the model. Measured on production and
+        reproduced in test_training_poisoning.py: with three copies of an
+        attack in the training window, IsolationForest stops finding it
+        unusual - three identical points are a small cluster, and a cluster is
+        not an outlier. Attack three times and the fourth goes unnoticed.
+
+        Conditional, like TenantsTable: UpdateItem CREATES a missing item, and
+        a flag on a bucket that no longer exists (TTL, or a wrong id) would
+        otherwise invent an empty telemetry row for training to read."""
+        try:
+            self.update(
+                key={"tenant_ip": f"{tenant_id}#{ip}", "bucket_start_ts": bucket_start_ts},
+                update_expression="SET flagged = :t",
+                expr_values={":t": True},
+                condition_expression="attribute_exists(tenant_ip)",
+            )
+        except ClientError as e:
+            if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
+                raise
+
+    def flag_all_for_ip(self, tenant_id: str, ip: str) -> int:
+        """Flag every bucket this IP has, so the next retrain ignores all of
+        it. Returns how many were flagged.
+
+        The recovery lever for a model that is already poisoned. Flagging at
+        decision time stops an attacker teaching the model, but it cannot undo
+        it: a poisoned model no longer detects the attack, so it no longer
+        flags it, so the next retrain learns it again. Observed on production -
+        an attack scoring -0.204 returned no decision at all two days later.
+
+        The exact inverse of the whitelist. The whitelist exempts an IP from
+        MITIGATION; this exempts one from TRAINING, and touches nothing else:
+        the IP keeps being scored and blocked like any other."""
+        flagged = 0
+        for item in self.query_buckets_for_ip(tenant_id, ip):
+            self.update(
+                key={"tenant_ip": f"{tenant_id}#{ip}",
+                     "bucket_start_ts": int(item["bucket_start_ts"])},
+                update_expression="SET flagged = :t",
+                expr_values={":t": True},
+            )
+            flagged += 1
+        return flagged
+
+    def query_buckets_for_ip(self, tenant_id: str, ip: str) -> list[dict]:
+        """Every bucket for one (tenant, IP) - the base table's own partition
+        key, so no index and no scan."""
+        from boto3.dynamodb.conditions import Key
+        resp = self._table.query(
+            KeyConditionExpression=Key("tenant_ip").eq(f"{tenant_id}#{ip}"))
+        return resp.get("Items", [])
+
     def get_bucket(self, tenant_ip: str, bucket_start_ts: int) -> dict | None:
         return self.get(tenant_ip=tenant_ip, bucket_start_ts=bucket_start_ts)
 

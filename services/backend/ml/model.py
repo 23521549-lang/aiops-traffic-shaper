@@ -5,12 +5,31 @@ import numpy as np
 from sklearn.ensemble import IsolationForest
 
 from services.backend.ml import registry
+from services.backend.ml.registry import ScoreStats
 from services.backend.ml.feature_engineering import FeatureVector
 
 logger = logging.getLogger(__name__)
 
+# Fallback only, for a model whose training scores had no spread at all.
 TIER1_THRESHOLD = -0.1
 TIER2_THRESHOLD = -0.3
+
+# The real thresholds: how many standard deviations below this model's own
+# training mean a score sits. decision_function is calibrated against the data
+# a model was fitted to - `contamination` puts the offset at that training
+# set's 1% quantile - so the same attack scored -0.204, -0.105 and -0.092
+# against three production models of the same tenant, crossing the fixed -0.1
+# line in between. Measured over 20 baselines with 300 held-out normal buckets
+# each (docs/adr/006-score-calibration.md):
+#
+#   raw < -0.10   brute force 14/20   mild abuse  2/20   false positives 0.00%
+#   z   < -4.0    brute force 20/20   mild abuse 17/20   false positives 0.27%
+#   z   < -5.0    brute force 11/20   mild abuse  0/20   false positives 0.00%
+#
+# raw < -0.15 caught nothing at all, so the old tier-2 line at -0.3 was not
+# strict - it was unreachable, and the hard-block path had never once fired.
+TIER1_Z = -4.0
+TIER2_Z = -5.0
 
 
 class AnomalyTier(IntEnum):
@@ -40,6 +59,7 @@ class ModelManager:
 
     def __init__(self) -> None:
         self._model:  IsolationForest | None = None
+        self._stats:  ScoreStats | None = None
         self._loaded: bool = False
         self._tenant_id: str | None = None
 
@@ -47,26 +67,33 @@ class ModelManager:
         self._tenant_id = tenant_id
 
         if tenant_id in ModelManager._cache:
-            self._model  = ModelManager._cache[tenant_id]
+            self._model, self._stats = ModelManager._cache[tenant_id]
             self._loaded = True
             return True
 
-        if not registry.model_exists(resource, tenant_id, "production"):
-            logger.info("No production model for tenant=%s — shadow mode", tenant_id)
-            self._model  = None
+        # ONE read. This used to call registry.model_exists() and then
+        # registry.load_model(), and model_exists fetched the whole item - so
+        # every cold start read the ~238KB model twice, about 120 RCU of a
+        # 25 RCU/second account budget.
+        model, stats = registry.load_model_and_stats(resource, tenant_id, "production")
+        if model is None:
+            logger.info("No usable production model for tenant=%s - shadow mode", tenant_id)
+            self._model = None
+            self._stats = None
             self._loaded = False
             return False
 
-        model = registry.load_model(resource, tenant_id, "production")
-        self._loaded = model is not None
-        if self._loaded:
-            ModelManager._cache[tenant_id] = model
-            self._model = model
-            logger.info("Production model loaded and cached: tenant=%s", tenant_id)
-        else:
-            logger.error("Failed to load production model: tenant=%s", tenant_id)
+        ModelManager._cache[tenant_id] = (model, stats)
+        self._model, self._stats = model, stats
+        self._loaded = True
+        logger.info("Production model loaded and cached: tenant=%s", tenant_id)
+        return True
 
-        return self._loaded
+    @property
+    def stats(self) -> ScoreStats | None:
+        """The training-score distribution this model was fitted to. Cached
+        with the model so tiering a score costs no extra read."""
+        return self._stats
 
     def reload(self, resource, tenant_id: str) -> bool:
         logger.info("Reloading production model: tenant=%s", tenant_id)
@@ -107,7 +134,26 @@ class ModelManager:
             return [(v, 0.0) for v in vectors]
 
 
+def classify(score: float, stats: ScoreStats | None) -> AnomalyTier:
+    """Tier a score by its distance, in standard deviations, from the mean of
+    the training scores of the model that produced it.
+
+    Falls back to the absolute thresholds when a model has no usable spread:
+    score_std is zero only when every training bucket scored identically, and
+    dividing by it on the request path would be a crash rather than a
+    detection."""
+    if stats is None or stats.std <= 0:
+        return classify_score(score)
+    z = (score - stats.mean) / stats.std
+    if z < TIER2_Z:
+        return AnomalyTier.HARD_BLOCK
+    if z < TIER1_Z:
+        return AnomalyTier.RATE_LIMIT
+    return AnomalyTier.NORMAL
+
+
 def classify_score(score: float) -> AnomalyTier:
+    """Absolute thresholds. Kept for the degenerate-spread fallback above."""
     if score < TIER2_THRESHOLD:
         return AnomalyTier.HARD_BLOCK
     if score < TIER1_THRESHOLD:
