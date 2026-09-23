@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from services.backend.schemas.mitigation import MitigationState
 
@@ -20,7 +20,13 @@ class LogRecord(BaseModel):
 
 
 class TelemetryBatch(BaseModel):
-    logs: list[LogRecord]
+    # Each distinct IP in a batch fans out into its own DynamoDB write plus
+    # a GSI mirror, so an unbounded batch is unbounded write amplification on
+    # the one path the product cannot afford to lose. dependencies.py already
+    # claimed "batches carry up to 100 log lines" and used it to justify
+    # amortising a read; nothing enforced it. A 422 is strictly better than
+    # a fan-out that throttles ingest for every tenant.
+    logs: list[LogRecord] = Field(max_length=1000)
 
 
 class TelemetryResponse(BaseModel):

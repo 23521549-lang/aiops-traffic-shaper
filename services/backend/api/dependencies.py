@@ -19,8 +19,12 @@ def assert_tenant_active(resource, tenant_id: str) -> None:
     """Phase 4 / H3. Fails closed on a MISSING tenant record too, not just a
     suspended one: an agent whose owning tenant does not exist is not a
     tenant this platform should be serving either."""
+    # Allow-list, not deny-list. This used to refuse exactly
+    # status == "suspended", so any other value — a half-created tenant, a
+    # mistyped status, a state added later — was served as though healthy.
+    # A check whose entire job is refusing service must fail closed.
     tenant = TenantsTable(resource).get(tenant_id=tenant_id)
-    if tenant is None or tenant.get("status") == "suspended":
+    if tenant is None or tenant.get("status") != "active":
         raise HTTPException(status_code=403, detail="Tenant is not active")
 
 

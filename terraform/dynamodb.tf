@@ -17,7 +17,11 @@
 #   ------------------------------
 #   TOTAL               14   20    of 25 / 25
 #
-# Five RCU and five WCU of headroom. Spend them deliberately.
+# Budget sums to 14 RCU / 20 WCU, so the real headroom is ELEVEN RCU and
+# five WCU. This line said "five RCU" for the life of the project, which
+# made every read look six units more expensive than it was — and is a
+# large part of why nobody costed a chart. Writes are the scarce
+# dimension here; reads are not.
 
 resource "aws_dynamodb_table" "tenants" {
   # FREE, and it removes the single most catastrophic failure mode: no API

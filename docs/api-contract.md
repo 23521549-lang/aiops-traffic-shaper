@@ -75,7 +75,7 @@ curl -X POST "$BASE/agent/v1/telemetry"   -H "content-type: application/json"   
 |---|---|---|---|---|---|---|
 | GET | /dashboard/v1/mitigations | Active rate-limit/block decisions for the caller's own tenant | Cognito JWT | — | `MitigationState[]` | 401 |
 | GET | /dashboard/v1/whitelist | List whitelisted IPs | Cognito JWT | — | `{"whitelisted_ips": str[]}` | 401 |
-| POST | /dashboard/v1/whitelist | Add IP to whitelist + training exclusion | Cognito JWT | `WhitelistRequest` | `{"message": str}` | 401, 422 |
+| POST | /dashboard/v1/whitelist | Add IP to whitelist, and clear any mitigation already in force for it | Cognito JWT | `WhitelistRequest` | `{"message": str}` | 401, 422 |
 | DELETE | /dashboard/v1/whitelist/{ip} | Remove IP from whitelist | Cognito JWT | — | `{"message": str}` | 401, 404 |
 | GET | /dashboard/v1/model/status | This tenant's own model metadata | Cognito JWT | — | `ModelStatus` | 401 |
 
@@ -220,3 +220,23 @@ caller authenticating by cookie alone.
 *Contract verified against the implementation on 2026-08-24 (Phase 6 gate row
 2). The four drifts found — telemetry 429/403, register 403, decisions 403, and
 suspend's `agents_revoked` — are corrected above.*
+
+
+## Correction, 2026-09-23
+
+This document described `POST /dashboard/v1/whitelist` as performing
+"whitelist + training exclusion", and explained elsewhere that the two older
+endpoints were merged precisely to remove the footgun of having one IP
+excluded from mitigation and not from training.
+
+The implementation never did the second half. `add_whitelist`
+(`services/backend/api/routes/dashboard.py`) writes the `Whitelist` row and
+deletes the `MitigationState` row, and `flag_all_for_ip` is called from
+exactly one place in the product: the admin-only
+`/admin/v1/tenants/{id}/training-exclude/{ip}` route. So the footgun the
+merge was meant to remove is still present, pointing the other way.
+
+The row above now says what the code does. Wiring training exclusion into
+the whitelist path is tracked separately, because `flag_all_for_ip` had to be
+bounded first — it wrote one `UpdateItem` per telemetry bucket with no limit,
+which for a continuously-active IP is ~18,000 synchronous writes.

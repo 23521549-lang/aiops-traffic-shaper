@@ -192,9 +192,11 @@ def ready(resource=Depends(get_dynamo_resource)):
     """Readiness: can this instance actually serve? Two dependencies decide
     that, and both have failed silently in this project's history.
 
-    DynamoDB - tables are created by create_all_tables() from application
-    code, not by Terraform, so a fresh deployment can be up and answering
-    /health with no table behind it.
+    DynamoDB - in production the tables exist only because terraform
+    created them; create_all_tables() is called by the test suite and by
+    scripts/run_local.py, never by this application. (This docstring said
+    the opposite for a long time.) Either way a deployment can be up and
+    answering /health with no table behind it, which is what this checks.
 
     Cognito configuration - Phase 4 (H1) made authentication fail CLOSED when
     the pool id or app client id is unset. Such a deployment authenticates

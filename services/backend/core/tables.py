@@ -1,8 +1,12 @@
+import logging
 import time
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from botocore.exceptions import ClientError
+
+
+logger = logging.getLogger(__name__)
 
 
 def _to_dynamo_safe(value):
@@ -27,7 +31,8 @@ def _to_dynamo_safe(value):
 # allowance and bills from the first request — using it here would
 # silently break the project's core "0đ forever" constraint (ADR-002).
 # Budget below sums to 20 WCU / 14 RCU (Stage 7 added TelemetryEvents'
-# TenantIndex GSI), leaving headroom under 25/25.
+# TenantIndex GSI), leaving 11 RCU and 5 WCU of headroom under 25/25.
+# Writes are the scarce dimension; reads have room.
 _TABLE_SPECS = [
     {"TableName": "Tenants", "KeySchema": [{"AttributeName": "tenant_id", "KeyType": "HASH"}],
      "AttributeDefinitions": [{"AttributeName": "tenant_id", "AttributeType": "S"}],
@@ -136,6 +141,38 @@ class _SimpleTable:
 
     def delete(self, **key) -> None:
         self._table.delete_item(Key={k: key[k] for k in self._key_names})
+
+    # DynamoDB truncates EVERY Query at 1MB and signals more with
+    # LastEvaluatedKey. Nothing in this codebase followed it: a grep for
+    # LastEvaluatedKey/ExclusiveStartKey across services/backend returned
+    # zero hits, so every paged read silently returned its first page.
+    #
+    # It mattered in exactly one place and it mattered a lot. The nightly
+    # retrain calls query_since(tenant_id, 0) over 25 hours of 5-second
+    # telemetry buckets — megabytes for an active tenant — and a Query
+    # returns ascending, so the model was trained on the OLDEST ~5,000
+    # buckets in the window, every night, and reported success. Tests
+    # passed because moto does not enforce the page limit.
+    #
+    # The cap is a safety valve, not a page size: a runaway follow-the-cursor
+    # loop would burn the whole Lambda timeout and take the request with it,
+    # which is a worse failure than truncation. 200 pages is far more than a
+    # legitimate 25-hour window needs and still terminates.
+    MAX_QUERY_PAGES = 200
+
+    def _query_all_pages(self, **kwargs) -> list[dict]:
+        items: list[dict] = []
+        for _ in range(self.MAX_QUERY_PAGES):
+            resp = self._table.query(**kwargs)
+            items.extend(resp.get("Items", []))
+            cursor = resp.get("LastEvaluatedKey")
+            if not cursor:
+                break
+            kwargs["ExclusiveStartKey"] = cursor
+        else:
+            logger.warning("%s: query hit the %d-page cap; results are truncated",
+                           self._table_name, self.MAX_QUERY_PAGES)
+        return items
 
     def update(self, key: dict, update_expression: str,
                expr_names: dict | None = None, expr_values: dict | None = None,
@@ -429,7 +466,16 @@ class TelemetryEventsTable(_SimpleTable):
             if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
                 raise
 
-    def flag_all_for_ip(self, tenant_id: str, ip: str) -> int:
+    # 25 hours of 5-second buckets is ~18,000 items, and this writes one
+    # UpdateItem per bucket plus a GSI mirror, synchronously inside one
+    # request. Unbounded, that is a guaranteed Lambda timeout against a
+    # table provisioned at 5 WCU. 720 is the last hour of buckets, which
+    # is where the poisoning lives; the rest ages out of the window on
+    # its own.
+    FLAG_LIMIT = 720
+
+    def flag_all_for_ip(self, tenant_id: str, ip: str,
+                        limit: int | None = None) -> int:
         """Flag every bucket this IP has, so the next retrain ignores all of
         it. Returns how many were flagged.
 
@@ -441,9 +487,17 @@ class TelemetryEventsTable(_SimpleTable):
 
         The exact inverse of the whitelist. The whitelist exempts an IP from
         MITIGATION; this exempts one from TRAINING, and touches nothing else:
-        the IP keeps being scored and blocked like any other."""
+        the IP keeps being scored and blocked like any other.
+
+        Bounded, newest first. `last_flag_truncated` says whether there were
+        more — a caller undoing model poisoning needs to know it did not
+        finish, and silently doing 720 of 18,000 would look like success."""
+        limit = self.FLAG_LIMIT if limit is None else limit
+        buckets = sorted(self.query_buckets_for_ip(tenant_id, ip),
+                         key=lambda b: int(b["bucket_start_ts"]), reverse=True)
+        self.last_flag_truncated = len(buckets) > limit
         flagged = 0
-        for item in self.query_buckets_for_ip(tenant_id, ip):
+        for item in buckets[:limit]:
             self.update(
                 key={"tenant_ip": f"{tenant_id}#{ip}",
                      "bucket_start_ts": int(item["bucket_start_ts"])},
@@ -457,9 +511,8 @@ class TelemetryEventsTable(_SimpleTable):
         """Every bucket for one (tenant, IP) - the base table's own partition
         key, so no index and no scan."""
         from boto3.dynamodb.conditions import Key
-        resp = self._table.query(
+        return self._query_all_pages(
             KeyConditionExpression=Key("tenant_ip").eq(f"{tenant_id}#{ip}"))
-        return resp.get("Items", [])
 
     def get_bucket(self, tenant_ip: str, bucket_start_ts: int) -> dict | None:
         return self.get(tenant_ip=tenant_ip, bucket_start_ts=bucket_start_ts)
@@ -472,11 +525,10 @@ class TelemetryEventsTable(_SimpleTable):
         a real index built for exactly this cross-IP, per-tenant access
         pattern, not the base table's composite key."""
         from boto3.dynamodb.conditions import Key
-        resp = self._table.query(
+        return self._query_all_pages(
             IndexName="TenantIndex",
             KeyConditionExpression=Key("tenant_id").eq(tenant_id) & Key("bucket_start_ts").gte(since_ts),
         )
-        return resp.get("Items", [])
 
     def get_buckets_batch(self, tenant_ip: str, bucket_starts: list[int]) -> dict[int, dict]:
         """Fetch multiple buckets for the same tenant_ip in one DynamoDB
