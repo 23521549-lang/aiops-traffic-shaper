@@ -35,6 +35,7 @@ def _shell(request, active, resource, **extra):
     stale = len(list_agents(status="stale", resource=resource))
     ctx = {"role": "admin", "active": active,
            "csrf_token": request.cookies.get(CSRF_COOKIE_NAME, ""),
+           "theme": request.cookies.get("theme", ""),
            "stale_count": stale}
     ctx.update(extra)
     return ctx

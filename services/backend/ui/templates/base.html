@@ -1,5 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+{# data-theme comes from a cookie, rendered here by the server. Under
+   `script-src 'self'` there is nowhere to put the usual head script that
+   reads localStorage before first paint - and this is better anyway: there
+   is no flash of the wrong theme at all, and it works with JS off. #}
+<html lang="en"{% if theme %} data-theme="{{ theme }}"{% endif %}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">

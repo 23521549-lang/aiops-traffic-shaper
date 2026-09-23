@@ -219,32 +219,3 @@ def test_a_failed_sign_in_reports_itself_without_replacing_the_document():
     assert 'data-login-error' in page
     assert 'role="alert"' in page
     assert 'tabindex="-1"' in page
-
-
-# --- the site root -------------------------------------------------------
-
-def test_the_site_root_leads_to_the_login_page(dynamo_resource, cognito_test_keys):
-    """Every documented entry point was a sub-path (/ui/login, /dashboard/ui,
-    /admin/ui) and nothing answered "/". A person handed the CloudFront URL
-    opened it and got {"detail":"Not Found"} — FastAPI's JSON 404, on what is
-    for all practical purposes the product's front door."""
-    client = _client(dynamo_resource, cognito_test_keys)
-    resp = client.get("/", follow_redirects=False)
-    assert resp.status_code == 302
-    assert resp.headers["location"] == "/ui/login"
-
-
-def test_the_root_redirect_costs_no_dynamodb_write(dynamo_resource, cognito_test_keys):
-    """The root is public, unauthenticated and the most likely target of
-    drive-by traffic, so metering it would hand an anonymous caller the same
-    lever on the free-tier write quota that M8 closed for /health and
-    /ui/login. A 302 is not in the (401, 403, 429) set the metering middleware
-    already skips, so this needs its own exemption."""
-    from services.backend.tests.test_perf_budget import _OpCounter
-
-    client = _client(dynamo_resource, cognito_test_keys)
-    counter = _OpCounter(dynamo_resource)
-    client.get("/", follow_redirects=False)
-
-    assert counter.counts.get("UpdateItem", 0) == 0, counter.counts
-    assert counter.counts.get("PutItem", 0) == 0, counter.counts

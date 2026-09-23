@@ -16,6 +16,7 @@ from services.backend.ui.auth_pages import router as ui_auth_router
 from services.backend.ui.control_platform import router as ui_control_platform_router
 from services.backend.ui.csrf import CsrfError
 from services.backend.ui.dashboard import router as ui_dashboard_router
+from services.backend.ui.public import router as ui_public_router
 from services.backend.ui.static_files import router as ui_static_router
 
 app = FastAPI()
@@ -27,6 +28,7 @@ app.include_router(ui_auth_router)
 app.include_router(ui_dashboard_router)
 app.include_router(ui_control_platform_router)
 app.include_router(ui_static_router)
+app.include_router(ui_public_router)
 
 _UI_PAGE_PREFIXES = ("/dashboard/ui", "/admin/ui")
 
@@ -89,6 +91,12 @@ def _should_meter(request, response) -> bool:
     # request on the front door.
     if request.url.path == "/":
         return False
+    # The landing page and the theme toggle are anonymous and read no
+    # DynamoDB, which is what lets them sit behind a CloudFront cache
+    # behaviour. Metering them would spend write capacity on traffic that
+    # never reaches the application.
+    if request.url.path.startswith("/ui/prefs/"):
+        return False
     if response.status_code in (401, 403, 429):
         return False
     # Set by the exception handler above, for UI paths whose 401 has already
@@ -143,17 +151,6 @@ async def security_headers(request, call_next):
     for header, value in _SECURITY_HEADERS.items():
         response.headers.setdefault(header, value)
     return response
-
-
-@app.get("/")
-def root():
-    """The front door. Every entry point this product documents is a
-    sub-path - /ui/login, /dashboard/ui, /admin/ui - and until now nothing
-    answered "/" at all, so anyone handed the deployment URL and nothing else
-    met FastAPI's JSON 404. Send them where a person arriving with no
-    credentials has to go anyway; the two UI routers already redirect there on
-    401/403."""
-    return RedirectResponse(url="/ui/login", status_code=302)
 
 
 @app.get("/health")

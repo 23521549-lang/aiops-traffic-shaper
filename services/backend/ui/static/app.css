@@ -635,3 +635,130 @@ input[type=text], input[type=password], select {
 .on-ink a { color: var(--brand-cyan); }
 .on-ink .c-axis-label, .on-ink .c-empty { fill: var(--ink-muted); }
 .on-ink .c-rule, .on-ink .c-tick { stroke: var(--ink-muted); }
+
+/* --- landing ---------------------------------------------------------- */
+
+.lp-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s4); padding: var(--s4) var(--s5);
+}
+.lp-brand { color: inherit; text-decoration: none; }
+.lp-nav { display: flex; align-items: center; gap: var(--s5); font-size: var(--text-base); }
+.lp-nav a { color: var(--ink-muted); }
+.lp-nav a:hover { color: var(--ink-fg); }
+.lp-nav .btn {
+  background: transparent; color: var(--ink-fg); border-color: var(--ink-muted);
+}
+.lp-nav .btn:hover { background: rgba(255, 255, 255, .08); }
+
+.lp-hero {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s7);
+  padding: var(--s8) var(--s5) var(--s9);
+  align-items: center;
+}
+.lp-hero h1 {
+  font-size: var(--text-hero); line-height: 1.08; letter-spacing: -.02em;
+  margin: 0 0 var(--s5);
+}
+.lp-lead { font-size: var(--text-lg); line-height: 1.55; max-width: 62ch; }
+.lp-hero-copy { max-width: 62ch; }
+.lp-cta { display: flex; gap: var(--s3); flex-wrap: wrap; margin: var(--s6) 0 var(--s4); }
+.lp-fineprint { font-size: var(--text-base); max-width: 56ch; }
+.btn-ghost { background: transparent; color: inherit; border-color: currentColor; }
+
+.lp-section { padding: var(--s9) var(--s5); max-width: 1120px; margin: 0 auto; }
+.lp-section > h2 {
+  font-size: var(--text-3xl); line-height: 1.15; letter-spacing: -.015em;
+  margin: 0 0 var(--s4); max-width: 24ch;
+}
+.lp-section > h3 { font-size: var(--text-xl); margin: var(--s6) 0 var(--s3); }
+.lp-section p { max-width: 68ch; }
+.lp-narrow { max-width: 760px; }
+.on-ink.lp-section { max-width: none; }
+.on-ink.lp-section > * { max-width: 1120px; margin-inline: auto; }
+
+.lp-kicker {
+  font-family: var(--font-mono); font-size: var(--text-xs);
+  text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted);
+  display: block; margin-bottom: var(--s2);
+}
+.lp-grid-3 { display: grid; gap: var(--s5); margin-top: var(--s7); }
+.lp-col { border-top: 1px solid var(--border-interactive); padding-top: var(--s3); }
+.lp-col p { font-size: var(--text-base); color: var(--text-muted); }
+
+.lp-steps { list-style: none; padding: 0; display: grid; gap: var(--s5); margin: var(--s6) 0; }
+.lp-steps li { border-top: 1px solid var(--border-interactive); padding-top: var(--s3); }
+
+.lp-flow { margin-top: var(--s7); }
+.c-enclosure { fill: none; stroke: var(--border-interactive); stroke-dasharray: 4 4; }
+.c-enclosure-label {
+  fill: var(--text-muted); font-size: 10px; font-family: var(--font-mono);
+}
+.c-node { fill: var(--surface); stroke: var(--border-interactive); stroke-width: 1.5; }
+.c-node--ours { fill: var(--accent-subtle); stroke: var(--accent); }
+.c-node-label { fill: var(--text); font-size: 12px; font-family: var(--font-sans); }
+.c-arrow { stroke: var(--accent); stroke-width: 1.5; }
+.c-arrow-label {
+  fill: var(--text-muted); font-size: 10px; font-family: var(--font-mono);
+}
+
+.lp-sigma .c-strip { max-width: 640px; margin: var(--s6) 0; }
+.lp-row-chosen th, .lp-row-chosen td { font-weight: 700; }
+
+.lp-gaps { list-style: none; padding: 0; display: grid; gap: var(--s4); }
+.lp-gaps li { max-width: 68ch; }
+
+.lp-price { max-width: 560px; }
+.lp-features { list-style: none; padding: 0; margin: 0 0 var(--s4); display: grid; gap: var(--s1); }
+.lp-features li { color: var(--text-muted); font-size: var(--text-base); }
+
+.lp-code {
+  background: var(--surface-sunken); border: 1px solid var(--border);
+  border-radius: var(--r3); padding: var(--s4); overflow-x: auto;
+  font-family: var(--font-mono); font-size: var(--text-base); line-height: 1.7;
+}
+
+.lp-section details {
+  border-top: 1px solid var(--border); padding: var(--s3) 0;
+}
+.lp-section summary {
+  cursor: pointer; font-weight: 600; padding: var(--s1) 0;
+}
+.lp-section summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.lp-section details p { margin: var(--s2) 0 0; color: var(--text-muted); }
+
+.lp-footer {
+  background: var(--surface); border-top: 1px solid var(--border);
+  padding: var(--s7) var(--s5) var(--s5);
+}
+.lp-footer-grid { display: grid; gap: var(--s5); max-width: 1120px; margin: 0 auto; }
+.lp-footer h4 {
+  font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-muted); margin: 0 0 var(--s2);
+}
+.lp-footer-grid a {
+  display: block; font-size: var(--text-base); padding: 3px 0; color: var(--text);
+}
+.lp-footer-rule {
+  max-width: 1120px; margin: var(--s6) auto 0; padding-top: var(--s4);
+  border-top: 1px solid var(--border); font-size: var(--text-base);
+  display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap;
+}
+.glyph-sigma { vertical-align: middle; }
+
+@media (min-width: 860px) {
+  .lp-hero { grid-template-columns: 1.05fr .95fr; }
+  .lp-grid-3 { grid-template-columns: repeat(3, 1fr); }
+  .lp-steps { grid-template-columns: repeat(3, 1fr); }
+  .lp-footer-grid { grid-template-columns: 1.4fr 1fr 1fr 1fr; }
+}
+
+/* 320px: the hero headline is the one thing that must not wrap into a wall.
+ * Everything else stacks from the single-column defaults above. */
+@media (max-width: 600px) {
+  .lp-hero h1 { font-size: var(--text-2xl); }
+  .lp-section > h2 { font-size: var(--text-xl); }
+  .lp-hero, .lp-section { padding-left: var(--s4); padding-right: var(--s4); }
+  .lp-section { padding-top: var(--s7); padding-bottom: var(--s7); }
+  .lp-nav { gap: var(--s3); }
+}

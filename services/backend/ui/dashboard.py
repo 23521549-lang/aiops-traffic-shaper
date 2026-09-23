@@ -55,7 +55,8 @@ def _shell(request, tenant_id, active, **extra):
     was readable by script only so the old helper could parse
     document.cookie."""
     ctx = {"tenant_id": tenant_id, "role": "tenant", "active": active,
-           "csrf_token": request.cookies.get(CSRF_COOKIE_NAME, "")}
+           "csrf_token": request.cookies.get(CSRF_COOKIE_NAME, ""),
+           "theme": request.cookies.get("theme", "")}
     ctx.update(extra)
     return ctx
 
