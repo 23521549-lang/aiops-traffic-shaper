@@ -3,9 +3,14 @@ from pydantic import BaseModel
 
 class Tenant(BaseModel):
     tenant_id: str
-    name: str
+    # Optional because it always was in practice. There is no create-tenant
+    # route anywhere in the product, so every tenant that exists was written
+    # directly to DynamoDB — and the one in production carries a `note` and
+    # no `name`. Declaring it required asserted a guarantee the system never
+    # made, and 500'd both admin pages on real data.
+    name: str | None = None
     status: str
-    created_at: str
+    created_at: str | None = None
 
 
 class AgentSummary(BaseModel):

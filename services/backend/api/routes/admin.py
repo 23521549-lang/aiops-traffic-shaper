@@ -1,6 +1,8 @@
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import ValidationError
 
 from services.backend.api.cognito_auth import admin_auth
 from services.backend.core.dynamo import get_dynamo_resource
@@ -8,12 +10,22 @@ from services.backend.ui.csrf import verify_csrf_if_cookie_auth
 from services.backend.core.tables import AgentsTable, TelemetryEventsTable, TenantsTable
 from services.backend.schemas.admin import AgentSummary, Tenant
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 @router.get("/admin/v1/tenants", response_model=list[Tenant], dependencies=[Depends(admin_auth)])
 def list_tenants(resource=Depends(get_dynamo_resource)) -> list[Tenant]:
-    return [Tenant(**item) for item in TenantsTable(resource).list_all()]
+    # Skip rather than propagate. A record this cannot parse costs the
+    # operator that one row; raising costs them the entire Control Platform,
+    # including the screen they would use to find the bad record.
+    tenants = []
+    for item in TenantsTable(resource).list_all():
+        try:
+            tenants.append(Tenant(**item))
+        except ValidationError:
+            logger.warning("Skipping unparseable tenant row: %s", item.get("tenant_id"))
+    return tenants
 
 
 @router.get("/admin/v1/agents", response_model=list[AgentSummary], dependencies=[Depends(admin_auth)])
