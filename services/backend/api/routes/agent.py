@@ -27,7 +27,7 @@ from services.backend.ml.feature_engineering import (
     compute_features_for_ip,
     record_batch,
 )
-from services.backend.ml.model import AnomalyTier, ModelManager, classify
+from services.backend.ml.model import AnomalyTier, ModelManager, classify, z_score
 from services.backend.schemas.agent_register import AgentRegisterRequest, AgentRegisterResponse
 from services.backend.schemas.mitigation import MitigationState
 from services.backend.schemas.telemetry import TelemetryBatch, TelemetryResponse
@@ -107,6 +107,12 @@ def ingest_telemetry(
                 continue
             state = MitigationState(
                 ip=v.remote_addr, tier=int(tier), score=score,
+                # Recorded here, not recomputed at render time: the nightly
+                # retrain moves score_mean/score_std, so a page rendered
+                # tomorrow would otherwise show a different figure from the
+                # one that caused this decision. mgr.stats is already in
+                # memory for classify() — no extra read.
+                z=z_score(score, mgr.stats),
                 reason="behavioral_anomaly",
                 expires_at=int(time.time()) + _TTL_SECONDS[tier],
             )

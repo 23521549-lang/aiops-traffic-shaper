@@ -134,6 +134,20 @@ class ModelManager:
             return [(v, 0.0) for v in vectors]
 
 
+def z_score(score: float, stats: ScoreStats | None) -> float | None:
+    """How many standard deviations below this model's own training mean the
+    score sits — the quantity ADR-006 made the product tier on.
+
+    None when there is no usable spread (score_std <= 0, i.e. every training
+    bucket scored identically) or no statistics at all. Callers must render
+    that as "not measurable" rather than substituting a number: `classify`
+    falls back to the absolute thresholds in the same case, so a fabricated z
+    would not even describe the decision that was taken."""
+    if stats is None or stats.std <= 0:
+        return None
+    return (score - stats.mean) / stats.std
+
+
 def classify(score: float, stats: ScoreStats | None) -> AnomalyTier:
     """Tier a score by its distance, in standard deviations, from the mean of
     the training scores of the model that produced it.
@@ -142,9 +156,9 @@ def classify(score: float, stats: ScoreStats | None) -> AnomalyTier:
     score_std is zero only when every training bucket scored identically, and
     dividing by it on the request path would be a crash rather than a
     detection."""
-    if stats is None or stats.std <= 0:
+    z = z_score(score, stats)
+    if z is None:
         return classify_score(score)
-    z = (score - stats.mean) / stats.std
     if z < TIER2_Z:
         return AnomalyTier.HARD_BLOCK
     if z < TIER1_Z:

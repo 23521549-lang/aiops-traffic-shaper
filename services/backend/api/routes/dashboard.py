@@ -39,6 +39,20 @@ def add_whitelist(body: WhitelistRequest, tenant_id: str = Depends(dashboard_aut
         tenant_id=tenant_id, ip=body.ip,
         added_at=datetime.now(timezone.utc).isoformat(), reason=body.reason,
     )
+    # Whitelisting has to UNDO the block, not merely prevent the next one.
+    # The whitelist is consulted at scoring time (api/routes/agent.py), so
+    # without this delete the already-written MitigationState row survives:
+    # /agent/v1/decisions keeps serving it, the customer's nginx keeps the
+    # deny in place for up to an hour, and the dashboard keeps listing it —
+    # all after the UI said "added to whitelist". This is the only lever the
+    # product gives a customer for "you got this one wrong", and it reported
+    # success while changing nothing they could observe.
+    #
+    # Scoped to (tenant_id, ip), which is the table's full key, so one
+    # tenant's decision cannot clear another's. Deleting a key that is not
+    # there is a no-op in DynamoDB — the common case is pre-approving an IP
+    # that was never blocked.
+    MitigationStateTable(resource).delete(tenant_id=tenant_id, ip=body.ip)
     return {"message": f"{body.ip} added to whitelist"}
 
 
