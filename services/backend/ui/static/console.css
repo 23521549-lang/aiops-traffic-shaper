@@ -615,6 +615,10 @@ kbd {
   background: var(--tier-blocked-bg); color: var(--tier-blocked);
   border-color: var(--tier-blocked); border-width: 0 0 0 3px;
 }
+.console .alert-ok {
+  background: var(--tier-normal-bg); color: var(--tier-normal);
+  border-color: var(--tier-normal); border-width: 0 0 0 3px;
+}
 .console #ui-status { margin: 12px 20px 0; }
 .console #ui-status[hidden] { display: none; }
 
@@ -626,3 +630,33 @@ kbd {
 /* Charts inside the console lose the marketing spacing. */
 .console .chart { margin: 0; }
 .console .chart-caption { font-family: var(--font-mono); font-size: 10px; margin-top: 6px; }
+
+
+/* --- bulk selection ---------------------------------------------------- */
+
+/* The column is 28px and never wider: a checkbox that shifts the address
+ * column sideways costs more than it saves, and the addresses are the thing
+ * being read. */
+.c-check { width: 28px; padding-right: 0; }
+.c-check input { margin: 0; accent-color: var(--accent); }
+
+/* The bar sits on the list, not in the page flow, so selecting a row near
+ * the bottom of a long table does not push the row out from under the
+ * pointer that just selected it. */
+.c-bulkbar {
+  position: sticky; bottom: 0; z-index: 2;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 20px;
+  background: var(--surface-raised);
+  border-top: 1px solid var(--border-interactive);
+}
+/* Hidden until something is selected. `hidden` alone loses to the flex
+ * display above, which is how an empty action bar ends up permanently on
+ * screen. */
+.c-bulkbar[hidden] { display: none; }
+.c-bulkbar-count {
+  font-family: var(--font-mono); font-size: var(--text-sm); color: var(--text);
+}
+/* Always the ratio, never a bare count: "3 selected" cannot tell the
+ * operator whether they got the whole incident or a third of it. */
+.c-bulkbar-count .c-dim { color: var(--text-muted); }

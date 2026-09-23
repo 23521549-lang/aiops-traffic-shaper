@@ -21,6 +21,25 @@ no agent has ever reported
 
 <div class="c-list">
 
+  {% if outcome %}
+  {# Carried back as two integers through the redirect, because the action
+     that produced it posts with hx-swap="none" from a page it then leaves.
+     It reports what went through, never what was asked for. #}
+  <div class="c-panel">
+    <div class="alert {{ 'alert-warning' if outcome.skipped else 'alert-ok' }}"
+         role="status">
+      {% if outcome.allowed %}
+      <strong>{{ outcome.allowed }} source{{ 's' if outcome.allowed != 1 }} allowed.</strong>
+      {% else %}
+      <strong>Nothing was allowed.</strong>
+      {% endif %}
+      {% if outcome.skipped %}
+      {{ outcome.skipped }} were not valid addresses and were left alone.
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
   {% if health.state != 'healthy' %}
   <div class="c-panel">
     <div class="alert alert-warning">
@@ -43,10 +62,22 @@ no agent has ever reported
   </div>
 
   {% if mitigations %}
+  {# A real form, submitted by a real button. The selection UI on top of it
+     is progressive: without bulk-select.js the checkboxes and the submit
+     still work, they just do not count themselves. The values ride into the
+     query string (data-params-in-url), so this POST has no body and needs
+     no CloudFront payload hash. #}
+  <form data-bulk-form data-params-in-url
+        hx-post="/dashboard/ui/whitelist/bulk" hx-target="body" hx-swap="none"
+        hx-confirm="Allow every selected source? They stop being slowed or blocked immediately, and are left out of future model training.">
   <table class="c-table">
     <caption class="sr-only">Active mitigations, most severe first</caption>
     <thead>
       <tr>
+        <th scope="col" class="c-check">
+          <input type="checkbox" data-bulk-master
+                 aria-label="Select every source listed">
+        </th>
         <th scope="col">Source</th>
         <th scope="col">State</th>
         <th scope="col">Deviation</th>
@@ -57,6 +88,10 @@ no agent has ever reported
     <tbody>
       {% for m in mitigations %}
       <tr data-tier="{{ m.tier }}" {% if selected and selected.ip == m.ip %}aria-selected="true"{% endif %}>
+        <td class="c-check">
+          <input type="checkbox" name="ip" value="{{ m.ip }}" data-bulk-row
+                 aria-label="Select {{ m.ip }}">
+        </td>
         <th scope="row">
           <a href="/dashboard/ui?ip={{ m.ip }}">{{ m.ip }}</a>
         </th>
@@ -79,6 +114,16 @@ no agent has ever reported
       {% endfor %}
     </tbody>
   </table>
+
+  {# Sticky, so selecting a row near the bottom of a long list does not push
+     that row out from under the pointer that just selected it. Hidden until
+     something is selected: a permanently visible action bar with nothing to
+     act on is furniture. #}
+  <div class="c-bulkbar" data-bulk-bar hidden>
+    <span class="c-bulkbar-count" data-bulk-count aria-live="polite"></span>
+    <button type="submit" class="c-btn c-btn--primary">Allow selected</button>
+  </div>
+  </form>
   {% else %}
   <div class="c-empty-state">
     {% if health.state == 'healthy' %}

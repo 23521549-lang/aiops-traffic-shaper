@@ -12,8 +12,8 @@ GetItem too. Each route now reads only what it renders.
 """
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, Response
 from pydantic import ValidationError
 
 from services.backend.api.cognito_auth import dashboard_auth
@@ -89,6 +89,7 @@ def _shell(request, tenant_id, active, **extra):
 
 @router.get("/dashboard/ui", response_class=HTMLResponse)
 def protection_status(request: Request, ip: str | None = None,
+                      allowed: str = "", skipped: str = "",
                       tenant_id: str = Depends(dashboard_auth),
                       resource=Depends(get_dynamo_resource)):
     """The list and the selected source, side by side.
@@ -124,7 +125,25 @@ def protection_status(request: Request, ip: str | None = None,
         detail_open=selected is not None,
         strip=sigma_strip(worst),
         active_count=len(mitigations),
+        outcome=_bulk_outcome(allowed, skipped),
     ))
+
+
+def _bulk_outcome(allowed: str, skipped: str) -> dict | None:
+    """What the bulk action did, carried back from the redirect.
+
+    Declared as strings and parsed here on purpose. `int` in the signature
+    would make a hand-edited URL a 422 on the main screen of the product,
+    and this value is reflected into the page, so it is checked on the way
+    out rather than trusted on the way in.
+    """
+    try:
+        ok, bad = int(allowed), int(skipped)
+    except ValueError:
+        return None
+    if ok < 0 or bad < 0 or (ok == 0 and bad == 0):
+        return None
+    return {"allowed": ok, "skipped": bad}
 
 
 @router.get("/dashboard/ui/agents", response_class=HTMLResponse)
@@ -156,6 +175,55 @@ def agents_page(request: Request, id: str | None = None,
         live_count=live, quiet_count=sum(1 for r in rows if r["state"] == "quiet"),
         agent_count=len(rows),
     ))
+
+
+# One synchronous write each against a table on the account-wide 25 WCU
+# pool. `flag_all_for_ip` taught the rest: a caller over the cap is refused,
+# never served the first fifty in silence.
+BULK_ALLOW_LIMIT = 50
+
+
+# Registered BEFORE /whitelist/{ip}, and that ordering is load-bearing:
+# FastAPI matches in declaration order, so the other way round this reads as
+# an attempt to allow an address named "bulk" and loses the whole selection
+# behind a success-shaped response.
+@router.post("/dashboard/ui/whitelist/bulk", response_class=HTMLResponse,
+             dependencies=[Depends(verify_csrf)])
+def bulk_allow_ui(ip: list[str] = Query(default=[]),
+                  tenant_id: str = Depends(dashboard_auth),
+                  resource=Depends(get_dynamo_resource)):
+    """Allow several sources in one action.
+
+    The addresses ride in the query string, repeated, so this POST still has
+    no body and still needs no CloudFront payload hash (ADR-005). The same
+    reason the single-source button posts to a path.
+
+    The outcome travels home as two integers rather than a rendered message:
+    the caller posts with hx-swap="none" from a page it is about to leave,
+    so a body would be discarded. Integers are also the only thing safe to
+    reflect back into a page from a request.
+    """
+    wanted = list(dict.fromkeys(ip))  # a duplicated checkbox is one allowance
+    if len(wanted) > BULK_ALLOW_LIMIT:
+        raise HTTPException(
+            status_code=400,
+            detail=(f"Select at most {BULK_ALLOW_LIMIT} sources at a time. "
+                    f"Nothing was changed."))
+
+    allowed = 0
+    for address in wanted:
+        try:
+            add_whitelist(WhitelistRequest(ip=address, reason="allowed in bulk"),
+                          tenant_id=tenant_id, resource=resource)
+            allowed += 1
+        except ValidationError:
+            # Counted, not raised. Two malformed rows must not cost the
+            # operator the eighteen that were fine.
+            continue
+
+    return Response(status_code=200, headers={
+        "HX-Redirect": f"/dashboard/ui?allowed={allowed}&skipped={len(wanted) - allowed}",
+    })
 
 
 @router.get("/dashboard/ui/whitelist", response_class=HTMLResponse)

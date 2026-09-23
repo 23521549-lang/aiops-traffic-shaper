@@ -60,7 +60,17 @@
     var params = new URLSearchParams();
     Object.keys(evt.detail.parameters).forEach(function (k) {
       var v = evt.detail.parameters[k];
-      if (v !== null && v !== undefined && v !== "") params.append(k, v);
+      if (v === null || v === undefined || v === "") return;
+      // Several checkboxes under one name arrive as an array. Appending it
+      // whole stringifies to "a,b,c", which reaches the server as a single
+      // malformed address and reports two skipped rows that were fine.
+      if (Array.isArray(v)) {
+        v.forEach(function (one) {
+          if (one !== null && one !== undefined && one !== "") params.append(k, one);
+        });
+        return;
+      }
+      params.append(k, v);
     });
     var qs = params.toString();
     if (qs) evt.detail.path += (evt.detail.path.indexOf("?") === -1 ? "?" : "&") + qs;
