@@ -15,9 +15,9 @@
   </thead>
   <tbody>
     {% for row in tenants %}
-    <tr>
+    <tr {% if selected and selected.tenant.tenant_id == row.tenant.tenant_id %}aria-selected="true"{% endif %}>
       <th scope="row">
-        {{ row.tenant.tenant_id }}
+        <a href="/admin/ui/tenants?id={{ row.tenant.tenant_id }}">{{ row.tenant.tenant_id }}</a>
         {% if row.tenant.name %}<span class="c-dim">{{ row.tenant.name }}</span>{% endif %}
       </th>
       <td>

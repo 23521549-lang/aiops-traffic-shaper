@@ -25,8 +25,12 @@ from services.backend.schemas.admin import TenantCreateRequest
 from services.backend.api.routes.admin_usage import usage as usage_report
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.usage import _DAILY_REQUEST_CEILING, tenant_requests_today
+from services.backend.core.tables import AgentsTable
 from services.backend.ui.csrf import CSRF_COOKIE_NAME, verify_csrf
-from services.backend.ui.presenters import humanise_age, timestamp_pair, usage_share
+from services.backend.ui.hx import hx_return
+from services.backend.ui.presenters import (
+    agent_state, humanise_age, timestamp_pair, usage_share,
+)
 from services.backend.ui.templates_env import templates
 
 router = APIRouter()
@@ -85,10 +89,44 @@ def overview(request: Request, resource=Depends(get_dynamo_resource)):
 
 @router.get("/admin/ui/tenants", response_class=HTMLResponse,
             dependencies=[Depends(admin_auth)])
-def tenants_page(request: Request, resource=Depends(get_dynamo_resource)):
+def tenants_page(request: Request, id: str | None = None,
+                 resource=Depends(get_dynamo_resource)):
+    """The list, and the selected tenant beside it.
+
+    `?id=` selects, exactly as `?ip=` does on the customer console: a real
+    URL, so it deep-links into a support thread and survives a refresh. The
+    selection is resolved against the rows already fetched, so an id that
+    does not exist opens nothing rather than a pane attached to an empty
+    record.
+    """
+    ctx = _tenants_ctx(resource)
+    selected = next((r for r in ctx["tenants"] if r["tenant"].tenant_id == id), None)
+    if selected:
+        selected = {**selected, **_tenant_detail(resource, id)}
     return templates.TemplateResponse(request, "admin_tenants.html", _shell(
-        request, "tenants", resource, **_tenants_ctx(resource),
+        request, "tenants", resource, selected=selected,
+        detail_open=selected is not None, **ctx,
     ))
+
+
+def _tenant_detail(resource, tenant_id: str) -> dict:
+    """One extra Query, and only when a tenant is selected.
+
+    Agents are partitioned by tenant_id on the base table, so this is the
+    same read the customer's own console makes: no GSI, no scan, and the
+    list page pays nothing for a pane nobody opened.
+
+    The count is the point. Suspension revokes every key this tenant holds,
+    and the console offered that button while showing how many keys that
+    was precisely nowhere.
+    """
+    now = datetime.now(timezone.utc)
+    agents = [agent_state(a, now)
+              for a in AgentsTable(resource).query_by_tenant(tenant_id)]
+    agents.sort(key=lambda a: a["label"])
+    live = sum(1 for a in agents if a["state"] == "live")
+    return {"agents": agents, "agent_count": len(agents), "live_agents": live,
+            "quiet_agents": sum(1 for a in agents if a["state"] == "quiet")}
 
 
 def _tenants_ctx(resource) -> dict:
@@ -128,13 +166,23 @@ def agents_page(request: Request, status: str = "stale",
     ))
 
 
+def _tenant_returns(tenant_id: str) -> dict[str, str]:
+    """The detail pane displays the status it just changed, so it has to be
+    re-read rather than left showing the old value. The id is this route's
+    own path parameter, never a caller-supplied URL."""
+    return {"detail": f"/admin/ui/tenants?id={tenant_id}"}
+
+
 # --- mutations ------------------------------------------------------------
 
 @router.post("/admin/ui/tenants/{tenant_id}/suspend", response_class=HTMLResponse,
              dependencies=[Depends(admin_auth), Depends(verify_csrf)])
-def suspend_tenant_ui(request: Request, tenant_id: str,
+def suspend_tenant_ui(request: Request, tenant_id: str, back: str = "",
                       resource=Depends(get_dynamo_resource)):
     result = suspend_tenant(tenant_id, resource=resource)
+    sent_back = hx_return(back, _tenant_returns(tenant_id))
+    if sent_back is not None:
+        return sent_back
     return templates.TemplateResponse(request, "_tenants_table.html", {
         **_tenants_ctx(resource),
         "message": (f"{tenant_id} suspended. "
@@ -144,9 +192,12 @@ def suspend_tenant_ui(request: Request, tenant_id: str,
 
 @router.post("/admin/ui/tenants/{tenant_id}/reactivate", response_class=HTMLResponse,
              dependencies=[Depends(admin_auth), Depends(verify_csrf)])
-def reactivate_tenant_ui(request: Request, tenant_id: str,
+def reactivate_tenant_ui(request: Request, tenant_id: str, back: str = "",
                          resource=Depends(get_dynamo_resource)):
     reactivate_tenant(tenant_id, resource=resource)
+    sent_back = hx_return(back, _tenant_returns(tenant_id))
+    if sent_back is not None:
+        return sent_back
     return templates.TemplateResponse(request, "_tenants_table.html", {
         **_tenants_ctx(resource),
         "message": (f"{tenant_id} reactivated. Agent keys stay revoked, "

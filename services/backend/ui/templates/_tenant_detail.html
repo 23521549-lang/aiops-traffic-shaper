@@ -1,0 +1,97 @@
+<aside class="c-detail" aria-label="Tenant detail">
+  <div class="c-detail-head">
+    <div class="c-detail-id">{{ selected.tenant.tenant_id }}</div>
+    <div>
+      {% if selected.tenant.status == "suspended" %}
+      <span class="c-state c-state--blocked">Suspended</span>
+      {% elif selected.tenant.status == "active" %}
+      <span class="c-state c-state--clear">Active</span>
+      {% else %}
+      <span class="c-state c-state--slowed">{{ selected.tenant.status }}</span>
+      {% endif %}
+      <span class="c-summary">{{ selected.tenant.name or "unnamed" }}</span>
+    </div>
+  </div>
+
+  <div class="c-detail-body">
+    <div>
+      <div class="c-section-label">Tenant detail</div>
+      <dl class="c-kv">
+        <dt>Name</dt><dd>{{ selected.tenant.name or "not set" }}</dd>
+        <dt>Registered</dt><dd>{{ selected.registered.label }}</dd>
+        <dt>Requests today</dt><dd>{{ selected.used }}</dd>
+        <dt>Agents</dt><dd>{{ selected.live_agents }} of {{ selected.agent_count }} reporting</dd>
+      </dl>
+    </div>
+
+    <div>
+      <div class="c-section-label">Protection</div>
+      {# The consequence of the button below, stated before it is pressed.
+         Suspension revokes every key this tenant holds, and the console
+         used to offer that while showing how many keys that was nowhere. #}
+      {% if selected.agent_count == 0 %}
+      <p class="c-summary">
+        No agent has ever registered for this tenant, so nothing of theirs is
+        being checked. Suspending them changes nothing they would notice.
+      </p>
+      {% elif selected.live_agents == 0 %}
+      <p class="c-summary">
+        {% if selected.agent_count == 1 -%}
+        Their only agent has not reported in the last five minutes,
+        {%- else -%}
+        None of their {{ selected.agent_count }} agents has reported in the last five minutes,
+        {%- endif %}
+        so this tenant is <strong>not protected</strong> right now, whatever
+        the status above says.
+      </p>
+      {% else %}
+      <p class="c-summary">
+        {{ selected.live_agents }} agent{{ 's' if selected.live_agents != 1 }}
+        reporting. Suspending this tenant stops them being served immediately.
+      </p>
+      {% endif %}
+
+      {% if selected.agents %}
+      <table class="c-table">
+        <caption class="sr-only">Agents registered to this tenant</caption>
+        <thead>
+          <tr>
+            <th scope="col">Agent</th>
+            <th scope="col">State</th>
+            <th scope="col">Last seen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in selected.agents %}
+          <tr>
+            <th scope="row" title="{{ a.agent_id }}">{{ a.label }}</th>
+            <td><span class="c-state c-state--{{ a.state }}">{{ a.state_label }}</span></td>
+            <td class="d" title="{{ a.last_seen_exact }}">{{ a.last_seen }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="c-actions">
+    {% if selected.tenant.status == "suspended" %}
+    <button type="button" class="c-btn c-btn--primary"
+            hx-post="/admin/ui/tenants/{{ selected.tenant.tenant_id }}/reactivate?back=detail"
+            hx-target="body" hx-swap="none"
+            hx-confirm="Reactivate {{ selected.tenant.tenant_id }}? Its agent keys stay revoked, so its agents must register again before they are served.">
+      Reactivate
+    </button>
+    {% else %}
+    <button type="button" class="c-btn c-btn--danger"
+            hx-post="/admin/ui/tenants/{{ selected.tenant.tenant_id }}/suspend?back=detail"
+            hx-target="body" hx-swap="none"
+            hx-confirm="Suspend {{ selected.tenant.tenant_id }}? Its agents stop being served immediately and {{ selected.agent_count }} agent key{{ 's' if selected.agent_count != 1 }} will be revoked.">
+      Suspend tenant
+    </button>
+    {% endif %}
+    <a class="c-btn" href="/admin/ui/agents">All agents</a>
+    <a class="c-btn" href="/admin/ui/tenants">Close <kbd class="c-key">Esc</kbd></a>
+  </div>
+</aside>

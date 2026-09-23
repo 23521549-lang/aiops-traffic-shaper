@@ -27,6 +27,7 @@ from services.backend.ml.model import ModelManager
 from services.backend.ui.charts import deviation_chart, downsample, sigma_strip
 from services.backend.schemas.whitelist import WhitelistRequest
 from services.backend.ui.csrf import CSRF_COOKIE_NAME, verify_csrf
+from services.backend.ui.hx import hx_return
 from services.backend.ui.presenters import (
     absolute_expiry, agent_health, agent_state, decompose, relative_expiry,
     severity_detail,
@@ -197,12 +198,19 @@ def add_whitelist_form(request: Request, ip: str = "", reason: str = "",
     """The add form. Its values ride in the query string (see the
     data-params-in-url hook in ui-status.js), so this POST has no body and
     therefore needs no CloudFront payload hash."""
-    return add_whitelist_ui(request, ip, reason, tenant_id, resource)
+    # Keyword arguments deliberately: this call sat one positional ahead
+    # of the signature the moment `back` was added, and it would have
+    # passed the tenant id in as the return destination.
+    return add_whitelist_ui(request, ip=ip, reason=reason,
+                            tenant_id=tenant_id, resource=resource)
+
+
+_WHITELIST_RETURNS = {"status": "/dashboard/ui"}
 
 
 @router.post("/dashboard/ui/whitelist/{ip}", response_class=HTMLResponse,
              dependencies=[Depends(verify_csrf)])
-def add_whitelist_ui(request: Request, ip: str, reason: str = "",
+def add_whitelist_ui(request: Request, ip: str, reason: str = "", back: str = "",
                      tenant_id: str = Depends(dashboard_auth),
                      resource=Depends(get_dynamo_resource)):
     """The IP travels in the path, not a form body.
@@ -221,6 +229,13 @@ def add_whitelist_ui(request: Request, ip: str, reason: str = "",
         message = f"{ip} added to your allowed list. Any block on it has been lifted."
     except ValidationError:
         error = f"“{ip}” is not a valid IP address."
+    # Posted from the mitigation table, where hx-swap="none" discards the
+    # body: the only way to show the operator that anything happened is to
+    # send them back to the list the source has just left.
+    if not error:
+        sent_back = hx_return(back, _WHITELIST_RETURNS)
+        if sent_back is not None:
+            return sent_back
     whitelist = list_whitelist(tenant_id=tenant_id, resource=resource)
     return templates.TemplateResponse(request, "_whitelist_table.html", {
         "whitelist": _whitelist_rows(whitelist), "error": error, "message": message,

@@ -65,9 +65,12 @@ no agent has ever reported
         <td class="d" title="{{ m.expires_exact }}">{{ m.expires_label }}</td>
         <td class="c-row-actions">
           {# Body-less POST: the IP rides in the path, so CloudFront's OAC
-             needs no payload hash and htmx sends it unaided. #}
+             needs no payload hash and htmx sends it unaided. `back=status`
+             is what makes the click visible: hx-swap="none" discards the
+             response, so without it the row stayed here, still labelled
+             Blocked, until someone thought to reload. #}
           <button type="button" class="c-btn c-btn--sm"
-                  hx-post="/dashboard/ui/whitelist/{{ m.ip }}"
+                  hx-post="/dashboard/ui/whitelist/{{ m.ip }}?back=status"
                   hx-target="body" hx-swap="none"
                   hx-confirm="Allow {{ m.ip }}? It stops being slowed or blocked immediately, and is left out of future model training."
                   aria-label="Allow {{ m.ip }}">Allow</button>
@@ -152,7 +155,7 @@ no agent has ever reported
 
   <div class="c-actions">
     <button type="button" class="c-btn c-btn--primary"
-            hx-post="/dashboard/ui/whitelist/{{ selected.ip }}"
+            hx-post="/dashboard/ui/whitelist/{{ selected.ip }}?back=status"
             hx-target="body" hx-swap="none"
             hx-confirm="Allow {{ selected.ip }}? It stops being slowed or blocked immediately, and is left out of future model training.">
       Allow this source <kbd class="c-key">A</kbd>

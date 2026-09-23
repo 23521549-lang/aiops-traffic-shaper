@@ -11,4 +11,8 @@
 <div class="c-list" id="tenants-table">
   {% include "_tenants_table.html" %}
 </div>
+
+{% if selected %}
+{% include "_tenant_detail.html" %}
+{% endif %}
 {% endblock %}
