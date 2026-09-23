@@ -27,14 +27,23 @@ from services.backend.core.tables import AgentsTable, create_all_tables
 from services.backend.main import app
 from services.backend.tests.conftest import sign_test_token
 
-NOW = datetime.now(timezone.utc)
+# Relative to when the row is written, never to import time.
+#
+# This was a module-level constant, and liveness is derived by comparing
+# last_seen_at against the clock AT REQUEST TIME with a five-minute cutoff.
+# On a nine-minute suite run the agent seeded "20 seconds ago" was already
+# nine minutes stale by the time its test executed, so it read as Quiet and
+# the assertion failed - in the full run only, never when the file was run
+# on its own.
+def _now():
+    return datetime.now(timezone.utc)
 
 
 def _agent(resource, tenant_id, agent_id, label, ago, status="active", version="1.4.0"):
     AgentsTable(resource).put(
         tenant_id=tenant_id, agent_id=agent_id, agent_label=label,
-        registered_at=(NOW - timedelta(days=30)).isoformat(),
-        last_seen_at=(NOW - ago).isoformat(),
+        registered_at=(_now() - timedelta(days=30)).isoformat(),
+        last_seen_at=(_now() - ago).isoformat(),
         agent_version=version, api_key_hash="h", status=status,
     )
 

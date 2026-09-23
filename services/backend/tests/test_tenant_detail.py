@@ -21,7 +21,16 @@ from services.backend.core.tables import AgentsTable, TenantsTable, create_all_t
 from services.backend.main import app
 from services.backend.tests.conftest import sign_test_token
 
-NOW = datetime.now(timezone.utc)
+# Relative to when the row is written, never to import time.
+#
+# This was a module-level constant, and liveness is derived by comparing
+# last_seen_at against the clock AT REQUEST TIME with a five-minute cutoff.
+# On a nine-minute suite run the agent seeded "20 seconds ago" was already
+# nine minutes stale by the time its test executed, so it read as Quiet and
+# the assertion failed - in the full run only, never when the file was run
+# on its own.
+def _now():
+    return datetime.now(timezone.utc)
 
 
 @pytest.fixture
@@ -42,8 +51,8 @@ def client(dynamo_resource, cognito_test_keys):
 def _agent(resource, tenant_id, agent_id, label, ago, status="active"):
     AgentsTable(resource).put(
         tenant_id=tenant_id, agent_id=agent_id, agent_label=label,
-        registered_at=(NOW - timedelta(days=9)).isoformat(),
-        last_seen_at=(NOW - ago).isoformat(),
+        registered_at=(_now() - timedelta(days=9)).isoformat(),
+        last_seen_at=(_now() - ago).isoformat(),
         agent_version="1.4.0", api_key_hash="h", status=status)
 
 
