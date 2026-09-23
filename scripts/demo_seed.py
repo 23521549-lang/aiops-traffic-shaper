@@ -79,16 +79,30 @@ def seed(resource, primary_tenant: str) -> dict:
     # --- mitigations, spanning both tiers and the whole expiry range -----
     # z values chosen to land in each severity band the copy distinguishes,
     # so all four phrasings are visible on one screen.
+    # The feature vector is what the "why this source" pane decomposes:
+    # request_rate, error_ratio, avg_bytes, avg_time, uri_ratio, ua_entropy,
+    # post_ratio. Shaped like the real cases so each row reads as a
+    # recognisable attack rather than as noise.
     mitigations = [
-        ("198.51.100.66", 2, -0.204, -6.42, 3180),   # Far outside
-        ("203.0.113.201", 2, -0.188, -5.31, 2040),   # Well outside
-        ("192.0.2.144", 1, -0.131, -4.62, 250),      # Clearly outside
-        ("198.51.100.7", 1, -0.092, -4.21, 47),      # Outside, about to end
-        ("203.0.113.88", 1, -0.115, None, 190),      # no usable spread
+        # A login brute force: fast, nearly all errors, nearly all POSTs, one URI.
+        ("198.51.100.66", 2, -0.204, -6.42, 3180,
+         [8.4, 0.71, 90.0, 0.003, 0.02, 0.90, 0.94]),
+        # A scraper: fast and wide, but it gets what it asks for.
+        ("203.0.113.201", 2, -0.188, -5.31, 2040,
+         [6.9, 0.02, 14200.0, 0.41, 0.97, 0.30, 0.01]),
+        # A vulnerability scan: many distinct paths, most of them 404.
+        ("192.0.2.144", 1, -0.131, -4.62, 250,
+         [3.1, 0.58, 420.0, 0.02, 0.96, 0.40, 0.07]),
+        # A misconfigured client retrying one endpoint.
+        ("198.51.100.7", 1, -0.092, -4.21, 47,
+         [2.8, 0.44, 310.0, 0.01, 0.04, 0.10, 0.62]),
+        ("203.0.113.88", 1, -0.115, None, 190,
+         [2.2, 0.20, 900.0, 0.08, 0.30, 0.70, 0.18]),
     ]
-    for ip, tier, score, z, ttl in mitigations:
+    for ip, tier, score, z, ttl, features in mitigations:
         fields = {"tenant_id": primary_tenant, "ip": ip, "tier": tier, "score": score,
-                  "reason": "behavioral_anomaly", "expires_at": epoch + ttl}
+                  "reason": "behavioral_anomaly", "expires_at": epoch + ttl,
+                  "features": features}
         if z is not None:
             fields["z"] = z
         MitigationStateTable(resource).put(**fields)

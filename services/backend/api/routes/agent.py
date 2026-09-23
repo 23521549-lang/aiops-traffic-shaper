@@ -138,6 +138,7 @@ def ingest_telemetry(
                 # one that caused this decision. mgr.stats is already in
                 # memory for classify() — no extra read.
                 z=z_score(score, mgr.stats),
+                features=v.to_list(),
                 reason="behavioral_anomaly",
                 expires_at=int(time.time()) + _TTL_SECONDS[tier],
             )

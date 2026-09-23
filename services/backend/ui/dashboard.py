@@ -23,11 +23,13 @@ from services.backend.api.routes.dashboard import (
 )
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.tables import AgentsTable
+from services.backend.ml.model import ModelManager
 from services.backend.ui.charts import deviation_chart, downsample, sigma_strip
 from services.backend.schemas.whitelist import WhitelistRequest
 from services.backend.ui.csrf import CSRF_COOKIE_NAME, verify_csrf
 from services.backend.ui.presenters import (
-    absolute_expiry, agent_health, relative_expiry, severity_detail, tier_css, tier_label,
+    absolute_expiry, agent_health, decompose, relative_expiry, severity_detail,
+    tier_css, tier_label,
     timestamp_pair,
 )
 from services.backend.ui.templates_env import templates
@@ -50,6 +52,7 @@ def _rows(mitigations, now):
         "score": m.score,
         "z": m.z,
         "reason": m.reason,
+        "features": m.features,
     } for m in mitigations]
 
 
@@ -100,6 +103,17 @@ def protection_status(request: Request, ip: str | None = None,
     health = agent_health(AgentsTable(resource).query_by_tenant(tenant_id), now)
     rows = _rows(mitigations, now)
     selected = next((r for r in rows if r["ip"] == ip), None)
+    if selected:
+        # The statistics travel with the model that is already cached for
+        # scoring, so opening a detail pane costs no extra read.
+        mgr = ModelManager()
+        mgr.load(resource, tenant_id)
+        stats = mgr.stats
+        selected["features_breakdown"] = decompose(
+            selected["features"] or [],
+            getattr(stats, "feature_means", None),
+            getattr(stats, "feature_stds", None),
+        )
     worst = min((r["z"] for r in rows if r["z"] is not None), default=None)
 
     return templates.TemplateResponse(request, "dashboard_status.html", _shell(

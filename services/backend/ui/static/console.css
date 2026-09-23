@@ -156,10 +156,16 @@
 }
 .c-table td, .c-table th[scope="row"] {
   padding: 0 12px; height: var(--row-h);
-  border-bottom: 1px solid var(--border);
   font-size: var(--text-base); vertical-align: middle;
   text-align: left; font-weight: 400;
 }
+/* The rule belongs on the ROW, not the cell. On the cell it stops wherever
+ * the last cell stops, and the last cell holds actions that are invisible
+ * until hover, so every rule ended short of the right edge. */
+.c-table tbody tr { border-bottom: 1px solid var(--border); }
+/* The actions column takes the slack so the data columns stay tight
+ * against each other and the row still reaches the edge. */
+.c-table .c-row-actions { width: 100%; }
 /* Data is monospace and tabular. A column of figures that do not line up is
  * a column you have to read rather than scan. */
 .c-table th[scope="row"], .c-table .d {
@@ -217,9 +223,15 @@ tr:hover .c-row-actions, tr:focus-within .c-row-actions { opacity: 1; }
 
 /* The per-feature decomposition: the answer to "why this IP". */
 .c-why { width: 100%; border-collapse: collapse; font-size: var(--text-base); }
-.c-why th {
+.c-why thead th {
+  font-family: var(--font-mono); font-size: 9px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted);
+  text-align: right; padding: 0 0 6px; border-bottom: 1px solid var(--border);
+}
+.c-why thead th:first-child { text-align: left; }
+.c-why tbody th {
   text-align: left; font-weight: 400; color: var(--text-muted);
-  padding: 4px 0; white-space: nowrap;
+  padding: 5px 0; white-space: nowrap; font-size: var(--text-base);
 }
 .c-why td {
   font-family: var(--font-mono); font-variant-numeric: tabular-nums;

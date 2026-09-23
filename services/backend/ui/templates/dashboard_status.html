@@ -103,31 +103,41 @@ no agent has ever reported
   </div>
 
   <div class="c-detail-body">
-    {% if selected.features %}
     <div>
       <div class="c-section-label">Why this source</div>
+      {% if selected.features_breakdown %}
+      {# The one thing no competitor can show. A rule engine answers with a
+         rule id; an IP-reputation service answers with an opinion about
+         someone else traffic. Neither has a per-customer baseline to
+         measure against. #}
       <table class="c-why">
+        <caption class="sr-only">Each feature, against this tenant own baseline</caption>
+        <thead>
+          <tr>
+            <th scope="col">Feature</th>
+            <th scope="col">This source</th>
+            <th scope="col">Your normal</th>
+            <th scope="col">Distance</th>
+          </tr>
+        </thead>
         <tbody>
-          {% for f in selected.features %}
+          {% for f in selected.features_breakdown %}
           <tr>
             <th scope="row">{{ f.label }}</th>
             <td>{{ f.value }}</td>
-            <td class="{{ 'drives' if f.drives }}">{{ f.sigma }}</td>
+            <td class="c-dim">{{ f.normal }}</td>
+            <td class="{{ 'drives' if f.drives }}">{{ f.display }}</td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
-      <p class="c-summary">{{ selected.reads_as }}</p>
-    </div>
-    {% else %}
-    <div>
-      <div class="c-section-label">Why this source</div>
+      {% else %}
       <p class="c-summary">
-        Per-feature breakdown needs statistics this tenant's model does not
+        The per-feature breakdown needs statistics this tenant model does not
         carry yet. It appears after the next nightly retrain.
       </p>
+      {% endif %}
     </div>
-    {% endif %}
 
     <div>
       <div class="c-section-label">Context</div>

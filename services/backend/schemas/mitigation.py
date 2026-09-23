@@ -15,6 +15,12 @@ class MitigationState(BaseModel):
     # statistics it is derived from. None where the model had no usable
     # spread, and for rows written before this field existed.
     z: float | None = None
+    # The seven feature values this decision was made on. Seven floats on a
+    # write that already happens, and they are what lets the console answer
+    # "why this source" instead of only "how far out". Recomputing them at
+    # render time is impossible: the 5-second bucket they came from has a
+    # 25-hour TTL and the traffic itself is gone.
+    features: list[float] | None = None
     reason: str
     expires_at: int
 

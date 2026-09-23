@@ -48,6 +48,11 @@ def train_and_save(resource, tenant_id: str, feature_vectors: list[list[float]],
         score_std=float(np.std(scores)),
         features=FEATURE_NAMES,
         stage=stage,
+        # Two numpy calls on an array that is already in memory and already
+        # fitted. Fourteen floats on a write that happens once per tenant
+        # per night.
+        feature_means=[float(v) for v in np.mean(X, axis=0)],
+        feature_stds=[float(v) for v in np.std(X, axis=0)],
     )
 
     save_model(resource, tenant_id, model, metadata, stage=stage)

@@ -186,3 +186,73 @@ def timestamp_pair(raw, now: datetime | None = None) -> dict:
         "relative": humanise_age((now - dt).total_seconds()),
         "exact": dt.isoformat(timespec="seconds"),
     }
+
+
+# --- why this source ------------------------------------------------------
+
+# `unique_uri_ratio` is a column in a dataframe. "Distinct URLs" is something
+# a person reading an incident at 3am can act on.
+FEATURE_LABELS = {
+    "request_rate": "Request rate",
+    "error_ratio": "Error ratio",
+    "avg_bytes_sent": "Average bytes",
+    "avg_request_time": "Average time",
+    "unique_uri_ratio": "Distinct URLs",
+    "user_agent_entropy": "User-agent spread",
+    "post_ratio": "POST ratio",
+}
+
+# How far out a single feature has to be before it is called a driver. Lower
+# than the tiering threshold on purpose: the model fires on the combination,
+# so the features that explain it are individually milder than the whole.
+DRIVER_SIGMA = 2.5
+
+
+def decompose(vector, means, stds) -> list[dict]:
+    """Break one decision out across the seven features, each in standard
+    deviations of THIS tenant's own baseline.
+
+    This is the one thing no competitor can do. A rule engine's best answer
+    is a rule id; an IP-reputation service's is an opinion about someone
+    else's traffic. Neither has a per-customer baseline to measure against.
+
+    Returns [] rather than guesses when the statistics are missing. Models
+    trained before those existed have none, and inventing a plausible reason
+    for a real enforcement decision would be worse than admitting there is
+    none yet.
+    """
+    from services.backend.ml.feature_engineering import FEATURE_NAMES
+
+    if not means or not stds:
+        return []
+    if not (len(vector) == len(means) == len(stds) == len(FEATURE_NAMES)):
+        # A short vector compared against a full set of statistics would
+        # line the wrong feature up with the wrong baseline, and the result
+        # would look entirely plausible.
+        return []
+
+    rows = []
+    for name, value, mean, std in zip(FEATURE_NAMES, vector, means, stds):
+        sigma = (value - mean) / std if std > 0 else None
+        rows.append({
+            "name": name,
+            "label": FEATURE_LABELS.get(name, name.replace("_", " ").capitalize()),
+            "value": _figure(value),
+            "normal": f"{_figure(mean)} ± {_figure(std)}",
+            "sigma": sigma,
+            "display": "not measurable" if sigma is None else f"{sigma:+.1f}σ",
+            "drives": sigma is not None and abs(sigma) >= DRIVER_SIGMA,
+        })
+    # An operator reads the top of the list and stops, so the top has to be
+    # the strongest signal.
+    rows.sort(key=lambda r: abs(r["sigma"]) if r["sigma"] is not None else -1, reverse=True)
+    return rows
+
+
+def _figure(v: float) -> str:
+    v = float(v)
+    if v >= 1000:
+        return f"{v:,.0f}"
+    if v >= 10:
+        return f"{v:.1f}"
+    return f"{v:.2f}"

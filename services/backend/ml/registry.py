@@ -1,7 +1,7 @@
 import gzip
 import io
 import logging
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 import joblib
 from sklearn.ensemble import IsolationForest
@@ -21,6 +21,14 @@ class ModelMetadata:
     score_std: float
     features: list[str]
     stage: str
+    # What normal looks like on each of the seven axes, for THIS tenant.
+    # One numpy call each on the array the trainer already built, written
+    # into an item already being written, read in a GetItem already being
+    # made - and it is the difference between "6.4 standard deviations out"
+    # and "repeated failing POSTs to one path at seven times your usual
+    # rate". Empty on models trained before this field existed.
+    feature_means: list[float] = field(default_factory=list)
+    feature_stds: list[float] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -43,6 +51,8 @@ class ScoreStats:
     fixed meaning across models - see docs/adr/006-score-calibration.md."""
     mean: float
     std: float
+    feature_means: list[float] = field(default_factory=list)
+    feature_stds: list[float] = field(default_factory=list)
 
 
 def load_model_and_stats(resource, tenant_id: str, stage: str = "production",
@@ -56,7 +66,14 @@ def load_model_and_stats(resource, tenant_id: str, stage: str = "production",
         return None, None
     stats = None
     if "score_mean" in item and "score_std" in item:
-        stats = ScoreStats(mean=float(item["score_mean"]), std=float(item["score_std"]))
+        stats = ScoreStats(
+            mean=float(item["score_mean"]), std=float(item["score_std"]),
+            # Absent on models trained before per-feature statistics existed.
+            # An empty list is what lets the detail pane say so instead of
+            # inventing a reason for a real enforcement decision.
+            feature_means=[float(v) for v in item.get("feature_means", [])],
+            feature_stds=[float(v) for v in item.get("feature_stds", [])],
+        )
     return _deserialize(item, tenant_id, stage), stats
 
 
