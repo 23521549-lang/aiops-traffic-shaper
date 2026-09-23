@@ -26,6 +26,7 @@ __pycache__/
 htmlcov/
 dist/
 build/
+*.egg-info/
 
 # Docker
 *.tar
