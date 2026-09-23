@@ -13,43 +13,63 @@
 
 :root {
   /* --- surfaces ------------------------------------------------------- */
-  --bg: #f6f7fb;
-  --surface: #ffffff;
-  --border: #e3e6ee;              /* decorative rules only — see below */
-  --border-interactive: #8a90a3;  /* 3.18:1 on --surface, WCAG 1.4.11 */
+  --bg: #f1f4f7;                  /* page field */
+  --surface: #ffffff;             /* cards, table rows, dialogs */
+  --surface-sunken: #e7ecf1;      /* hover rows, chart bands, skeletons */
+  --surface-raised: #ffffff;      /* popovers and menus; light = surface + border */
+  --border: #dde3ea;              /* decorative rules only */
+  --border-interactive: #7e8598;  /* 3.69:1 on surface, 3.34:1 on bg */
 
   /* --- text ----------------------------------------------------------- */
-  --text: #1a1d29;                /* 16.78:1 on --surface */
-  --text-muted: #5b6472;          /* 5.98:1 on --surface, 5.59:1 on --bg */
+  --text: #111823;                /* 17.82:1 on surface, 16.14:1 on bg */
+  --text-muted: #55606f;          /* 6.39:1 on surface, 5.78:1 on bg, 5.37:1 on sunken */
 
   /* --- interaction ---------------------------------------------------- */
   /* --accent means "you can act on this" and nothing else. It must never
-   * carry status: a console where indigo sometimes means "link" and
-   * sometimes means "state" cannot be read at a glance. */
-  --accent: #4f46e5;              /* 6.29:1 on --surface */
-  --accent-hover: #4338ca;
-  --accent-subtle: #eef2ff;
-  --focus-ring: #4f46e5;          /* was #c7d2fe at 1.49:1 — invisible */
+   * carry status: a console where one hue sometimes means "link" and
+   * sometimes means "state" cannot be read at a glance.
+   *
+   * The old value was #4f46e5, which is Tailwind indigo-600 — the single
+   * most identifiable generic-admin-theme pixel available. */
+  --accent: #046b7a;              /* 6.20:1 on surface, 5.61:1 on bg */
+  --accent-hover: #035663;        /* white on it: 8.35:1 */
+  --accent-subtle: #e2f2f4;       /* accent on it: 5.38:1 */
+  --focus-ring: #046b7a;
+
+  /* --- brand field ---------------------------------------------------- */
+  /* The ink field is where the product argues for itself: the landing hero,
+   * the sigma explanation, the login card. Deliberately not a surface the
+   * console uses, so the two read as different places. */
+  --ink: #0d1b26;
+  --ink-fg: #ffffff;              /* 17.47:1 on ink */
+  --ink-muted: #a7b6c2;           /* 8.41:1 on ink */
+  /* Unusable on white (1.79:1) ON PURPOSE. That constraint is what stops
+   * the cyan ever becoming an interface colour: it can only appear on an
+   * ink field or in dark mode, so it reads as brand and can never be
+   * confused with the tier ramp. test_contrast.py asserts the failure. */
+  --brand-cyan: #37d4e6;          /* 9.75:1 on ink */
 
   /* --- axis A: what we did to traffic --------------------------------- */
-  /* Separate from system health on purpose. The old palette used one red
-   * for "an attacker was hard-blocked" and for "you typed an invalid IP",
-   * so red could not tell the operator whether it was good news. */
-  --tier-normal: #0f7a4d;         /* 4.82:1 on its bg */
+  /* Separate from system health on purpose. The original palette used one
+   * red for "an attacker was hard-blocked" and for "you typed an invalid
+   * IP", so red could not tell the operator whether it was good news. */
+  --tier-normal: #0f7a4d;         /* 5.37:1 on surface, 4.82:1 on its bg */
   --tier-normal-bg: #e8f6ee;
-  --tier-limited: #9a4a06;        /* 5.59:1 on its bg */
+  --tier-limited: #9a4a06;        /* 6.26:1 on surface, 5.59:1 on its bg */
   --tier-limited-bg: #fdf0e3;
-  --tier-blocked: #8f1d1d;        /* 7.59:1 on its bg */
+  --tier-blocked: #8f1d1d;        /* 8.89:1 on surface, 7.59:1 on its bg */
   --tier-blocked-bg: #fbe9e9;
   --tier-blocked-edge: #d97070;
+  --tier-limited-edge: #9a4a06;
 
   /* --- axis B: is the product itself healthy -------------------------- */
-  --success: #15803d;
+  /* Ratios measured 2026-09-23; these shipped unmeasured for months. */
+  --success: #15803d;             /* 4.76:1 on its bg */
   --success-bg: #ecfdf3;
-  --warning: #b45309;
+  --warning: #b45309;             /* 4.84:1 on its bg */
   --warning-bg: #fffbeb;
   --warning-border: #fde68a;
-  --danger: #b91c1c;
+  --danger: #b91c1c;              /* 5.91:1 on its bg */
   --danger-bg: #fef2f2;
   --danger-border: #fecaca;
   --danger-bg-hover: #fee2e2;
@@ -66,10 +86,116 @@
   --text-body: 14px;
   --text-lg: 16px;
   --text-xl: 20px;
+  --text-2xl: 26px;
+  --text-3xl: 34px;
+  --text-hero: 46px;
   --text-stat: 28px;
 
-  --radius: 10px;
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.04);
+  /* --- space and shape ------------------------------------------------ */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px; --s9: 96px;
+  --r1: 4px;  --r2: 6px;  --r3: 8px;  --r4: 12px; --r5: 16px;
+  --r-pill: 999px;
+  --radius: var(--r4);
+}
+
+/* Dark is a token override and nothing else: no component rule below this
+ * point knows which theme is active. That only works because every colour
+ * in the file is a token — which is why the six hardcoded hexes were
+ * removed before this block was written.
+ *
+ * The theme comes from a cookie rendered into data-theme on <html> by the
+ * server. That is the only implementation possible under `script-src
+ * 'self'` with no inline script: the usual trick is a <script> in <head>
+ * that reads localStorage before first paint, and it is unavailable here.
+ * The server-rendered attribute has no flash of the wrong theme at all. */
+[data-theme="dark"] {
+  --bg: #0b1017;
+  --surface: #131b24;
+  --surface-sunken: #0f161e;
+  --surface-raised: #1c2732;
+  --border: #23303d;
+  --border-interactive: #64788c;  /* 3.81:1 on surface, 4.18:1 on bg */
+
+  /* Not #ffffff: pure white on a near-black field halates. 14.85:1 is
+   * deliberately backed off and still far above AA. */
+  --text: #e8eef4;
+  --text-muted: #94a6b8;          /* 6.95:1 on surface, 7.64:1 on bg */
+
+  --accent: #38bfd4;              /* 7.91:1 on surface; ink-on-it 7.96:1 */
+  --accent-hover: #6ad3e3;
+  --accent-subtle: #0d2b33;       /* accent on it: 6.79:1 */
+  --focus-ring: #38bfd4;
+
+  --ink: #0b1017;
+  --ink-fg: #e8eef4;
+  --ink-muted: #94a6b8;
+  --brand-cyan: #38bfd4;
+
+  /* Desaturated ~20 points against their light counterparts, per the
+   * standard dark-mode guidance; the tinted backgrounds sit at 1.16-1.34:1
+   * against --surface, enough to read as a pill and not enough to vibrate. */
+  --tier-normal: #56d68f;         /* 9.43:1 on surface, 7.02:1 on its bg */
+  --tier-normal-bg: #12382a;
+  --tier-limited: #f0b054;        /* 9.13:1 on surface, 7.19:1 on its bg */
+  --tier-limited-bg: #3d2a0d;
+  --tier-blocked: #f8827f;        /* 7.02:1 on surface, 6.03:1 on its bg */
+  --tier-blocked-bg: #45191b;
+  --tier-blocked-edge: #f8827f;
+  --tier-limited-edge: #f0b054;
+
+  /* Axis B collapses onto the same three hues in dark, and the separation
+   * moves to FORM, which is a stronger channel than a 6% hue difference:
+   * axis A is always a pill or a chart band, axis B is always a full-width
+   * banner with a leading glyph. Axis A is never a banner; axis B is never
+   * a pill. */
+  --success: #56d68f;
+  --success-bg: #12382a;
+  --warning: #f0b054;
+  --warning-bg: #3d2a0d;
+  --warning-border: #5c4114;
+  --danger: #f8827f;
+  --danger-bg: #45191b;
+  --danger-border: #6b2427;
+  --danger-bg-hover: #56201f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1017;
+    --surface: #131b24;
+    --surface-sunken: #0f161e;
+    --surface-raised: #1c2732;
+    --border: #23303d;
+    --border-interactive: #64788c;
+    --text: #e8eef4;
+    --text-muted: #94a6b8;
+    --accent: #38bfd4;
+    --accent-hover: #6ad3e3;
+    --accent-subtle: #0d2b33;
+    --focus-ring: #38bfd4;
+    --ink: #0b1017;
+    --ink-fg: #e8eef4;
+    --ink-muted: #94a6b8;
+    --brand-cyan: #38bfd4;
+    --tier-normal: #56d68f;
+    --tier-normal-bg: #12382a;
+    --tier-limited: #f0b054;
+    --tier-limited-bg: #3d2a0d;
+    --tier-blocked: #f8827f;
+    --tier-blocked-bg: #45191b;
+    --tier-blocked-edge: #f8827f;
+    --tier-limited-edge: #f0b054;
+    --success: #56d68f;
+    --success-bg: #12382a;
+    --warning: #f0b054;
+    --warning-bg: #3d2a0d;
+    --warning-border: #5c4114;
+    --danger: #f8827f;
+    --danger-bg: #45191b;
+    --danger-border: #6b2427;
+    --danger-bg-hover: #56201f;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -170,7 +296,7 @@ select:focus-visible,
 
 .card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 20px; margin-bottom: 20px; box-shadow: var(--shadow);
+  padding: 20px; margin-bottom: 20px; 
 }
 .card h2 { font-size: var(--text-lg); line-height: 1.25; margin: 0 0 4px; }
 .card .card-sub { color: var(--text-muted); font-size: var(--text-base); margin-bottom: 14px; }
@@ -241,6 +367,14 @@ tbody tr[data-tier="1"] th[scope="row"] { border-left: 3px solid var(--tier-limi
 .btn:hover { background: var(--bg); text-decoration: none; }
 .btn[disabled], .btn[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
 .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+/* Dark flips the accent from a deep teal to a bright cyan, so the label on
+ * a filled control has to flip too: white on #38bfd4 is 1.88:1, ink on it
+ * is 7.96:1. The token system handles every other colour automatically;
+ * this is the one pairing that genuinely inverts. */
+[data-theme="dark"] .btn-primary { color: var(--ink); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .btn-primary { color: var(--ink); }
+}
 .btn-primary:hover { background: var(--accent-hover); }
 .btn-danger { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger); }
 .btn-danger:hover { background: var(--danger-bg-hover); }
