@@ -20,6 +20,11 @@
       <span>Protection status</span>
       {% if active_count %}<span class="nav-count" data-tone="alarm">{{ active_count }}</span>{% endif %}
     </a>
+    <a class="nav-link" href="/dashboard/ui/history"
+       {% if active == 'history' %}aria-current="page"{% endif %}>
+      <span>History</span>
+      {% if unread_count %}<span class="nav-count" data-tone="alarm">{{ unread_count }}</span>{% endif %}
+    </a>
     <a class="nav-link" href="/dashboard/ui/whitelist"
        {% if active == 'whitelist' %}aria-current="page"{% endif %}>
       <span>Allowed IPs</span>

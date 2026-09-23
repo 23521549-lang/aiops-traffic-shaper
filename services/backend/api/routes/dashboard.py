@@ -1,3 +1,4 @@
+import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -5,8 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from services.backend.api.cognito_auth import dashboard_auth
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.ui.csrf import verify_csrf_if_cookie_auth
-from services.backend.core.tables import MitigationStateTable, ModelsTable, WhitelistTable
+from services.backend.core.tables import (
+    MitigationStateTable, ModelsTable, TenantHistoryTable, WhitelistTable,
+)
 from services.backend.schemas.mitigation import MitigationState
+from services.backend.schemas.history import HourlyPoint, MitigationEpisode
 from services.backend.schemas.whitelist import WhitelistEntry, WhitelistRequest
 from services.backend.schemas.model_status import ModelStatus
 
@@ -83,3 +87,87 @@ def model_status(tenant_id: str = Depends(dashboard_auth),
         score_mean=float(item["score_mean"]) if "score_mean" in item else None,
         score_std=float(item["score_std"]) if "score_std" in item else None,
     )
+
+
+# --- history ------------------------------------------------------------
+
+# A window cap, not a UX preference. Thirty days of a busy tenant is ~700
+# episode rows plus 720 hourly rows, and one such Query is ~15 eventually
+# consistent RCU against a table provisioned at 2. Refusing with a message
+# that names the cap is better than truncating silently, which is how the
+# retrain ended up training on a partial window for months.
+MAX_HISTORY_DAYS = 7
+_MAX_WINDOW = MAX_HISTORY_DAYS * 86_400
+
+
+def _window(since: int | None, until: int | None) -> tuple[int, int]:
+    now = int(time.time())
+    until = until if until is not None else now
+    since = since if since is not None else until - 86_400
+    if since > until:
+        raise HTTPException(status_code=400, detail="`since` must be before `until`")
+    if until - since > _MAX_WINDOW:
+        raise HTTPException(
+            status_code=400,
+            detail=f"History window is limited to {MAX_HISTORY_DAYS} days")
+    return since, until
+
+
+@router.get("/dashboard/v1/history", response_model=list[MitigationEpisode])
+def list_history(since: int | None = None, until: int | None = None,
+                 ip: str | None = None,
+                 tenant_id: str = Depends(dashboard_auth),
+                 resource=Depends(get_dynamo_resource)) -> list[MitigationEpisode]:
+    """What this product did, and when. PRD US-6's second acceptance
+    criterion, unmeetable until TenantHistory existed."""
+    since, until = _window(since, until)
+    table = TenantHistoryTable(resource)
+    # Absent marker means the tenant has never looked; treating that as
+    # epoch 0 would present the whole window as unread the first time the
+    # feature speaks.
+    read_through = table.unread_since(tenant_id, default_ts=since)
+
+    episodes = []
+    for row in table.query_episodes(tenant_id, since, until):
+        if ip and row.get("ip") != ip:
+            continue
+        episodes.append(MitigationEpisode(
+            ip=row["ip"],
+            hour_start=int(row["hour_start"]),
+            first_ts=int(row.get("first_ts", row["hour_start"])),
+            last_ts=int(row.get("last_ts", row["hour_start"])),
+            tier1_count=int(row.get("tier1_count", 0)),
+            tier2_count=int(row.get("tier2_count", 0)),
+            last_score=float(row["last_score"]) if row.get("last_score") is not None else None,
+            last_z=float(row["last_z"]) if row.get("last_z") is not None else None,
+            reason=row.get("reason", "behavioral_anomaly"),
+            is_new=int(row["hour_start"]) >= read_through,
+        ))
+    return episodes
+
+
+@router.get("/dashboard/v1/series", response_model=list[HourlyPoint])
+def list_series(since: int | None = None, until: int | None = None,
+                tenant_id: str = Depends(dashboard_auth),
+                resource=Depends(get_dynamo_resource)) -> list[HourlyPoint]:
+    since, until = _window(since, until)
+    rows = TenantHistoryTable(resource).query_series(tenant_id, since, until, fill=True)
+    return [HourlyPoint(
+        hour_start=int(r["hour_start"]),
+        requests=int(r.get("requests", 0)),
+        batches=int(r.get("batches", 0)),
+        tier1_decisions=int(r.get("tier1_decisions", 0)),
+        tier2_decisions=int(r.get("tier2_decisions", 0)),
+    ) for r in rows]
+
+
+@router.post("/dashboard/v1/history/mark-read",
+             dependencies=[Depends(verify_csrf_if_cookie_auth)])
+def mark_history_read(through_ts: int | None = None,
+                      tenant_id: str = Depends(dashboard_auth),
+                      resource=Depends(get_dynamo_resource)) -> dict:
+    """Idempotent, and never moves backwards: two tabs or a retried request
+    must not re-announce what the customer has already seen."""
+    through = through_ts if through_ts is not None else int(time.time())
+    TenantHistoryTable(resource).mark_read(tenant_id, through)
+    return {"last_read_ts": TenantHistoryTable(resource).unread_since(tenant_id, through)}

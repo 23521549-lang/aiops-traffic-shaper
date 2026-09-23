@@ -762,3 +762,15 @@ input[type=text], input[type=password], select {
   .lp-section { padding-top: var(--s7); padding-bottom: var(--s7); }
   .lp-nav { gap: var(--s3); }
 }
+
+/* --- card head -------------------------------------------------------- */
+
+/* A title and its controls on one line, stacking at phone width rather than
+ * squeezing the filter tabs into a column of one. */
+.card-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--s4); flex-wrap: wrap; margin-bottom: var(--s3);
+}
+.card-head > div:first-child { min-width: 0; }
+.card-head .card-sub { margin-bottom: 0; }
+.card-head .filter-tabs { margin-bottom: 0; }

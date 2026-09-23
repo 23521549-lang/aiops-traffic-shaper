@@ -20,7 +20,8 @@ from datetime import datetime, timedelta, timezone
 
 from services.backend.api.dependencies import hash_api_key
 from services.backend.core.tables import (
-    AgentsTable, MitigationStateTable, TenantsTable, UsageCountersTable, WhitelistTable,
+    AgentsTable, MitigationStateTable, TenantHistoryTable, TenantsTable,
+    UsageCountersTable, WhitelistTable,
 )
 from services.backend.core.usage import _DAILY_REQUEST_CEILING, _TENANT_KEY_MARKER, _today
 
@@ -118,6 +119,35 @@ def seed(resource, primary_tenant: str) -> dict:
             date=f"{today}{_TENANT_KEY_MARKER}{tenant_id}",
             total_requests=int(total * share),
         )
+
+    # --- history: 24 hours of hourly rollups and a handful of episodes ---
+    history = TenantHistoryTable(resource)
+    hour_now = TenantHistoryTable.hour_of(epoch)
+    # A quiet day with two busy stretches, so the chart has a shape rather
+    # than a flat line or a wall.
+    shape = [140, 120, 95, 80, 70, 65, 90, 210, 380, 520, 610, 640,
+             590, 620, 700, 660, 580, 540, 610, 720, 480, 330, 240, 180]
+    for i, requests in enumerate(shape):
+        hour = hour_now - (23 - i) * 3600
+        history.record_traffic(primary_tenant, hour_start=hour,
+                               requests=requests, tier1=0, tier2=0)
+
+    # Episodes, placed where the traffic is busiest so the chart and the
+    # table tell the same story.
+    episodes = [
+        ("198.51.100.66", 19, 2, -6.42, 11),
+        ("198.51.100.66", 20, 2, -5.88, 4),
+        ("203.0.113.201", 14, 2, -5.31, 6),
+        ("192.0.2.144", 11, 1, -4.62, 3),
+        ("198.51.100.7", 9, 1, -4.21, 2),
+        ("203.0.113.88", 7, 1, None, 1),
+    ]
+    for ip, hours_ago, tier, z, count in episodes:
+        hour = hour_now - (23 - hours_ago) * 3600
+        for n in range(count):
+            history.record_decision(
+                primary_tenant, ip, hour_start=hour, tier=tier,
+                now=hour + 120 + n * 90, score=(z / 30 if z else -0.11), z=z)
 
     out["tenants"] = [t[0] for t in tenants]
     return out

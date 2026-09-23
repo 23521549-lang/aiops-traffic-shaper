@@ -18,10 +18,12 @@ from pydantic import ValidationError
 
 from services.backend.api.cognito_auth import dashboard_auth
 from services.backend.api.routes.dashboard import (
-    add_whitelist, list_mitigations, list_whitelist, model_status, remove_whitelist,
+    add_whitelist, list_history, list_mitigations, list_series, list_whitelist,
+    mark_history_read, model_status, remove_whitelist,
 )
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.tables import AgentsTable
+from services.backend.ui.charts import deviation_chart, downsample
 from services.backend.schemas.whitelist import WhitelistRequest
 from services.backend.ui.csrf import CSRF_COOKIE_NAME, verify_csrf
 from services.backend.ui.presenters import (
@@ -156,3 +158,88 @@ def remove_whitelist_ui(request: Request, ip: str, tenant_id: str = Depends(dash
         "whitelist": whitelist.whitelisted_ips,
         "message": f"{ip} removed. It will be checked like any other IP from now on.",
     })
+
+
+# --- history -------------------------------------------------------------
+
+def _episode_rows(episodes, now):
+    return [{
+        "ip": e.ip,
+        "hour": datetime.fromtimestamp(e.hour_start, tz=timezone.utc).strftime("%d %b %H:00"),
+        "hour_start": e.hour_start,
+        "span": _span(e.first_ts, e.last_ts),
+        "tier": e.max_tier,
+        "tier_label": tier_label(e.max_tier),
+        "tier_css": tier_css(e.max_tier),
+        "severity": severity_detail(e.last_z),
+        "decisions": e.decisions,
+        "tier1": e.tier1_count,
+        "tier2": e.tier2_count,
+        "is_new": e.is_new,
+        "score": e.last_score,
+        "z": e.last_z,
+    } for e in episodes]
+
+
+def _span(first_ts: int, last_ts: int) -> str:
+    a = datetime.fromtimestamp(first_ts, tz=timezone.utc).strftime("%H:%M")
+    b = datetime.fromtimestamp(last_ts, tz=timezone.utc).strftime("%H:%M")
+    return a if a == b else f"{a}–{b}"
+
+
+@router.get("/dashboard/ui/history", response_class=HTMLResponse)
+def history_page(request: Request, days: int = 1,
+                 tenant_id: str = Depends(dashboard_auth),
+                 resource=Depends(get_dynamo_resource)):
+    """What the product did, over time.
+
+    The chart and the table come from the same query window so they can
+    never disagree — a chart showing a spike the table below it does not
+    list is worse than no chart.
+    """
+    days = days if days in (1, 7) else 1
+    now = datetime.now(timezone.utc)
+    until = int(now.timestamp())
+    since = until - days * 86_400
+
+    episodes = list_history(since=since, until=until, tenant_id=tenant_id, resource=resource)
+    series = list_series(since=since, until=until, tenant_id=tenant_id, resource=resource)
+
+    # The deviation chart plots the worst sigma seen in each hour. An hour
+    # with traffic but no decision is a real zero; an hour with no row at
+    # all is a gap and must stay None, or a dead agent renders as calm.
+    worst = {}
+    for e in episodes:
+        z = abs(e.last_z) if e.last_z is not None else 0.0
+        worst[e.hour_start] = max(worst.get(e.hour_start, 0.0), z)
+    points = [(p.hour_start, -worst.get(p.hour_start, 0.0) if p.batches or p.hour_start in worst else None)
+              for p in series]
+
+    chart = deviation_chart(
+        downsample(points),
+        empty_message=_history_empty_message(series),
+        caption=f"Worst deviation per hour, last {'24 hours' if days == 1 else '7 days'}.",
+        label_for=lambda ts: datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M"),
+    )
+
+    return templates.TemplateResponse(request, "dashboard_history.html", _shell(
+        request, tenant_id, "history",
+        chart=chart, episodes=_episode_rows(episodes, now), days=days,
+        unread=sum(1 for e in episodes if e.is_new),
+        total_blocked=sum(e.tier2_count for e in episodes),
+        total_slowed=sum(e.tier1_count for e in episodes),
+    ))
+
+
+def _history_empty_message(series) -> str:
+    if not any(p.batches for p in series):
+        return "No telemetry in this window."
+    return "Nothing crossed your threshold in this window."
+
+
+@router.post("/dashboard/ui/history/mark-read", response_class=HTMLResponse,
+             dependencies=[Depends(verify_csrf)])
+def mark_read_ui(request: Request, tenant_id: str = Depends(dashboard_auth),
+                 resource=Depends(get_dynamo_resource)):
+    mark_history_read(tenant_id=tenant_id, resource=resource)
+    return HTMLResponse('<p class="field-hint" data-live>Marked as read.</p>')
