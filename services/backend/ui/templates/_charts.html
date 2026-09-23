@@ -91,7 +91,11 @@
   {% if chart.caption %}<figcaption class="chart-caption">{{ chart.caption }}</figcaption>{% endif %}
 
   {% if chart.rows %}
-  <table class="sr-only">
+  {# A block wrapper, not the class on the table itself: table layout
+     ignores the width cap and lays out at min-content, which pushed the
+     whole page sideways at phone width. #}
+  <div class="sr-only">
+  <table>
     <caption>{{ title }}</caption>
     <thead><tr><th scope="col">When</th><th scope="col">Most unusual source</th></tr></thead>
     <tbody>
@@ -100,6 +104,7 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
   {% endif %}
 </figure>
 {% endmacro %}

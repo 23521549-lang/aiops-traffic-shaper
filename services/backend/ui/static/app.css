@@ -230,10 +230,18 @@ select:focus-visible,
   outline-offset: 2px;
 }
 
+/* `clip` is deprecated and, more to the point, a <table> does not clip the
+ * way a block does: the sr-only tables that carry every chart's numbers
+ * were laying out at their full min-content width and pushing the page
+ * 45px past a 390px viewport. Found with a browser, not a test. Both
+ * properties are kept so the rule works either way, and the accompanying
+ * .sr-only-wrap puts a clipping BLOCK around any table that needs it. */
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%);
+  white-space: nowrap; border: 0;
 }
+.sr-only table { width: 1px; }
 
 /* Keyboard users land here first; it stays hidden until focused. */
 .skip-link {
@@ -296,7 +304,11 @@ select:focus-visible,
 
 .card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 20px; margin-bottom: 20px; 
+  padding: 20px; margin-bottom: 20px;
+  /* Contains absolutely positioned descendants, notably `.sr-only`, which
+   * would otherwise anchor to the initial containing block and widen the
+   * page. See test_contrast.py. */
+  position: relative;
 }
 .card h2 { font-size: var(--text-lg); line-height: 1.25; margin: 0 0 4px; }
 .card .card-sub { color: var(--text-muted); font-size: var(--text-base); margin-bottom: 14px; }
@@ -318,7 +330,13 @@ select:focus-visible,
  * than the viewport. The data-table exception lets the TABLE scroll; it
  * does not let the page scroll. tabindex makes it reachable by keyboard,
  * which an overflow container otherwise is not. */
-.table-scroll { overflow-x: auto; }
+/* position: relative is load-bearing, not tidiness. `.sr-only` is
+ * absolutely positioned, and with no positioned ancestor it anchors to the
+ * initial containing block instead of the scroll container: the hidden
+ * "Actions" label in a table header was landing at x=450 on a 390px screen
+ * and dragging the whole page sideways with it. Found with a browser
+ * walking the rendered box tree; no unit test can see this. */
+.table-scroll { overflow-x: auto; position: relative; }
 .table-scroll:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
 table { width: 100%; border-collapse: collapse; }
@@ -640,7 +658,8 @@ input[type=text], input[type=password], select {
 
 .lp-topbar {
   display: flex; align-items: center; justify-content: space-between;
-  gap: var(--s4); padding: var(--s4) var(--s5);
+  gap: var(--s4); padding: var(--s4) var(--s5); flex-wrap: wrap;
+  row-gap: var(--s2);
 }
 .lp-brand { color: inherit; text-decoration: none; }
 .lp-nav { display: flex; align-items: center; gap: var(--s5); font-size: var(--text-base); }

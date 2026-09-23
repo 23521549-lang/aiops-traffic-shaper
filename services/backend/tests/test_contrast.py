@@ -175,3 +175,37 @@ def test_dark_text_is_not_pure_white():
     deliberate and still far above AA."""
     assert DARK["--text"].lower() != "#ffffff"
     assert ratio(DARK["--text"], DARK["--surface"]) >= 4.5
+
+
+# --- layout guards -------------------------------------------------------
+
+def test_scroll_containers_contain_their_absolutely_positioned_children():
+    """`.sr-only` is absolutely positioned. With no positioned ancestor it
+    anchors to the initial containing block rather than the scroll container
+    it sits inside, so a hidden "Actions" label in a table header landed at
+    x=450 on a 390px screen and dragged the whole page sideways with it.
+
+    That carried the "Allow this IP" button off the right edge, which made
+    the single most urgent action in the product unreachable on a phone.
+
+    Found by walking the rendered box tree in a real browser. No assertion
+    on a response body can see it, which is why the structural guard is
+    pinned here instead."""
+    css = CSS.read_text(encoding="utf-8")
+    for selector in (".table-scroll", ".card"):
+        block = css[css.index(selector + " {"):]
+        block = block[:block.index("}")]
+        assert "position: relative" in block, selector
+
+
+def test_the_screen_reader_table_cannot_widen_the_page():
+    """A <table> does not clip the way a block does: the sr-only tables that
+    carry every chart's numbers were laying out at full min-content width.
+    Two defences, because `clip` is deprecated and `clip-path` is the
+    replacement, and both are cheap."""
+    css = CSS.read_text(encoding="utf-8")
+    block = css[css.index(".sr-only {"):]
+    block = block[:block.index("}")]
+    assert "clip-path: inset(50%)" in block
+    assert "overflow: hidden" in block
+    assert ".sr-only table { width: 1px; }" in css
