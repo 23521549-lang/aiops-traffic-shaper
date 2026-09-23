@@ -2,13 +2,16 @@ import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import ValidationError
 
 from services.backend.api.cognito_auth import dashboard_auth
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.ui.csrf import verify_csrf_if_cookie_auth
 from services.backend.core.tables import (
-    MitigationStateTable, ModelsTable, TenantHistoryTable, WhitelistTable,
+    AgentsTable, MitigationStateTable, ModelsTable, TenantHistoryTable,
+    WhitelistTable,
 )
+from services.backend.schemas.admin import AgentSummary
 from services.backend.schemas.mitigation import MitigationState
 from services.backend.schemas.history import HourlyPoint, MitigationEpisode
 from services.backend.schemas.whitelist import WhitelistEntry, WhitelistRequest
@@ -22,6 +25,34 @@ def list_mitigations(tenant_id: str = Depends(dashboard_auth),
                       resource=Depends(get_dynamo_resource)) -> list[MitigationState]:
     items = MitigationStateTable(resource).query_active(tenant_id)
     return [MitigationState(**item) for item in items]
+
+
+@router.get("/dashboard/v1/agents", response_model=list[AgentSummary])
+def list_own_agents(tenant_id: str = Depends(dashboard_auth),
+                    resource=Depends(get_dynamo_resource)) -> list[AgentSummary]:
+    """The tenant's own agents.
+
+    One Query on the base table's own partition key. `AgentSummary` is
+    reused rather than a raw dict: its closed field list is what keeps
+    `api_key_hash` server-side, and the shape then matches what the
+    publisher console already consumes.
+
+    Liveness is derived by the caller from `last_seen_at`. `LastSeenIndex`
+    is partitioned on `status` and is cross-tenant, so it cannot answer
+    "which of MY agents"; a per-tenant liveness GSI would mirror every
+    agent write against the account-wide 25 WCU pool to save a loop over
+    single digits.
+    """
+    items = AgentsTable(resource).query_by_tenant(tenant_id)
+    out = []
+    for item in items:
+        try:
+            out.append(AgentSummary(**item))
+        except ValidationError:
+            # An agent row written before a field existed must not 500 the
+            # page. Same rule the tenant list learned the hard way.
+            continue
+    return sorted(out, key=lambda a: a.last_seen_at, reverse=True)
 
 
 @router.get("/dashboard/v1/whitelist", response_model=WhitelistEntry)

@@ -256,3 +256,56 @@ def _figure(v: float) -> str:
     if v >= 10:
         return f"{v:.1f}"
     return f"{v:.2f}"
+
+
+AGENT_STALE_AFTER_SECONDS = 300
+
+
+def agent_state(agent: dict, now: datetime | None = None,
+                stale_after_seconds: int = AGENT_STALE_AFTER_SECONDS) -> dict:
+    """One agent, as a person reads it.
+
+    `status` on the item is lifecycle, not liveness: it says whether the key
+    was revoked, and it keeps saying "active" for a machine that has been
+    powered off for a week. Liveness is derived from `last_seen_at`, exactly
+    as `AgentsTable.query_live` derives it, so the two can never disagree.
+
+    Revoked wins over quiet. A revoked agent is also not reporting, and
+    saying so first would send its owner to restart a process that is
+    working fine; the key was taken away from it, usually because the tenant
+    was suspended.
+    """
+    now = now or datetime.now(timezone.utc)
+    raw = agent.get("last_seen_at")
+    seen = None
+    if raw:
+        try:
+            seen = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        except ValueError:
+            seen = None
+
+    age = (now - seen).total_seconds() if seen else None
+    if agent.get("status") == "revoked":
+        state, label = "revoked", "Revoked"
+    elif age is not None and age <= stale_after_seconds:
+        state, label = "live", "Reporting"
+    else:
+        state, label = "quiet", "Quiet"
+
+    stamps = timestamp_pair(raw) if raw else {"label": "never", "exact": ""}
+    return {
+        "agent_id": agent.get("agent_id", ""),
+        "tenant_id": agent.get("tenant_id", ""),
+        # The name its owner gave the machine. A uuid does not tell anyone
+        # which box to walk over to.
+        "label": agent.get("agent_label") or agent.get("agent_id", ""),
+        "version": agent.get("agent_version") or "unknown",
+        "state": state,
+        "state_label": label,
+        "last_seen": humanise_age(age) if age is not None else "never",
+        "last_seen_exact": stamps["exact"],
+        "registered": timestamp_pair(agent.get("registered_at"))["label"]
+                      if agent.get("registered_at") else "unknown",
+        "registered_exact": timestamp_pair(agent.get("registered_at"))["exact"]
+                            if agent.get("registered_at") else "",
+    }

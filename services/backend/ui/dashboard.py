@@ -18,8 +18,8 @@ from pydantic import ValidationError
 
 from services.backend.api.cognito_auth import dashboard_auth
 from services.backend.api.routes.dashboard import (
-    add_whitelist, list_history, list_mitigations, list_series, list_whitelist,
-    mark_history_read, model_status, remove_whitelist,
+    add_whitelist, list_history, list_mitigations, list_own_agents, list_series,
+    list_whitelist, mark_history_read, model_status, remove_whitelist,
 )
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.core.tables import AgentsTable
@@ -28,7 +28,8 @@ from services.backend.ui.charts import deviation_chart, downsample, sigma_strip
 from services.backend.schemas.whitelist import WhitelistRequest
 from services.backend.ui.csrf import CSRF_COOKIE_NAME, verify_csrf
 from services.backend.ui.presenters import (
-    absolute_expiry, agent_health, decompose, relative_expiry, severity_detail,
+    absolute_expiry, agent_health, agent_state, decompose, relative_expiry,
+    severity_detail,
     tier_css, tier_label,
     timestamp_pair,
 )
@@ -122,6 +123,37 @@ def protection_status(request: Request, ip: str | None = None,
         detail_open=selected is not None,
         strip=sigma_strip(worst),
         active_count=len(mitigations),
+    ))
+
+
+@router.get("/dashboard/ui/agents", response_class=HTMLResponse)
+def agents_page(request: Request, id: str | None = None,
+                tenant_id: str = Depends(dashboard_auth),
+                resource=Depends(get_dynamo_resource)):
+    """The fleet, and the selected machine beside it.
+
+    Until now a customer whose protection had stopped was told only that no
+    telemetry had arrived. Which of their servers had gone quiet was not
+    shown anywhere in the product, on a screen they would be reading during
+    the incident it caused.
+
+    `?id=` selects, like `?ip=` on Protection: a real URL, so it deep-links
+    into a ticket, survives a refresh, and needs no script. The lookup is
+    done over the rows already fetched, never by id against the table, so an
+    id guessed from another tenant finds nothing rather than finding
+    somebody else's machine.
+    """
+    now = datetime.now(timezone.utc)
+    rows = [agent_state(a.model_dump(), now)
+            for a in list_own_agents(tenant_id=tenant_id, resource=resource)]
+    selected = next((r for r in rows if r["agent_id"] == id), None)
+    live = sum(1 for r in rows if r["state"] == "live")
+
+    return templates.TemplateResponse(request, "dashboard_agents.html", _shell(
+        request, tenant_id, "agents",
+        agents=rows, selected=selected, detail_open=selected is not None,
+        live_count=live, quiet_count=sum(1 for r in rows if r["state"] == "quiet"),
+        agent_count=len(rows),
     ))
 
 

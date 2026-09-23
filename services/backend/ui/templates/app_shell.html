@@ -26,6 +26,11 @@
         <span>History</span>
         {% if unread_count %}<span class="c-nav-count" data-tone="alarm">{{ unread_count }}</span>{% endif %}
       </a>
+      <a class="c-nav-link" href="/dashboard/ui/agents"
+         {% if active == 'agents' %}aria-current="page"{% endif %}>
+        <span>Agents</span>
+        {% if quiet_count %}<span class="c-nav-count" data-tone="alarm">{{ quiet_count }}</span>{% endif %}
+      </a>
 
       <div class="c-nav-label">Control</div>
       <a class="c-nav-link" href="/dashboard/ui/whitelist"

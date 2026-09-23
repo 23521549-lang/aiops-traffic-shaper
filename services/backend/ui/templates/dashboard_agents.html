@@ -1,0 +1,119 @@
+{% extends "app_shell.html" %}
+{% block title %}Agents · Traffic Shaper{% endblock %}
+{% block page_title %}Agents{% endblock %}
+{% block page_summary %}
+{%- if agent_count -%}
+{{ live_count }} of {{ agent_count }} reporting
+{%- if quiet_count %} · {{ quiet_count }} quiet{% endif -%}
+{%- else -%}
+nothing registered yet
+{%- endif -%}
+{% endblock %}
+{% block page_actions %}
+<a class="c-btn" href="/dashboard/ui">Protection</a>
+{% endblock %}
+{% block page_content %}
+
+<div class="c-list">
+
+  {% if quiet_count %}
+  <div class="c-panel">
+    <div class="alert alert-warning">
+      <strong>{{ quiet_count }} agent{{ 's' if quiet_count != 1 }} stopped reporting.</strong>
+      Traffic through {{ 'those machines' if quiet_count != 1 else 'that machine' }}
+      is not being checked. The quiet ones are named below.
+    </div>
+  </div>
+  {% endif %}
+
+  {% if agents %}
+  <table class="c-table">
+    <caption class="sr-only">Your agents, most recently seen first</caption>
+    <thead>
+      <tr>
+        <th scope="col">Agent</th>
+        <th scope="col">State</th>
+        <th scope="col">Last seen</th>
+        <th scope="col">Version</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in agents %}
+      <tr {% if selected and selected.agent_id == a.agent_id %}aria-selected="true"{% endif %}>
+        {# The label its owner chose. The uuid stays in the title for anyone
+           who needs to paste it into a ticket. #}
+        <th scope="row" title="{{ a.agent_id }}">
+          <a href="/dashboard/ui/agents?id={{ a.agent_id }}">{{ a.label }}</a>
+        </th>
+        <td><span class="c-state c-state--{{ a.state }}">{{ a.state_label }}</span></td>
+        <td class="d" title="{{ a.last_seen_exact }}">{{ a.last_seen }}</td>
+        <td class="d">{{ a.version }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="c-empty-state">
+    <strong>No agent has registered</strong>
+    <p>
+      Install the agent on the server you want protected and register it with
+      your tenant id. Nothing is being checked until one reports in, so an
+      empty Protection list right now is not evidence that your traffic is
+      clean.
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+{% if selected %}
+<aside class="c-detail" aria-label="Agent detail">
+  <div class="c-detail-head">
+    <div class="c-detail-id">{{ selected.label }}</div>
+    <div>
+      <span class="c-state c-state--{{ selected.state }}">{{ selected.state_label }}</span>
+      <span class="c-summary">last seen {{ selected.last_seen }}</span>
+    </div>
+  </div>
+
+  <div class="c-detail-body">
+    <div>
+      <div class="c-section-label">Agent detail</div>
+      <dl class="c-kv">
+        <dt>Agent id</dt><dd>{{ selected.agent_id }}</dd>
+        <dt>Version</dt><dd>{{ selected.version }}</dd>
+        <dt>Registered</dt><dd>{{ selected.registered }}</dd>
+        <dt>Last seen</dt><dd>{{ selected.last_seen_exact or selected.last_seen }}</dd>
+      </dl>
+    </div>
+
+    <div>
+      <div class="c-section-label">What this state means</div>
+      {% if selected.state == 'live' %}
+      <p class="c-summary">
+        This machine made an authenticated call within the last five minutes.
+        Its traffic is being scored against your baseline.
+      </p>
+      {% elif selected.state == 'revoked' %}
+      <p class="c-summary">
+        This key was revoked, which happens when a tenant is suspended. The
+        process may well still be running and healthy; it simply cannot
+        report any more. It has to register again to come back.
+      </p>
+      {% else %}
+      <p class="c-summary">
+        Nothing has arrived from this machine in over five minutes. Either
+        the process stopped, or it cannot reach the API. Traffic through it
+        is not being checked while that is true.
+      </p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="c-actions">
+    <a class="c-btn" href="/dashboard/ui">Protection</a>
+    <a class="c-btn" href="/dashboard/ui/agents">Close <kbd class="c-key">Esc</kbd></a>
+  </div>
+</aside>
+{% endif %}
+
+{% endblock %}

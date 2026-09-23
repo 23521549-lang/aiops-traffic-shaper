@@ -190,6 +190,12 @@
 .c-state--slowed { color: var(--tier-limited); }
 .c-state--clear { color: var(--tier-normal); }
 
+/* Agent liveness reuses the tier palette, and like the tiers it is never
+ * colour alone: the word is the signal, the colour only agrees with it. */
+.c-state--live { color: var(--tier-normal); }
+.c-state--quiet { color: var(--tier-limited); }
+.c-state--revoked { color: var(--tier-blocked); }
+
 /* --- row actions ------------------------------------------------------ */
 
 /* Hidden until hover on a pointer device, always visible on touch. An
