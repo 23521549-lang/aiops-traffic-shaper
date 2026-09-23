@@ -81,6 +81,12 @@ _UNMETERED_PATH_PREFIXES = ("/health", "/ready", "/ui/login", "/ui/logout", "/ui
 def _should_meter(request, response) -> bool:
     if request.url.path.startswith(_UNMETERED_PATH_PREFIXES):
         return False
+    # "/" cannot be expressed as a prefix - every path starts with it - and it
+    # is the most exposed URL the deployment has. Before it redirected it
+    # answered 404, and that 404 was metered: a DynamoDB write per drive-by
+    # request on the front door.
+    if request.url.path == "/":
+        return False
     if response.status_code in (401, 403, 429):
         return False
     # Set by the exception handler above, for UI paths whose 401 has already
@@ -131,6 +137,17 @@ async def security_headers(request, call_next):
     for header, value in _SECURITY_HEADERS.items():
         response.headers.setdefault(header, value)
     return response
+
+
+@app.get("/")
+def root():
+    """The front door. Every entry point this product documents is a
+    sub-path - /ui/login, /dashboard/ui, /admin/ui - and until now nothing
+    answered "/" at all, so anyone handed the deployment URL and nothing else
+    met FastAPI's JSON 404. Send them where a person arriving with no
+    credentials has to go anyway; the two UI routers already redirect there on
+    401/403."""
+    return RedirectResponse(url="/ui/login", status_code=302)
 
 
 @app.get("/health")
