@@ -98,3 +98,25 @@ def test_dashboard_cannot_reach_admin_scope(dynamo_resource, cognito_test_keys):
     resp = client.get("/admin/ui", follow_redirects=False)
     assert resp.status_code == 302
     assert resp.headers["location"] == "/ui/login"
+
+
+def test_the_degraded_banner_reads_as_a_sentence(dynamo_resource, cognito_test_keys):
+    """Caught by reading the rendered page on the live deployment, not by a
+    test: the banner said "We haven't heard from your agent in 2 days ago."
+    `humanise_age` already returns a phrase ending in "ago", so the template's
+    own "in" made it ungrammatical. Copy is part of the product; a security
+    warning that reads as broken English undermines the warning."""
+    from datetime import datetime, timedelta, timezone
+
+    from services.backend.core.tables import AgentsTable
+
+    client = _client(dynamo_resource, cognito_test_keys, "t-1")
+    stale = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+    AgentsTable(dynamo_resource).put(tenant_id="t-1", agent_id="a-1", agent_label="nginx-01",
+                                     registered_at=stale, last_seen_at=stale,
+                                     agent_version="unknown", api_key_hash="h", status="active")
+
+    page = client.get("/dashboard/ui").text
+    assert "We haven’t heard from your agent." in page
+    assert "Last contact was 2 days ago." in page
+    assert "in 2 days ago" not in page

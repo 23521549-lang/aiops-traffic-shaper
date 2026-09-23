@@ -21,9 +21,10 @@
 </div>
 {% elif health.state == "degraded" %}
 <div class="alert alert-warning">
-  <strong>We haven’t heard from your agent in {{ health.last_seen_label }}.</strong>
-  Nothing is being checked right now, so an empty list below does <strong>not</strong>
-  mean your traffic is clean.
+  <strong>We haven’t heard from your agent.</strong>
+  Last contact was {{ health.last_seen_label }}. Nothing is being checked
+  right now, so an empty list below does <strong>not</strong> mean your
+  traffic is clean.
 </div>
 {% endif %}
 
