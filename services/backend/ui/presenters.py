@@ -68,7 +68,7 @@ def relative_expiry(expires_at: int, now: datetime | None = None) -> str:
     the page never refreshed, the answer they computed was usually wrong.
     """
     if not expires_at:
-        return "—"
+        return "no expiry"
     now = now or datetime.now(timezone.utc)
     remaining = int(expires_at - now.timestamp())
     if remaining <= 0:

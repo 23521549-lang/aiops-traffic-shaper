@@ -94,8 +94,11 @@ def test_something_already_over_says_so():
     assert relative_expiry(int((NOW - timedelta(minutes=1)).timestamp()), NOW) == "Ended"
 
 
-def test_no_expiry_renders_as_a_dash():
-    assert relative_expiry(0, NOW) == "—"
+def test_no_expiry_says_so_in_words():
+    """It used to render an em dash. A punctuation mark standing in for a
+    fact is a small puzzle for the reader, and the em dash is now gone from
+    the UI entirely."""
+    assert relative_expiry(0, NOW) == "no expiry"
 
 
 # --- the three kinds of nothing ------------------------------------------

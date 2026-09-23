@@ -155,3 +155,58 @@ def test_the_theme_toggle_cannot_be_used_as_an_open_redirect(dynamo_resource):
         resp = client.post(f"/ui/prefs/theme?theme=dark&next_url={hostile}",
                            follow_redirects=False)
         assert resp.headers["location"] == "/"
+
+
+# --- typography ----------------------------------------------------------
+
+def test_no_em_dash_reaches_any_page(dynamo_resource, cognito_test_keys):
+    """The product owner asked for the em dash to be gone from the UI.
+
+    It is easy to remove once and easy to reintroduce, because an em dash is
+    the natural thing to reach for when joining two clauses. This walks every
+    page a visitor or a signed-in user can reach and fails on the character
+    itself, so the next person who types one finds out here rather than on a
+    screenshot.
+
+    Jinja comments and Python docstrings are not covered and do not need to
+    be: they never render.
+    """
+    from services.backend.api.cognito_auth import get_jwks
+    from services.backend.core.tables import TenantHistoryTable
+    from services.backend.tests.conftest import sign_test_token
+
+    create_all_tables(dynamo_resource)
+    app.dependency_overrides[get_dynamo_resource] = lambda: dynamo_resource
+    app.dependency_overrides[get_jwks] = lambda: cognito_test_keys["jwks"]
+
+    # Populated rather than empty, so the tables, badges and chart captions
+    # are actually in the output being checked.
+    import time
+    hour = TenantHistoryTable.hour_of(int(time.time()) - 3600)
+    TenantHistoryTable(dynamo_resource).record_decision(
+        "t-1", "198.51.100.66", hour_start=hour, tier=2,
+        now=hour + 60, score=-0.2, z=-5.9)
+
+    public = TestClient(app, base_url="https://testserver")
+    tenant = TestClient(app, base_url="https://testserver")
+    tenant.post("/ui/login", data={"id_token": sign_test_token(
+        cognito_test_keys["private_pem"], {"custom:tenant_id": "t-1"})})
+    admin = TestClient(app, base_url="https://testserver")
+    admin.post("/ui/login", data={"id_token": sign_test_token(
+        cognito_test_keys["private_pem"], {"cognito:groups": ["admin"]})})
+
+    pages = [
+        (public, "/"), (public, "/ui/login"), (public, "/not-a-page"),
+        (tenant, "/dashboard/ui"), (tenant, "/dashboard/ui/history"),
+        (tenant, "/dashboard/ui/whitelist"), (tenant, "/dashboard/ui/model"),
+        (admin, "/admin/ui"), (admin, "/admin/ui/tenants"),
+        (admin, "/admin/ui/tenants/new"), (admin, "/admin/ui/agents"),
+    ]
+
+    offenders = []
+    for client, path in pages:
+        body = client.get(path, headers={"accept": "text/html"}).text
+        for line in body.splitlines():
+            if "—" in line:
+                offenders.append(f"{path}: {line.strip()[:70]}")
+    assert not offenders, "em dash rendered on:\n" + "\n".join(offenders)

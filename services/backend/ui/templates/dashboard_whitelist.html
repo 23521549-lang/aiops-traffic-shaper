@@ -1,5 +1,5 @@
 {% extends "app_shell.html" %}
-{% block title %}Allowed IPs — AI Traffic Shaper{% endblock %}
+{% block title %}Allowed IPs · Traffic Shaper{% endblock %}
 {% block page_title %}Allowed IPs{% endblock %}
 {% block page_subtitle %}Tenant: {{ tenant_id }}{% endblock %}
 {% block page_content %}
@@ -8,8 +8,8 @@
   <h2>Allowed IPs</h2>
   <div class="card-sub">
     These are never slowed or blocked, and they are left out of model
-    training — so allowing one will not teach the system that its pattern is
-    normal.
+    training, so allowing one will not teach the system that its pattern
+    is normal.
   </div>
 
   <form class="form-row stack-md" data-params-in-url
@@ -22,7 +22,7 @@
     <div class="field">
       <label for="wl-reason">Reason</label>
       <input type="text" id="wl-reason" name="reason" aria-describedby="wl-reason-hint">
-      <span class="field-hint" id="wl-reason-hint">Optional — shown in this list</span>
+      <span class="field-hint" id="wl-reason-hint">Optional. Shown in this list.</span>
     </div>
     <button type="submit" class="btn btn-primary">Add to allowed list</button>
   </form>

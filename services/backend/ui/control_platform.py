@@ -51,7 +51,7 @@ def _agent_rows(items, now):
     dicts — the UI reuses the API's own functions rather than re-querying."""
     rows = []
     for a in items:
-        label = "—"
+        label = "never"
         if a.last_seen_at:
             try:
                 seen = datetime.fromisoformat(a.last_seen_at.replace("Z", "+00:00"))
@@ -145,8 +145,8 @@ def reactivate_tenant_ui(request: Request, tenant_id: str,
     reactivate_tenant(tenant_id, resource=resource)
     return templates.TemplateResponse(request, "_tenants_table.html", {
         **_tenants_ctx(resource),
-        "message": (f"{tenant_id} reactivated. Agent keys stay revoked — "
-                    f"its agents must register again."),
+        "message": (f"{tenant_id} reactivated. Agent keys stay revoked, "
+                    f"so its agents must register again."),
     })
 
 

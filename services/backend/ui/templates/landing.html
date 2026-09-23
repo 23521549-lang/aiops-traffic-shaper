@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% import "_brand.html" as brand %}
 {% import "_charts.html" as charts %}
-{% block title %}Traffic Shaper — your traffic has a normal{% endblock %}
+{% block title %}Traffic Shaper · your traffic has a normal{% endblock %}
 {% block body %}
 {{ charts.patterns() }}
 <a class="skip-link" href="#main-content">Skip to content</a>
@@ -28,10 +28,10 @@
       <strong>does this look like you?</strong>
     </p>
     <p class="muted">
-      We learn your site’s own baseline — request rate, error ratio, bytes,
-      timing, URI spread, user-agent entropy, POST ratio — and we measure
-      every source IP in standard deviations from <em>that</em>. Past 4σ we
-      slow it. Past 5σ we stop it.
+      We learn your site’s own baseline: request rate, error ratio, bytes,
+      timing, URI spread, user-agent entropy and POST ratio. Then we
+      measure every source IP in standard deviations from <em>that</em>.
+      Past 4σ we slow it. Past 5σ we stop it.
     </p>
     <p class="lp-cta">
       <a href="#proof" class="btn btn-primary">Read the measurements</a>
@@ -39,7 +39,7 @@
     </p>
     <p class="muted lp-fineprint">
       Free forever. No card. The whole backend runs inside AWS’s Always-Free
-      tier — that is not a promotion, it is the architecture.
+      tier. That is not a promotion, it is the architecture.
     </p>
   </div>
   <div class="lp-hero-art">
@@ -91,8 +91,8 @@
     <li>
       <span class="lp-kicker">01 · The agent watches</span>
       <p>A thin Python client tails your nginx access log and batches
-         request <em>metadata</em> — never bodies, never payloads. It ships
-         with no ML and no AWS SDK.</p>
+         request <em>metadata</em>, never bodies and never payloads. It
+         ships with no ML and no AWS SDK.</p>
     </li>
     <li>
       <span class="lp-kicker">02 · The backend measures</span>
@@ -103,7 +103,7 @@
     <li>
       <span class="lp-kicker">03 · The agent enforces</span>
       <p>Decisions come back in the same HTTP response. Your agent writes
-         them into nginx or iptables — whichever it finds — and removes them
+         them into nginx or iptables, whichever it finds, and removes them
          itself when the timer runs out. Nothing else ever will.</p>
     </li>
   </ol>
@@ -137,7 +137,7 @@
 <section class="lp-section on-ink lp-sigma" id="sigma">
   <h2>σ, in one screen.</h2>
   <p class="lp-lead">
-    σ (“sigma”) is one standard deviation — the natural unit of
+    σ (“sigma”) is one standard deviation: the natural unit of
     <em>unusual</em> for a given dataset. It is not a score we invented, and
     it does not mean the same thing for two sites. That is the entire point.
   </p>
@@ -185,8 +185,8 @@
     </div>
     <p class="field-hint stack-sm">
       These numbers were measured on modelled traffic, not on live customer
-      traffic — we will say so on this page until that changes. A separate
-      row matters as much: <code>raw score &lt; −0.15</code> caught nothing
+      traffic, and we will say so on this page until that changes. A
+      separate row matters as much: <code>raw score &lt; −0.15</code> caught nothing
       at all, which means the hard-block threshold we shipped first had
       never once fired.
     </p>
@@ -235,7 +235,7 @@
     fit inside AWS’s Always-Free allowances rather than a trial.
   </p>
   <div class="card lp-price">
-    <h3>Free — forever</h3>
+    <h3>Free forever</h3>
     <ul class="lp-features">
       <li>Unlimited sites · unlimited agents</li>
       <li>Per-tenant model, retrained nightly</li>
@@ -294,7 +294,7 @@ traffic-shaper run</code></pre>
        normal.</p></details>
   <details><summary>What if it blocks a real customer?</summary>
     <p>One click in the console lifts it immediately and permanently. We got
-       this wrong for a while — the button reported success and left the
+       this wrong for a while. The button reported success and left the
        block in place for up to an hour. It does not any more, and there is
        a test named after the failure.</p></details>
   <details><summary>Does an attacker train the model?</summary>

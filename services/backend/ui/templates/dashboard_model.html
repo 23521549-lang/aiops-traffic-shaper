@@ -1,5 +1,5 @@
 {% extends "app_shell.html" %}
-{% block title %}Detection model — AI Traffic Shaper{% endblock %}
+{% block title %}Detection model · Traffic Shaper{% endblock %}
 {% block page_title %}Detection model{% endblock %}
 {% block page_subtitle %}Tenant: {{ tenant_id }}{% endblock %}
 {% block page_content %}
@@ -44,7 +44,7 @@
     <code>{{ "%.3f"|format(thresholds.block) }}</code> (blocked).
   </p>
   <p class="field-hint">
-    These thresholds move with your traffic — each night’s retraining
+    These thresholds move with your traffic. Each night’s retraining
     recalculates what normal means for your site. That is why a raw anomaly
     score is not comparable between two nights, and why this page reports
     distance from your own baseline instead.

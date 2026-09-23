@@ -184,7 +184,7 @@ def _episode_rows(episodes, now):
 def _span(first_ts: int, last_ts: int) -> str:
     a = datetime.fromtimestamp(first_ts, tz=timezone.utc).strftime("%H:%M")
     b = datetime.fromtimestamp(last_ts, tz=timezone.utc).strftime("%H:%M")
-    return a if a == b else f"{a}–{b}"
+    return a if a == b else f"{a} to {b}"
 
 
 @router.get("/dashboard/ui/history", response_class=HTMLResponse)
