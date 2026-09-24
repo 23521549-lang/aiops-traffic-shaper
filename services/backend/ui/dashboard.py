@@ -35,7 +35,8 @@ from services.backend.core.usage import (
 )
 from services.backend.ml.model import TIER1_Z, TIER2_Z, ModelManager
 from services.backend.ui.charts import (
-    build_axis, deviation_chart, downsample, gate_curve,
+    FEATURE_TRACK_HEIGHT, FEATURE_TRACK_WIDTH, build_axis, deviation_chart,
+    downsample, feature_runs, feature_track, gate_curve,
 )
 from services.backend.schemas.agent_register import AgentRegisterRequest
 from services.backend.schemas.whitelist import WhitelistRequest
@@ -104,14 +105,17 @@ def _shell(request, tenant_id, active, **extra):
 
 @router.get("/dashboard/ui", response_class=HTMLResponse)
 def protection_status(request: Request, ip: str | None = None,
+                      feature: str | None = None,
                       allowed: str = "", skipped: str = "",
                       tenant_id: str = Depends(dashboard_auth),
                       resource=Depends(get_dynamo_resource)):
     """The list and the selected source, side by side.
 
-    `?ip=` selects a row. A real URL rather than a client-side toggle, so it
-    deep-links, survives a refresh, works with the back button, and needs no
-    JavaScript at all.
+    `?ip=` selects a row and `?ip=&feature=` narrows that to one of the seven
+    dimensions. Real URLs rather than client-side toggles, so both deep-link,
+    survive a refresh, work with the back button, and need no JavaScript at
+    all. A decision exists to be pasted into a ticket, and only a URL does
+    that.
     """
     now = datetime.now(timezone.utc)
     mitigations = list_mitigations(tenant_id=tenant_id, resource=resource)
@@ -184,6 +188,11 @@ def protection_status(request: Request, ip: str | None = None,
     # address and never folded into the anonymous shape.
     curve = gate_curve(bins, tier1_sigma,
                        len([r for r in rows if r["z"] is not None]))
+
+    # Zoom 2. Reachable only from a selected source, and only for one of the
+    # seven real names: `feature` is used to INDEX a vector, so a value that
+    # is not on the list must never reach that far.
+    zoom = _feature_zoom(resource, tenant_id, selected, feature, stats, now_ts)
     # Stored now, enforced when the nightly retrain copies it onto the model.
     # Between those two moments the screen is showing a number that is not
     # yet the number being applied, and it has to say which is which.
@@ -196,9 +205,44 @@ def protection_status(request: Request, ip: str | None = None,
         detail_open=selected is not None,
         axis=axis, axis_state=state, measured=measured,
         curve=curve, enforced_sigma=enforced_sigma, pending=pending,
+        zoom=zoom, track_width=FEATURE_TRACK_WIDTH,
+        track_height=FEATURE_TRACK_HEIGHT,
         active_count=len(mitigations),
         outcome=_bulk_outcome(allowed, skipped),
     ))
+
+
+def _feature_zoom(resource, tenant_id: str, selected, feature, stats,
+                  now_ts: int) -> dict | None:
+    """One feature of the selected source, over the retained window.
+
+    Costs a 7-day episode Query, and pays it only when `feature` is set -
+    which is never on a default page load. The alternative, holding a track
+    for all seven on every load, would be seven times the work for a screen
+    nobody has asked for yet.
+    """
+    from services.backend.ml.feature_engineering import FEATURE_NAMES
+
+    if not (selected and feature and feature in FEATURE_NAMES):
+        return None
+    row = next((r for r in selected.get("features_breakdown") or []
+                if r["name"] == feature), None)
+    if row is None:
+        # No decomposition means the model carries no per-feature statistics,
+        # so there is no baseline to measure this dimension against and
+        # nothing honest to draw.
+        return None
+
+    index = FEATURE_NAMES.index(feature)
+    means = getattr(stats, "feature_means", None) or []
+    stds = getattr(stats, "feature_stds", None) or []
+    episodes = [e for e in list_history(since=now_ts - 7 * 86_400, until=now_ts,
+                                        tenant_id=tenant_id, resource=resource)
+                if e.ip == selected["ip"]]
+    points = feature_track(episodes, index,
+                           float(means[index]) if index < len(means) else 0.0,
+                           float(stds[index]) if index < len(stds) else 0.0)
+    return {"f": row, "runs": feature_runs(points)}
 
 
 def _bulk_outcome(allowed: str, skipped: str) -> dict | None:

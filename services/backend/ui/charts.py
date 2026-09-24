@@ -454,3 +454,82 @@ def gate_curve(bins: dict[str, int], current_sigma: float,
                        current=(abs(s - current_sigma) < 1e-9),
                        recommended=(s >= GATE_RECOMMENDED_FLOOR))
             for s, t in zip(edges, totals)]
+
+
+# --- zoom 2: one feature of one source, hour by hour -----------------------
+
+FEATURE_TRACK_WIDTH = 600.0
+FEATURE_TRACK_HEIGHT = 120.0
+# The same ceiling the sigma axis uses, so a point at 6 sigma here and a mark
+# at 6 sigma there sit at the same distance off the same scale.
+FEATURE_TRACK_CEILING = SIGMA_CEILING
+
+
+@dataclass
+class FeaturePoint:
+    hour_start: int
+    sigma: float | None
+    x: float
+    y: float
+
+
+def feature_track(episodes, index: int, mean: float,
+                  std: float) -> list[FeaturePoint]:
+    """One feature of one source, hour by hour.
+
+    This is the only honest chart the stored data supports for a single
+    dimension. A mean and a standard deviation describe a position, not a
+    shape, so a curve drawn from them would assert something about this
+    tenant's traffic that nothing has ever measured. The value frozen onto
+    each hourly episode is a real measurement, and a series of them is a real
+    series.
+
+    `sigma` is None wherever it genuinely cannot be computed - no vector, a
+    vector too short to line up, or a baseline with no spread. Those are holes
+    and the caller must draw them as holes: a hole says the instrument had
+    nothing, a zero says the source was normal, and in an hour when it was
+    being blocked those are opposite claims.
+
+    `y` is DISTANCE from normal, so a feature four sigma below the baseline
+    sits as high as one four sigma above. `sigma` keeps its sign, because the
+    table beside the chart has to be able to say which way.
+    """
+    ordered = sorted(episodes, key=lambda e: e.hour_start)
+    span = max(len(ordered) - 1, 1)
+    points = []
+    for i, e in enumerate(ordered):
+        vector = list(e.last_features or [])
+        sigma = None
+        if std > 0 and index < len(vector):
+            sigma = (float(vector[index]) - mean) / std
+        # Clamped for DRAWING only. The reading itself is never clipped: a
+        # source at 98 sigma is reported at 98 sigma and drawn at the edge.
+        magnitude = min(abs(sigma), FEATURE_TRACK_CEILING) if sigma is not None else 0.0
+        points.append(FeaturePoint(
+            hour_start=e.hour_start,
+            sigma=sigma,
+            x=round(i * FEATURE_TRACK_WIDTH / span, 2),
+            y=round(FEATURE_TRACK_HEIGHT * (1 - magnitude / FEATURE_TRACK_CEILING), 2),
+        ))
+    return points
+
+
+def feature_runs(points: list[FeaturePoint]) -> list[list[FeaturePoint]]:
+    """Consecutive readings, split on every hole.
+
+    One polyline through the lot would draw a straight line across the hours
+    that have no reading, which is precisely the claim the hole exists to
+    avoid making.
+    """
+    runs: list[list[FeaturePoint]] = []
+    current: list[FeaturePoint] = []
+    for p in points:
+        if p.sigma is None:
+            if current:
+                runs.append(current)
+            current = []
+        else:
+            current.append(p)
+    if current:
+        runs.append(current)
+    return runs

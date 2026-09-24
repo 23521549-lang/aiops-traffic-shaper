@@ -1,7 +1,8 @@
 {% extends "app_shell.html" %}
 {% import "shared/_charts.html" as charts %}
 {% import "shared/_axis.html" as axis_macro %}
-{% import "shared/_gate.html" as gate_macro %}
+{% import "_gate.html" as gate_macro %}
+{% import "_feature.html" as feature_macro %}
 {% block title %}Protection · Traffic Shaper{% endblock %}
 {% block page_title %}Protection{% endblock %}
 {% block page_summary %}
@@ -187,6 +188,13 @@ no agent has ever reported
 
   <div class="c-detail-body">
     <div>
+      {% if zoom %}
+      {# Zoom 2 replaces the seven-row table rather than sitting under it.
+         Both answer "why", at two scales, and showing them at once would put
+         the same number on the screen twice in two different shapes. #}
+      {{ feature_macro.render(zoom.f, zoom.runs, track_width, track_height,
+           "/dashboard/ui?ip=" ~ selected.ip) }}
+      {% else %}
       <div class="c-section-label">Why this source</div>
       {% if selected.features_breakdown %}
       {# The one thing no competitor can show. A rule engine answers with a
@@ -207,7 +215,11 @@ no agent has ever reported
         <tbody>
           {% for f in selected.features_breakdown %}
           <tr>
-            <th scope="row">{{ f.label }}</th>
+            {# The label is the way in to zoom 2. A separate "details" column
+               would be a second thing to hit for the same destination. #}
+            <th scope="row">
+              <a href="/dashboard/ui?ip={{ selected.ip }}&feature={{ f.name }}">{{ f.label }}</a>
+            </th>
             <td>{{ f.value }}</td>
             <td class="c-dim">{{ f.normal }}</td>
             <td class="{{ 'drives' if f.drives }}">{{ f.display }}</td>
@@ -238,6 +250,7 @@ no agent has ever reported
         The per-feature breakdown needs statistics this tenant model does not
         carry yet. It appears after the next nightly retrain.
       </p>
+      {% endif %}
       {% endif %}
     </div>
 

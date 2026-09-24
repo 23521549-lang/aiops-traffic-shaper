@@ -907,3 +907,18 @@ input[type=text], input[type=password], input[type=email], select {
  * rather than as a response to it. */
 .c-why-act { text-align: right; white-space: nowrap; }
 .c-why-act .c-btn { font-size: var(--text-xs); padding: 2px var(--space-2); }
+
+/* --- zoom 2, one feature ----------------------------------------------- */
+/* No distribution curve, deliberately. The stored statistics are a mean and a
+ * standard deviation, which locate a point and say nothing about shape. */
+
+.c-feature-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--space-3); margin-bottom: var(--space-3);
+}
+.c-feature-track {
+  width: 100%; height: 120px; margin-top: var(--space-4);
+  background: var(--surface-sunken); border-radius: var(--radius-sm);
+}
+.c-feature-line { fill: none; stroke: var(--accent); stroke-width: 2; }
+.c-feature-dot { fill: var(--accent); }
