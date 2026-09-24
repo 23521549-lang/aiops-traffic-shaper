@@ -35,8 +35,8 @@ from services.backend.core.usage import (
 )
 from services.backend.ml.model import TIER1_Z, TIER2_Z, ModelManager
 from services.backend.ui.charts import (
-    FEATURE_TRACK_HEIGHT, FEATURE_TRACK_WIDTH, build_axis, deviation_chart,
-    downsample, feature_runs, feature_track, gate_curve,
+    FEATURE_TRACK_HEIGHT, FEATURE_TRACK_WIDTH, build_axis, feature_runs,
+    feature_track, gate_curve, history_grid,
 )
 from services.backend.schemas.agent_register import AgentRegisterRequest
 from services.backend.schemas.whitelist import WhitelistRequest
@@ -617,29 +617,32 @@ def history_page(request: Request, days: int = 1, ip: str | None = None,
     episodes = list_history(since=since, until=until, tenant_id=tenant_id, resource=resource)
     series = list_series(since=since, until=until, tenant_id=tenant_id, resource=resource)
 
-    # The deviation chart plots the worst sigma seen in each hour. An hour
-    # with traffic but no decision is a real zero; an hour with no row at
-    # all is a gap and must stay None, or a dead agent renders as calm.
-    worst = {}
-    for e in episodes:
-        z = abs(e.last_z) if e.last_z is not None else 0.0
-        worst[e.hour_start] = max(worst.get(e.hour_start, 0.0), z)
-    points = [(p.hour_start, -worst.get(p.hour_start, 0.0) if p.batches or p.hour_start in worst else None)
-              for p in series]
-
-    chart = deviation_chart(
-        downsample(points),
-        empty_message=_history_empty_message(series),
-        caption=f"Worst deviation per hour, last {'24 hours' if days == 1 else '7 days'}.",
-        label_for=lambda ts: datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M"),
-    )
+    # The same ruler as every other screen, rotated. The deviation chart this
+    # replaces plotted one number per hour - the worst sigma seen - which
+    # answers "was there a spike" and cannot answer "where did my traffic
+    # sit", the question the gate control is for. Both come out of the
+    # thirteen bins the hourly row already carries, so this is a second
+    # reading of the Query above rather than a second Query.
+    #
+    # The tenant's own gates, from Tenants: bands drawn from the module
+    # constants would show every tenant somebody else's threshold, cutting
+    # through their own history.
+    tenant = TenantsTable(resource).get(tenant_id=tenant_id) or {}
+    grid = history_grid(series, episodes,
+                        abs(float(tenant.get("tier1_z", TIER1_Z))),
+                        abs(float(tenant.get("tier2_z", TIER2_Z))))
+    # No feed, no reading. Principle 1.2: an instrument that has lost its
+    # signal does not render a reading with a warning beside it.
+    has_feed = any(p.batches for p in series) or bool(episodes)
 
     shown = [e for e in episodes if e.ip == ip] if ip else episodes
     selected, breakdown, drifted = _historic_why(resource, tenant_id, shown)         if ip else (None, [], False)
 
     return templates.TemplateResponse(request, "dashboard_history.html", _shell(
         request, tenant_id, "history",
-        chart=chart, episodes=_episode_rows(shown, now), days=days,
+        grid=grid, has_feed=has_feed,
+        empty_message=_history_empty_message(series),
+        episodes=_episode_rows(shown, now), days=days,
         filter_ip=ip, selected_episode=selected,
         breakdown=breakdown, drifted=drifted,
         unread=sum(1 for e in episodes if e.is_new),

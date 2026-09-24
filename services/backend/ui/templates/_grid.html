@@ -1,0 +1,63 @@
+{% macro render(g, label, caption="") %}
+{# The sigma axis, rotated and stacked.
+
+   Two layers, exactly as the horizontal axis: SVG for everything at an
+   arbitrary position and nothing with text, HTML for all the type at integer
+   sigma. The gates are two lines through the full height, and that is the
+   whole point of the shape - an operator sees the gate literally cutting
+   across their own history rather than reading a number that claims to.
+
+   Only cells with a count are emitted. A dense 168-row grid emitting every
+   empty bin is about 22KB of markup describing absence. #}
+<div class="c-grid" role="img" aria-label="{{ label }}">
+  <svg class="c-grid-plot" viewBox="0 0 {{ g.width }} {{ g.height }}"
+       preserveAspectRatio="none" focusable="false" aria-hidden="true">
+    {% for b in g.bands %}
+    <rect class="{{ b.css }}" x="{{ b.x }}" y="0"
+          width="{{ b.width }}" height="{{ g.height }}"/>
+    {% endfor %}
+
+    {% for r in g.rows %}
+    {% if not r.live %}
+    <rect class="c-grid-dead" x="0" y="{{ r.y }}"
+          width="{{ g.width }}" height="{{ g.row_height }}"/>
+    {% endif %}
+    {% for c in r.cells %}
+    <rect class="c-grid-cell{% if c.identified %} c-grid-cell--id{% endif %}"
+          data-level="{{ c.level }}" x="{{ c.x }}" y="{{ r.y }}"
+          width="{{ c.width }}" height="{{ g.row_height }}"/>
+    {% endfor %}
+    {% endfor %}
+
+    <line class="c-grid-gate c-grid-gate--1" x1="{{ g.gate1_x }}" y1="0"
+          x2="{{ g.gate1_x }}" y2="{{ g.height }}"/>
+    <line class="c-grid-gate c-grid-gate--2" x1="{{ g.gate2_x }}" y1="0"
+          x2="{{ g.gate2_x }}" y2="{{ g.height }}"/>
+  </svg>
+
+  <div class="c-grid-ticks">
+    {% for value, text in g.ticks %}<span class="c-axis-tick">{{ text }}</span>{% endfor %}
+  </div>
+</div>
+
+{% if caption %}<p class="c-axis-caption">{{ caption }}</p>{% endif %}
+
+{# A SUMMARY, not a matrix. Several hundred cell counts read out one at a time
+   answer no question anyone has. #}
+<div class="sr-only">
+  <table>
+    <caption>{{ label }}</caption>
+    <thead>
+      <tr><th scope="col">Hours</th><th scope="col">Count</th></tr>
+    </thead>
+    <tbody>
+      <tr><th scope="row">In this window</th><td>{{ g.rows|length }}</td></tr>
+      <tr><th scope="row">With telemetry</th>
+          <td>{{ g.rows|selectattr("live")|list|length }}</td></tr>
+      <tr><th scope="row">With a source past {{ "%.2f"|format(g.gate1_sigma) }} sigma</th>
+          <td>{{ g.hours_with_sources }}</td></tr>
+      <tr><th scope="row">Busiest single reading</th><td>{{ g.busiest }}</td></tr>
+    </tbody>
+  </table>
+</div>
+{% endmacro %}

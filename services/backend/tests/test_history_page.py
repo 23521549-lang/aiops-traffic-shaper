@@ -102,16 +102,40 @@ def test_history_does_not_leak_across_tenants(dynamo_resource, cognito_test_keys
     assert "9.9.9.9" not in page
 
 
-def test_an_empty_window_still_renders_the_chart_chrome(
+def test_a_quiet_window_with_telemetry_still_renders_the_full_chrome(
         dynamo_resource, cognito_test_keys):
     """The healthy state of this product is empty, so the empty state is the
-    most-viewed screen. A flat run of bars inside the calm band is evidence
-    that the system was watching; a blank panel is not."""
+    most-viewed screen. The bands and the gates ARE the evidence that the
+    system was watching; a blank panel is not.
+
+    "Quiet" here means telemetry arrived and nothing crossed a gate. That is
+    the distinction the test this replaces did not draw: it seeded nothing at
+    all and then demanded the chrome, which under principle 1.2 is an
+    instrument with no feed rendering a reading.
+    """
     client = _client(dynamo_resource, cognito_test_keys)
+    TenantHistoryTable(dynamo_resource).record_traffic(
+        "t-1", TenantHistoryTable.hour_of(int(time.time()) - HOUR),
+        requests=400)
+
     page = client.get("/dashboard/ui/history").text
-    assert "c-deviation" in page
-    assert "c-band" in page
+
+    assert "c-grid" in page
+    assert "c-seg" in page
     assert "Nothing in this window" in page
+
+
+def test_a_window_with_no_telemetry_at_all_renders_no_reading(
+        dynamo_resource, cognito_test_keys):
+    """Principle 1.2, and the reason the test above had to be split. Nothing
+    was measured, so bands and gates drawn across an empty plot would be an
+    instrument with no feed showing a scale as though it meant something."""
+    client = _client(dynamo_resource, cognito_test_keys)
+
+    page = client.get("/dashboard/ui/history").text
+
+    assert "c-seg" not in page
+    assert "no telemetry" in page.lower()
 
 
 def test_the_page_says_where_history_begins(dynamo_resource, cognito_test_keys):

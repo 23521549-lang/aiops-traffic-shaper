@@ -578,6 +578,14 @@ class Grid:
     gate2_sigma: float = 0.0
     ticks: list[tuple[int, str]] = field(default_factory=list)
 
+    @property
+    def hours_with_sources(self) -> int:
+        """For the screen-reader summary. Computed here rather than in the
+        template: a Jinja expression nobody can read is worse than a property
+        with a name."""
+        return sum(1 for r in self.rows
+                   if any(c.identified for c in r.cells))
+
 
 def history_grid(series, episodes, tier1_sigma: float,
                  tier2_sigma: float) -> Grid:

@@ -930,3 +930,28 @@ input[type=text], input[type=password], input[type=email], select {
   display: flex; align-items: center; justify-content: space-between;
   gap: var(--space-3); flex-wrap: wrap;
 }
+
+/* --- history: the same axis, rotated ----------------------------------- */
+/* One row per hour, sigma along the row, the two gates running straight down
+ * through every hour. Only populated cells are emitted, which is a
+ * requirement and not an optimisation. */
+
+.c-grid { margin-top: var(--space-3); }
+.c-grid-plot { display: block; width: 100%; height: 260px; }
+.c-grid-ticks {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  font-family: var(--font-mono); font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.c-grid-dead { fill: var(--surface-sunken); }
+/* Bucketed, not measured: four steps. Opacity rather than four fills,
+ * because the bands underneath already carry meaning in colour and a second
+ * meaning on the same channel is unreadable. */
+.c-grid-cell { fill: var(--text); }
+.c-grid-cell[data-level="1"] { fill-opacity: .3; }
+.c-grid-cell[data-level="2"] { fill-opacity: .55; }
+.c-grid-cell[data-level="3"] { fill-opacity: .8; }
+.c-grid-cell[data-level="4"] { fill-opacity: 1; }
+.c-grid-cell--id { fill: var(--tier-blocked); fill-opacity: 1; }
+.c-grid-gate { stroke: var(--accent); stroke-width: 2; }
+.c-grid-gate--2 { stroke-dasharray: 5 3; }

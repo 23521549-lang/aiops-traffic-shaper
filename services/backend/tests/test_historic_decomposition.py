@@ -142,16 +142,18 @@ def test_an_unknown_source_is_an_empty_filter_not_an_error(client, dynamo_resour
     assert client.get("/dashboard/ui/history?ip=10.0.0.99").status_code == 200
 
 
-def test_the_chart_keeps_measuring_everything(client, dynamo_resource):
-    """The chart above is total traffic per hour. Filtering it to one source
-    would be a different quantity wearing the same axis, and the caption
-    would still say what it said before."""
+def test_the_grid_keeps_measuring_everything(client, dynamo_resource):
+    """The grid above is the whole tenant, hour by hour. Filtering it to one
+    source would be a different quantity wearing the same axis, under a
+    caption that would still say what it said before."""
     _trained(dynamo_resource)
     _episode(dynamo_resource)
+    _episode(dynamo_resource, ip="10.0.0.9")
 
     page = client.get("/dashboard/ui/history?ip=10.0.0.7").text
+    grid = page[page.index("c-grid"):page.index("c-filter-note")]
 
-    assert "Worst deviation per hour" in page
+    assert grid.count('class="c-grid-cell') == 2
 
 
 def test_the_filter_says_what_it_is_filtering_and_how_to_leave(client, dynamo_resource):

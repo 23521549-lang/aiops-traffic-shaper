@@ -1,5 +1,6 @@
 {% extends "app_shell.html" %}
 {% import "shared/_charts.html" as charts %}
+{% import "_grid.html" as grid_macro %}
 {% block title %}History · Traffic Shaper{% endblock %}
 {% block page_title %}History{% endblock %}
 {% block page_summary %}
@@ -27,13 +28,28 @@
 
 <div class="c-list">
   <div class="c-panel">
-    <div class="c-section-label">Worst deviation per hour</div>
-    {# The chart and the table below come from the same query window, so they
+    <div class="c-section-label">Your traffic against your gates</div>
+    {# The grid and the table below come from the same query window, so they
        cannot disagree. A chart showing a spike the table does not list is
-       worse than no chart at all. #}
-    {{ charts.deviation(chart,
-        "Worst deviation per hour",
-        "Each bar is the most unusual source seen in that hour, measured in standard deviations from this tenant own normal.") }}
+       worse than no chart at all.
+
+       This is the same sigma ruler the Protection screen draws, turned
+       ninety degrees: one row per hour, position along the row is distance
+       from this tenant own normal, and the two gates run straight down
+       through every hour. #}
+    {% if has_feed %}
+    {{ grid_macro.render(grid,
+        "Every hour in this window, on the sigma scale, with your gates",
+        "One row per hour, oldest at the top. Darker means more sources sat at that distance from your normal. A red mark is a source that crossed a gate and was acted on by address. A greyed row is an hour with no telemetry, which is not the same as a quiet hour.") }}
+    {% else %}
+    <div class="c-empty-state">
+      <strong>{{ empty_message }}</strong>
+      <p>
+        Nothing was measured in this window, so there is no reading to draw.
+        An empty scale here would not be evidence that your traffic was calm.
+      </p>
+    </div>
+    {% endif %}
   </div>
 
   <div id="unread-note"></div>
