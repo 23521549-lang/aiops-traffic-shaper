@@ -149,6 +149,32 @@ def dashboard_auth(authorization: str | None = Header(default=None),
     return tenant_id
 
 
+def dashboard_claims(authorization: str | None = Header(default=None),
+                     x_id_token: str | None = Header(default=None),
+                     id_token: str | None = Cookie(default=None),
+                     jwks: dict = Depends(get_jwks)) -> dict:
+    """The verified claims, for the four actions that need to name an actor.
+
+    `dashboard_auth` keeps returning just the tenant id. Nearly every route
+    wants only that, and widening its return type would touch every caller
+    for the benefit of four.
+    """
+    claims = _decode_and_verify(_extract_token(authorization, id_token, x_id_token), jwks)
+    if not claims.get("custom:tenant_id"):
+        raise HTTPException(status_code=401, detail="Token missing tenant_id claim")
+    return claims
+
+
+def actor_of(claims: dict) -> str:
+    """Who to name in a record.
+
+    Email when the pool carries one, subject id otherwise. Never a request
+    field: an actor a caller can choose is not an actor, and a variable-length
+    one would break the fixed-size rule these rows are built on.
+    """
+    return claims.get("email") or claims.get("sub") or "unknown"
+
+
 def admin_auth(authorization: str | None = Header(default=None),
                x_id_token: str | None = Header(default=None),
                id_token: str | None = Cookie(default=None),

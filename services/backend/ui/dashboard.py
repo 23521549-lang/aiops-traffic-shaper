@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import ValidationError
 
-from services.backend.api.cognito_auth import dashboard_auth
+from services.backend.api.cognito_auth import dashboard_auth, dashboard_claims
 from services.backend.api.routes.agent import register_agent
 from services.backend.api.routes.dashboard import (
     add_whitelist, list_history, list_mitigations, list_own_agents, list_series,
@@ -205,6 +205,7 @@ BULK_ALLOW_LIMIT = 50
              dependencies=[Depends(verify_csrf)])
 def bulk_allow_ui(ip: list[str] = Query(default=[]),
                   tenant_id: str = Depends(dashboard_auth),
+                  claims: dict = Depends(dashboard_claims),
                   resource=Depends(get_dynamo_resource)):
     """Allow several sources in one action.
 
@@ -227,8 +228,12 @@ def bulk_allow_ui(ip: list[str] = Query(default=[]),
     allowed = 0
     for address in wanted:
         try:
+            # `claims` is passed explicitly because this calls the API
+            # route as a plain function, not through FastAPI's dependency
+            # injection — an unfilled Depends() default would arrive here as
+            # the marker object itself.
             add_whitelist(WhitelistRequest(ip=address, reason="allowed in bulk"),
-                          tenant_id=tenant_id, resource=resource)
+                          tenant_id=tenant_id, claims=claims, resource=resource)
             allowed += 1
         except ValidationError:
             # Counted, not raised. Two malformed rows must not cost the
@@ -318,6 +323,7 @@ def model_page(request: Request, tenant_id: str = Depends(dashboard_auth),
              dependencies=[Depends(verify_csrf)])
 def add_whitelist_form(request: Request, ip: str = "", reason: str = "",
                        tenant_id: str = Depends(dashboard_auth),
+                       claims: dict = Depends(dashboard_claims),
                        resource=Depends(get_dynamo_resource)):
     """The add form. Its values ride in the query string (see the
     data-params-in-url hook in ui-status.js), so this POST has no body and
@@ -326,7 +332,7 @@ def add_whitelist_form(request: Request, ip: str = "", reason: str = "",
     # of the signature the moment `back` was added, and it would have
     # passed the tenant id in as the return destination.
     return add_whitelist_ui(request, ip=ip, reason=reason,
-                            tenant_id=tenant_id, resource=resource)
+                            tenant_id=tenant_id, claims=claims, resource=resource)
 
 
 _WHITELIST_RETURNS = {"status": "/dashboard/ui"}
@@ -336,6 +342,7 @@ _WHITELIST_RETURNS = {"status": "/dashboard/ui"}
              dependencies=[Depends(verify_csrf)])
 def add_whitelist_ui(request: Request, ip: str, reason: str = "", back: str = "",
                      tenant_id: str = Depends(dashboard_auth),
+                     claims: dict = Depends(dashboard_claims),
                      resource=Depends(get_dynamo_resource)):
     """The IP travels in the path, not a form body.
 
@@ -349,7 +356,7 @@ def add_whitelist_ui(request: Request, ip: str, reason: str = "", back: str = ""
     message = None
     try:
         add_whitelist(WhitelistRequest(ip=ip, reason=reason), tenant_id=tenant_id,
-                      resource=resource)
+                      claims=claims, resource=resource)
         message = f"{ip} added to your allowed list. Any block on it has been lifted."
     except ValidationError:
         error = f"“{ip}” is not a valid IP address."

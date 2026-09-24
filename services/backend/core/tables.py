@@ -705,6 +705,17 @@ class TenantHistoryTable(_SimpleTable):
     def series_sk(hour_start: int) -> str:
         return f"agg#{int(hour_start):010d}"
 
+    @staticmethod
+    def setting_sk(now: int) -> str:
+        """A fourth prefix on the same single-table design.
+
+        No new table, no provisioning floor, no GSI, and it reads through the
+        existing between() path. `agg#` < `mit#` < `set#` lexically, so the
+        three range reads cannot see each other's rows - a property the tests
+        assert rather than assume.
+        """
+        return f"set#{int(now):010d}"
+
     @classmethod
     def hour_of(cls, ts: int) -> int:
         return int(ts) // cls.HOUR * cls.HOUR
@@ -856,6 +867,45 @@ class TenantHistoryTable(_SimpleTable):
                 raise
 
     # --- reads ------------------------------------------------------------
+
+    def record_setting(self, tenant_id: str, actor: str, what: str,
+                       old, new, now: int) -> None:
+        """One PutItem per change: ~200 B, 1 WCU, 30-day TTL.
+
+        Append-only and never updated — the point of the row is that it
+        records a thing that happened, so a later change writes a second row
+        rather than editing this one.
+
+        Only four actions in this product earn one: a threshold move, a
+        whitelist add or remove, a tenant suspend or reactivate, and an agent
+        key mint or revoke. The test is whether a reasonable person could
+        later dispute it with money, blame or security attached. Page views,
+        filters and theme changes do not qualify, and none of the four gets an
+        undo: all four already have an inverse action.
+
+        `actor` comes from a verified JWT claim, never from a request field.
+        That is what keeps this row fixed-size, which is the same rule the
+        episode row follows for the same reason.
+        """
+        self.put(
+            tenant_id=tenant_id,
+            sk=self.setting_sk(now),
+            actor=actor,
+            what=what,
+            old=old,
+            new=new,
+            at=int(now),
+            ttl=int(now) + self.RETENTION_SECONDS,
+        )
+
+    def query_settings(self, tenant_id: str, since: int, until: int) -> list[dict]:
+        from boto3.dynamodb.conditions import Key
+        return self._query_all_pages(
+            KeyConditionExpression=(
+                Key("tenant_id").eq(tenant_id)
+                & Key("sk").between(self.setting_sk(since), self.setting_sk(until))
+            ),
+        )
 
     def query_episodes(self, tenant_id: str, since_ts: int, until_ts: int) -> list[dict]:
         """Newest first - this is a log, and a person reads the top of it.

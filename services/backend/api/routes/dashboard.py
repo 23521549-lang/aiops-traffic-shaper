@@ -4,7 +4,9 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ValidationError
 
-from services.backend.api.cognito_auth import dashboard_auth
+from services.backend.api.cognito_auth import (
+    actor_of, dashboard_auth, dashboard_claims,
+)
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.ui.csrf import verify_csrf_if_cookie_auth
 from services.backend.core.tables import (
@@ -72,6 +74,7 @@ def list_whitelist(tenant_id: str = Depends(dashboard_auth),
 
 @router.post("/dashboard/v1/whitelist", dependencies=[Depends(verify_csrf_if_cookie_auth)])
 def add_whitelist(body: WhitelistRequest, tenant_id: str = Depends(dashboard_auth),
+                   claims: dict = Depends(dashboard_claims),
                    resource=Depends(get_dynamo_resource)) -> dict:
     # NOTE: docs/api-contract.md's WhitelistRequest carries a `reason`
     # field that docs/schema.md's Whitelist table never defined (only
@@ -82,6 +85,11 @@ def add_whitelist(body: WhitelistRequest, tenant_id: str = Depends(dashboard_aut
     WhitelistTable(resource).put(
         tenant_id=tenant_id, ip=body.ip,
         added_at=datetime.now(timezone.utc).isoformat(), reason=body.reason,
+        # docs/schema.md has claimed this column since the table was
+        # designed and nothing ever wrote it, so in a multi-user tenant
+        # "who let this IP in, and why" had no answer at all. It comes
+        # from the verified token, never from the request.
+        added_by=actor_of(claims),
     )
     # Whitelisting has to UNDO the block, not merely prevent the next one.
     # The whitelist is consulted at scoring time (api/routes/agent.py), so

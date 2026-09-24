@@ -31,6 +31,14 @@ from services.backend.schemas.whitelist import WhitelistRequest
 from services.backend.tests.conftest import sign_test_token
 
 
+# `add_whitelist` records who acted, from the verified token. These tests
+# call it as a plain function rather than through FastAPI, so they supply
+# the claims the dependency would have. `actor_of` deliberately does NOT
+# tolerate a missing dict: a route that forgot the dependency would
+# otherwise write "unknown" into an audit field forever, silently.
+CLAIMS = {"custom:tenant_id": "t-1", "email": "ops@example.com"}
+
+
 def _future() -> int:
     return int(time.time()) + 3600
 
@@ -57,7 +65,7 @@ def test_whitelisting_an_ip_clears_its_active_mitigation(dynamo_resource):
     _block(dynamo_resource, "t-1", "203.0.113.4")
 
     add_whitelist(WhitelistRequest(ip="203.0.113.4", reason="partner crawler"),
-                  tenant_id="t-1", resource=dynamo_resource)
+                  tenant_id="t-1", claims=CLAIMS, resource=dynamo_resource)
 
     assert MitigationStateTable(dynamo_resource).get(tenant_id="t-1", ip="203.0.113.4") is None
 
@@ -72,7 +80,7 @@ def test_the_agent_stops_being_told_to_block_a_whitelisted_ip(dynamo_resource):
     _block(dynamo_resource, "t-1", "198.51.100.7")
 
     add_whitelist(WhitelistRequest(ip="203.0.113.4", reason=""),
-                  tenant_id="t-1", resource=dynamo_resource)
+                  tenant_id="t-1", claims=CLAIMS, resource=dynamo_resource)
 
     served = {d.ip for d in list_decisions(tenant_id="t-1", resource=dynamo_resource)}
     assert served == {"198.51.100.7"}
@@ -83,7 +91,7 @@ def test_whitelisting_an_ip_that_was_never_blocked_is_not_an_error(dynamo_resour
     the detector. Deleting a key that is not there must not raise."""
     create_all_tables(dynamo_resource)
     add_whitelist(WhitelistRequest(ip="203.0.113.9", reason="uptime monitor"),
-                  tenant_id="t-1", resource=dynamo_resource)
+                  tenant_id="t-1", claims=CLAIMS, resource=dynamo_resource)
     assert MitigationStateTable(dynamo_resource).get(tenant_id="t-1", ip="203.0.113.9") is None
 
 
@@ -96,7 +104,7 @@ def test_clearing_is_scoped_to_the_whitelisting_tenant(dynamo_resource):
     _block(dynamo_resource, "t-2", "203.0.113.4")
 
     add_whitelist(WhitelistRequest(ip="203.0.113.4", reason=""),
-                  tenant_id="t-1", resource=dynamo_resource)
+                  tenant_id="t-1", claims=CLAIMS, resource=dynamo_resource)
 
     assert MitigationStateTable(dynamo_resource).get(tenant_id="t-1", ip="203.0.113.4") is None
     assert MitigationStateTable(dynamo_resource).get(tenant_id="t-2", ip="203.0.113.4") is not None
@@ -114,7 +122,7 @@ def test_an_invalid_ip_clears_nothing(dynamo_resource):
 
     with pytest.raises(ValidationError):
         add_whitelist(WhitelistRequest(ip="203.0.113.999", reason=""),
-                      tenant_id="t-1", resource=dynamo_resource)
+                      tenant_id="t-1", claims=CLAIMS, resource=dynamo_resource)
 
     assert MitigationStateTable(dynamo_resource).get(tenant_id="t-1", ip="203.0.113.4") is not None
 
