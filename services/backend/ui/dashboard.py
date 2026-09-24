@@ -645,12 +645,32 @@ def history_page(request: Request, days: int = 1, ip: str | None = None,
     # signal does not render a reading with a warning beside it.
     has_feed = any(p.batches for p in series) or bool(episodes)
 
+    # The BLOCK gate, and only on the 7-day view. ADR-006 measured 0.00%
+    # false positives below z = -5.0, which is what makes this gate safe and
+    # is also what makes it impossible to tune on a day of data: the 5.0 to
+    # 6.0 bins are empty on almost every ordinary day, so a 24-hour curve
+    # offers thirteen rows reading zero at exactly the line the operator is
+    # being asked to move. Seven days of bins is about 20 RCU a view, which
+    # is why it sits behind the tab and is not switched on everywhere.
+    block_curve = None
+    if days == 7:
+        mgr = ModelManager()
+        mgr.load(resource, tenant_id)
+        if mgr.stats is not None:
+            bins: dict[str, int] = {}
+            for point in series:
+                for key, value in (point.near or {}).items():
+                    bins[key] = bins.get(key, 0) + int(value)
+            block_curve = gate_curve(
+                bins, abs(float(tenant.get("tier2_z", TIER2_Z))),
+                sum(e.tier2_count for e in episodes))
+
     shown = [e for e in episodes if e.ip == ip] if ip else episodes
     selected, breakdown, drifted = _historic_why(resource, tenant_id, shown)         if ip else (None, [], False)
 
     return templates.TemplateResponse(request, "dashboard_history.html", _shell(
         request, tenant_id, "history",
-        grid=grid, has_feed=has_feed,
+        grid=grid, has_feed=has_feed, block_curve=block_curve,
         empty_message=_history_empty_message(series),
         episodes=_episode_rows(shown, now), days=days,
         filter_ip=ip, selected_episode=selected,

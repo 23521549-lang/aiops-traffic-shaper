@@ -76,11 +76,16 @@ no agent has ever reported
        owns - that its explanation is already a coordinate on a scale, and a
        coordinate can be moved. #}
     <div class="c-gate">
-      <div class="c-section-label">Where you act</div>
+      {# Named for the gate it moves, not for the screen it is on. A second
+         control of exactly this shape sits on History and moves the BLOCK
+         gate, and two panels both labelled "where you act" is how an
+         operator blocks at the line they meant to slow at. #}
+      <div class="c-section-label">Where you slow</div>
       <p class="c-summary">
         Traffic Shaper slows a source once it sits this far outside your own
-        normal, and blocks it further out still. Each line below says how many
-        of the sources measured in the last 24 hours it would have caught.
+        normal. Each line says how many of the sources measured in the last
+        24 hours it would have caught. The block gate sits further out and is
+        set on the History screen, where a 7-day window gives it evidence.
       </p>
       {{ gate_macro.render(curve, 1, "Where the first gate sits") }}
       {% if pending %}

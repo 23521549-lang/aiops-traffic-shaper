@@ -1,6 +1,7 @@
 {% extends "app_shell.html" %}
 {% import "shared/_charts.html" as charts %}
 {% import "_grid.html" as grid_macro %}
+{% import "_gate.html" as gate_macro %}
 {% block title %}History · Traffic Shaper{% endblock %}
 {% block page_title %}History{% endblock %}
 {% block page_summary %}
@@ -51,6 +52,24 @@
     </div>
     {% endif %}
   </div>
+
+  {% if block_curve %}
+  {# The block gate lives here and not on the Protection screen, because this
+     is the only window with evidence under it. ADR-006 measured 0.00% false
+     positives below 5 sigma, so those bins are empty on almost every single
+     day and a 24-hour curve would offer thirteen measured zeroes at exactly
+     the line being moved. #}
+  <div class="c-panel">
+    <div class="c-section-label">Where you block</div>
+    <p class="c-summary">
+      Traffic Shaper blocks a source outright once it sits this far outside
+      your own normal. Each line says how many sources it would have caught
+      across the last 7 days, which is the shortest window with enough
+      evidence this far out to be worth reading.
+    </p>
+    {{ gate_macro.render(block_curve, 2, "Where the block gate sits") }}
+  </div>
+  {% endif %}
 
   <div id="unread-note"></div>
 
