@@ -922,3 +922,11 @@ input[type=text], input[type=password], input[type=email], select {
 }
 .c-feature-line { fill: none; stroke: var(--accent); stroke-width: 2; }
 .c-feature-dot { fill: var(--accent); }
+
+/* The filter says what it is showing and offers the way out on the same
+ * line. A filtered list that looks unfiltered is how an operator concludes a
+ * source has no other episodes. */
+.c-filter-note {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-3); flex-wrap: wrap;
+}

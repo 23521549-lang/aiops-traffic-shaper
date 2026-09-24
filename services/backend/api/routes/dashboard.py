@@ -215,6 +215,14 @@ def list_history(since: int | None = None, until: int | None = None,
             last_z=float(row["last_z"]) if row.get("last_z") is not None else None,
             reason=row.get("reason", "behavioral_anomaly"),
             is_new=int(row["hour_start"]) >= read_through,
+            # Written by record_decision since Phase 0 and dropped here, so
+            # the schema carried both fields, the table held both, and no
+            # caller could ever see either. Without them a decision can only
+            # be explained while it is still active, which makes the whole
+            # per-feature breakdown a monitoring feature rather than the
+            # thing being sold.
+            last_features=[float(v) for v in row.get("last_features", [])],
+            stats_version=row.get("stats_version"),
         ))
     return episodes
 

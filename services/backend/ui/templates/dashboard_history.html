@@ -3,7 +3,8 @@
 {% block title %}History · Traffic Shaper{% endblock %}
 {% block page_title %}History{% endblock %}
 {% block page_summary %}
-{{ total_blocked }} blocked · {{ total_slowed }} slowed · {{ episodes|length }} source{{ 's' if episodes|length != 1 }} over the last {{ '24 hours' if days == 1 else '7 days' }}
+{% if filter_ip %}{{ filter_ip }} · {% endif -%}
+{{ total_blocked }} blocked · {{ total_slowed }} slowed · {{ episodes|length }} {{ 'episode' if filter_ip else 'source' }}{{ 's' if episodes|length != 1 }} over the last {{ '24 hours' if days == 1 else '7 days' }}
 {% endblock %}
 {% block page_actions %}
 {% if unread %}
@@ -36,6 +37,63 @@
   </div>
 
   <div id="unread-note"></div>
+
+  {% if filter_ip %}
+  {# A filtered list that looks exactly like an unfiltered one is how an
+     operator concludes a source has no other episodes. It says what it is
+     showing and offers the way back in the same line. #}
+  <div class="c-panel">
+    <div class="c-filter-note">
+      <span>Showing only {{ filter_ip }}.</span>
+      <a class="c-btn c-btn--sm" href="/dashboard/ui/history{% if days == 7 %}?days=7{% endif %}">Show every source</a>
+    </div>
+  </div>
+
+  {% if selected_episode %}
+  <div class="c-panel">
+    <div class="c-section-label">Why this source</div>
+
+    {% if drifted %}
+    <div class="alert alert-warning">
+      <strong>Your model has been retrained since this decision.</strong>
+      The measurements below are the ones taken at the time. The normal they
+      are compared against is today, so the distances shown are not the
+      distances this decision was made on.
+    </div>
+    {% endif %}
+
+    {% if breakdown %}
+    <table class="c-why">
+      <caption class="sr-only">Each feature, against this tenant own baseline</caption>
+      <thead>
+        <tr>
+          <th scope="col">Feature</th>
+          <th scope="col">This source</th>
+          <th scope="col">Your normal</th>
+          <th scope="col">Distance</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in breakdown %}
+        <tr>
+          <th scope="row">{{ f.label }}</th>
+          <td>{{ f.value }}</td>
+          <td class="c-dim">{{ f.normal }}</td>
+          <td class="{{ 'drives' if f.drives }}">{{ f.display }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="c-summary">
+      This episode does not carry the measurements that were taken. Episodes
+      started recording them recently, so anything older than that explains
+      itself by deviation alone.
+    </p>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% endif %}
 
   {% if episodes %}
   <div class="c-table-scroll" tabindex="0" role="region"

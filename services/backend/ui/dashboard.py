@@ -592,7 +592,7 @@ def _span(first_ts: int, last_ts: int) -> str:
 
 
 @router.get("/dashboard/ui/history", response_class=HTMLResponse)
-def history_page(request: Request, days: int = 1,
+def history_page(request: Request, days: int = 1, ip: str | None = None,
                  tenant_id: str = Depends(dashboard_auth),
                  resource=Depends(get_dynamo_resource)):
     """What the product did, over time.
@@ -600,6 +600,14 @@ def history_page(request: Request, days: int = 1,
     The chart and the table come from the same query window so they can
     never disagree — a chart showing a spike the table below it does not
     list is worse than no chart.
+
+    `?ip=` narrows the table to one source. The detail pane has linked here
+    with that parameter since it was written and this route did not have it,
+    so the operator landed on the unfiltered list and read the wrong object
+    with nothing on the screen saying so. The CHART is deliberately left
+    unfiltered: it plots the worst deviation per hour across the whole
+    tenant, and narrowing it to one source would be a different quantity
+    under the same caption.
     """
     days = days if days in (1, 7) else 1
     now = datetime.now(timezone.utc)
@@ -626,13 +634,46 @@ def history_page(request: Request, days: int = 1,
         label_for=lambda ts: datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M"),
     )
 
+    shown = [e for e in episodes if e.ip == ip] if ip else episodes
+    selected, breakdown, drifted = _historic_why(resource, tenant_id, shown)         if ip else (None, [], False)
+
     return templates.TemplateResponse(request, "dashboard_history.html", _shell(
         request, tenant_id, "history",
-        chart=chart, episodes=_episode_rows(episodes, now), days=days,
+        chart=chart, episodes=_episode_rows(shown, now), days=days,
+        filter_ip=ip, selected_episode=selected,
+        breakdown=breakdown, drifted=drifted,
         unread=sum(1 for e in episodes if e.is_new),
-        total_blocked=sum(e.tier2_count for e in episodes),
-        total_slowed=sum(e.tier1_count for e in episodes),
+        total_blocked=sum(e.tier2_count for e in shown),
+        total_slowed=sum(e.tier1_count for e in shown),
     ))
+
+
+def _historic_why(resource, tenant_id: str, shown):
+    """The most recent episode for this source, broken out across the seven.
+
+    The vector is frozen at decision time and the baseline is read live, so a
+    retrain between the two makes the two halves of the explanation describe
+    different models. `stats_version` is on the episode for exactly this, and
+    this is the only place in the product able to notice. An episode that
+    never recorded a version claims nothing: "we cannot tell" and "it moved"
+    are different statements, and asserting the second would put a warning on
+    every episode written before Phase 0.
+    """
+    if not shown:
+        return None, [], False
+    episode = max(shown, key=lambda e: e.last_ts)
+    # Already cached for scoring in a warm container, so this is free on the
+    # common path and one GetItem on a cold one.
+    mgr = ModelManager()
+    mgr.load(resource, tenant_id)
+    stats = mgr.stats
+    breakdown = decompose(episode.last_features,
+                          getattr(stats, "feature_means", None),
+                          getattr(stats, "feature_stds", None))
+    live = getattr(stats, "version", None)
+    drifted = bool(episode.stats_version and live
+                   and episode.stats_version != live)
+    return episode, breakdown, drifted
 
 
 def _history_empty_message(series) -> str:
