@@ -354,3 +354,72 @@ on a free-tier budget with no rate limiting, which is worse. Task 1 changes
 marketing copy, which is the one kind of change in this rebuild with no
 mechanical way to verify taste - the tests pin the factual claims and not the
 prose.
+
+
+---
+
+## What the plan got wrong
+
+Written after execution, against the shipped code.
+
+**1. The chart macro has no `aria-label`.** The test asserted one. `charts.deviation`
+renders an `<svg role="img">` whose accessible name is its `<title>`, so the
+test was checking for an attribute that has never been there and would have
+passed against a chart with no accessible name at all. Fixed at the test.
+
+**2. Tasks 1 and 3 were one file, not two.** Both are "what a later rewrite
+would quietly break about this page", they share a fixture, and splitting them
+would have meant two files with the same three imports. Shipped as one, and
+committed as one.
+
+**3. The parallel table has 25 data rows, not 24.** The plan said 24 by 3,
+following the spec, and the spec was rounding. `query_series(fill=True)`
+zero-fills inclusively from the hour containing `since` to the hour containing
+`until`, so a 24-hour window that starts mid-hour touches 25 hours. The first
+version of the test hardcoded 25 and would have broken again the moment the
+window changed; the shipped one asserts the invariant - one row per charted
+hour, three cells each - rather than a number.
+
+**4. `Grid.hours_with_sources` died with the summary it was written for.** It
+was added in Phase 1d specifically so the four-row aggregate would not need an
+unreadable Jinja expression. The per-row table needs no aggregate, so the
+property went with it.
+
+## What this phase found that the spec did not know about
+
+The hero chart. `_HERO_SHAPE` is forty-eight hardcoded floats, and the page
+captioned them "24 hours of traffic in standard deviations from this site's
+own normal" with "one source reached 4.6 sigma and was slowed; one reached 5.4
+sigma and was blocked" underneath. Two sentences describing events that did
+not happen, on the most prominent element of the most public page in the
+product.
+
+`test_landing_claims.py` exists because four claims on this page had rotted
+into fiction. It checks that the commands the page tells a stranger to run are
+commands that exist. It could not see this one, because a chart is not a
+sentence, and nothing else looked.
+
+The shape is kept - showing a reader what these units look like is the page's
+actual job - and it now says it is an example, on the chart and in the
+accessible description, because a reader who gets the alt text and not the
+visible marker would otherwise still be misled.
+
+## Still outstanding after the whole rebuild
+
+- **Nothing has been deployed.** Seven phases. Production is also still
+  missing `bulk-select.js` and `keys.js`, and the CloudFront cache behaviour
+  for `/ui/static/*` ships alone and last, because it is the only step a
+  Lambda alias cannot roll back.
+- `settings.access_request_email` defaults to `access@traffic-shaper.example`,
+  which is a placeholder and must be set to a real address before the landing
+  page goes out.
+- ADR-007's htmx configuration needs confirming in a real browser:
+  `localStorage.getItem("htmx-history-cache")` is null, an `hx-push-url`
+  navigation changes the address bar, and Back then Ctrl+K opens the palette.
+- A gate move reaches enforcement at the next nightly retrain. The zero-RCU
+  path to making it immediate is written up at the end of the Phase 1b plan
+  and was deliberately not taken.
+- The full suite has not run in one process since Phase 1d, because the
+  machine ran low on memory and the harness stopped the run. It is run in two
+  parts, so the 80% coverage gate has not been applied to the whole in one
+  process since.
