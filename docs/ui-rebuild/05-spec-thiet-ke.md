@@ -75,13 +75,37 @@ chỉ gỡ khi hết hạn cục bộ. Không gì đối chiếu `_active` với
 được phục vụ. Luật `deny` trong nginx đứng tới một tiếng, và màn hình nói
 *"Any block on it has been lifted"*.
 
-**Sửa:** agent đối chiếu. Mỗi phản hồi telemetry đã mang `decisions[]` — đó
-là **tập hợp đầy đủ những gì đang có hiệu lực**. `DecisionStore` gỡ mọi IP
-trong `_active` mà không còn trong tập đó, y như nó gỡ những IP hết hạn.
+**Sửa:** agent đối chiếu với **tập đang có hiệu lực**, và tập đó phải được
+gửi kèm.
 
-Ràng buộc: chỉ đối chiếu khi lô được chấp nhận. Một phản hồi lỗi hoặc một
+> **Không đối chiếu với `decisions[]` của phản hồi telemetry.** Bản đầu của
+> spec này nói thế và nó sai nguy hiểm: `decisions[]` chỉ chứa các IP **có
+> traffic trong lô đó** (`for ip in touched_ips`). Một IP đang bị chặn thì
+> ngừng gửi traffic — đó chính là điều bị chặn nghĩa là gì. Đối chiếu với nó
+> sẽ **gỡ chặn mọi kẻ tấn công vài giây sau khi chặn**, tệ hơn hẳn lỗi đang
+> muốn sửa.
+
+`TelemetryResponse` thêm **`active_ips: list[str]`** — toàn bộ IP đang có
+hiệu lực cho tenant này, lấy từ `MitigationStateTable.query_active`, chính là
+thứ route `/agent/v1/decisions` vốn đã trả về và agent chưa bao giờ gọi.
+
+`DecisionStore.reconcile(active_ips, adapters)` gỡ mọi IP trong `_active`
+không còn trong tập đó, y như nó gỡ những IP hết hạn.
+
+Giá: **+1 Query mỗi lô** (~1 RCU cho ~20 dòng, ở 0,39 lô/giây toàn tài khoản
+là ~0,39 RCU duy trì), và ~800 B thêm vào phản hồi cho 50 địa chỉ. **Không
+thêm một request nào** — đó là lý do chọn cách này thay vì để agent poll
+`/agent/v1/decisions`: poll 60 giây với 4 agent đã ăn 69% hạn mức ngày của
+một tenant.
+
+Gửi danh sách IP chứ không gửi cả `MitigationState`: một tenant 50 mitigation
+mà gửi đủ object kèm mảng bảy đặc trưng là ~10KB mỗi 5 giây, tức ~172MB/ngày
+egress cho một việc mà một danh sách chuỗi làm được.
+
+**Ràng buộc: chỉ đối chiếu khi lô được chấp nhận.** Một phản hồi lỗi hoặc một
 đợt backend chết **không được** hiểu là "mọi thứ đã được gỡ" — đó sẽ là gỡ
-toàn bộ bảo vệ đúng lúc tấn công.
+toàn bộ bảo vệ đúng lúc tấn công. Trong `runner._apply`, `result` là None khi
+`BackendError`, nên điều kiện đã đúng sẵn; phải có test giữ nó.
 
 **Trong lúc chưa sửa,** giao diện chỉ được nói:
 > "203.0.113.7 đã vào danh sách cho phép. Chúng tôi đã ngừng ban hành lệnh
