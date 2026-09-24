@@ -89,10 +89,15 @@ no agent has ever reported
       </p>
       {{ gate_macro.render(curve, 1, "Where the first gate sits") }}
       {% if pending %}
+      {# The two numbers still differ for a while, and the reason is no longer
+         a delay: the gate you set is applied to the next batch your agents
+         send, and the copy on the model is what last night's retrain wrote.
+         Saying "being enforced right now" of the model's copy would be
+         false. #}
       <p class="c-summary" role="status">
-        Being enforced right now: {{ "%.2f"|format(enforced_sigma) }} sigma.
-        The position you set starts being applied tonight, when your model is
-        next retrained on your traffic.
+        Applied from your next batch of telemetry. Your model still carries
+        {{ "%.2f"|format(enforced_sigma) }} sigma from its last training run,
+        and tonight's run copies your value onto it.
       </p>
       {% endif %}
     </div>

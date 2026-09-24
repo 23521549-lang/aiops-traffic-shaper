@@ -172,21 +172,25 @@ def test_the_screen_shows_the_gate_of_record_not_the_models_copy(client, dynamo_
     assert "4.50" in marked[:200]
 
 
-def test_a_gate_not_yet_enforced_says_so_rather_than_implying_it_is(client, dynamo_resource):
-    """The move is stored immediately and reaches enforcement when the
-    nightly retrain copies it onto the model. Between those two moments the
-    screen shows a number that is not yet the number being applied, and it
-    has to say which is which."""
+def test_a_moved_gate_says_it_applies_now_and_not_tonight(client, dynamo_resource):
+    """It used to reach enforcement only when the nightly retrain copied it
+    onto the model, and the screen said so, which was honest and was still
+    the wrong behaviour for a security control.
+
+    The ingest path reads the Tenants item on every batch anyway, so it now
+    judges by the value of record. What still lags is the model's copy, and
+    the screen distinguishes the two without telling the customer to wait.
+    """
     _with_model(dynamo_resource)
     TenantsTable(dynamo_resource).set_threshold("t-1", "tier1_z", -4.5)
 
-    page = client.get("/dashboard/ui").text
+    page = client.get("/dashboard/ui").text.lower()
 
-    assert "4.0" in page          # what is being enforced right now
-    assert "tonight" in page.lower()
+    assert "next batch" in page
+    assert "4.0" in page          # the copy the model still carries
 
 
 def test_an_unmoved_gate_makes_no_claim_about_a_pending_change(client, dynamo_resource):
     _with_model(dynamo_resource)
 
-    assert "tonight" not in client.get("/dashboard/ui").text.lower()
+    assert "next batch" not in client.get("/dashboard/ui").text.lower()

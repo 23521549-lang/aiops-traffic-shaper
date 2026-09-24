@@ -154,6 +154,12 @@ def ingest_telemetry(
     mgr.load(resource, tenant_id)  # cached across warm invocations, see docs/PLAN.md Stage 3 —
     # do NOT "simplify" this back to an unconditional registry.load_model() call
 
+    # Read once per batch, not once per IP: it is the same two numbers for
+    # every source in the request.
+    tenant_record = agent.get("_tenant") or {}
+    gates = {k: float(tenant_record[k])
+             for k in ("tier1_z", "tier2_z") if k in tenant_record}
+
     decisions: list[MitigationState] = []
     # The shape below the gate, so the gate can be previewed downward.
     near_bins: dict[str, int] = {}
@@ -164,7 +170,14 @@ def ingest_telemetry(
         if vector is None:
             continue
         for v, score in mgr.score_vectors([vector]):
-            tier = classify(score, mgr.stats)
+            # The gate of RECORD, from the Tenants item this request already
+            # read to check the tenant is active. Without it a customer who
+            # moved their gate waited for the next nightly retrain to copy it
+            # onto the model, which for a security control is the wrong
+            # answer however honestly the console states it.
+            tier = classify(score, mgr.stats,
+                            tier1_z=gates.get("tier1_z"),
+                            tier2_z=gates.get("tier2_z"))
             if tier == AnomalyTier.NORMAL:
                 # Counted, not stored. A source below the gate is never acted
                 # on individually, so no address is retained - only the

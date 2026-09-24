@@ -100,7 +100,12 @@ def test_a_decision_is_recorded_as_an_episode(wired, monkeypatch):
     from services.backend.api.routes import agent as agent_routes
     from services.backend.ml.model import AnomalyTier
 
-    monkeypatch.setattr(agent_routes, "classify", lambda score, stats: AnomalyTier.HARD_BLOCK)
+    # **kw, not a fixed signature: classify gained the tenant's live gates,
+    # and a stand-in that has to be edited every time the real function grows
+    # an argument turns an unrelated change into a failure in a file about
+    # history writes.
+    monkeypatch.setattr(agent_routes, "classify",
+                        lambda score, stats, **kw: AnomalyTier.HARD_BLOCK)
     ingest = agent_routes.ingest_telemetry
 
     resp = ingest(_batch(3), tenant_id="t-1", agent=AGENT, resource=wired)
@@ -120,7 +125,7 @@ def test_repeated_decisions_stay_one_episode(wired, monkeypatch):
     from services.backend.api.routes import agent as agent_routes
     from services.backend.ml.model import AnomalyTier
 
-    monkeypatch.setattr(agent_routes, "classify", lambda score, stats: AnomalyTier.RATE_LIMIT)
+    monkeypatch.setattr(agent_routes, "classify", lambda score, stats, **kw: AnomalyTier.RATE_LIMIT)
 
     # 3 logs, not 2: compute_features_for_ip returns None below the
     # min_requests_threshold, so a 2-log batch produces no decision at all
@@ -138,7 +143,7 @@ def test_the_rollup_counts_decisions_too(wired, monkeypatch):
     from services.backend.api.routes import agent as agent_routes
     from services.backend.ml.model import AnomalyTier
 
-    monkeypatch.setattr(agent_routes, "classify", lambda score, stats: AnomalyTier.HARD_BLOCK)
+    monkeypatch.setattr(agent_routes, "classify", lambda score, stats, **kw: AnomalyTier.HARD_BLOCK)
     agent_routes.ingest_telemetry(_batch(3), tenant_id="t-1", agent=AGENT, resource=wired)
 
     now = int(time.time())
@@ -157,7 +162,7 @@ def test_a_failed_episode_write_does_not_fail_ingest(wired, monkeypatch):
     from services.backend.api.routes import agent as agent_routes
     from services.backend.ml.model import AnomalyTier
 
-    monkeypatch.setattr(agent_routes, "classify", lambda score, stats: AnomalyTier.HARD_BLOCK)
+    monkeypatch.setattr(agent_routes, "classify", lambda score, stats, **kw: AnomalyTier.HARD_BLOCK)
 
     def boom(*a, **kw):
         raise ClientError({"Error": {"Code": "ProvisionedThroughputExceededException"}},

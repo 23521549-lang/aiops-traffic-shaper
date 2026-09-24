@@ -148,7 +148,9 @@ def z_score(score: float, stats: ScoreStats | None) -> float | None:
     return (score - stats.mean) / stats.std
 
 
-def classify(score: float, stats: ScoreStats | None) -> AnomalyTier:
+def classify(score: float, stats: ScoreStats | None,
+             tier1_z: float | None = None,
+             tier2_z: float | None = None) -> AnomalyTier:
     """Tier a score by its distance, in standard deviations, from the mean of
     the training scores of the model that produced it.
 
@@ -163,8 +165,20 @@ def classify(score: float, stats: ScoreStats | None) -> AnomalyTier:
     # scoring. TIER1_Z/TIER2_Z are the default a tenant that never set one
     # gets, not a global rule any more: a console that explains a decision
     # and cannot change it is a dashboard, whatever it looks like.
-    tier2 = stats.tier2_z if stats is not None else TIER2_Z
-    tier1 = stats.tier1_z if stats is not None else TIER1_Z
+    #
+    # `tier1_z`/`tier2_z` override that copy with the value of record from the
+    # Tenants item, when the caller has one in hand. The copy on the stats is
+    # written by the nightly retrain, so without this a customer who lowered
+    # their gate during an attack waited up to a day for it to mean anything.
+    # The ingest path already reads that item, to refuse a suspended tenant,
+    # so the live value costs nothing to carry.
+    #
+    # Each gate falls back on its own. Defaulting a missing one to the shipped
+    # constant would move a gate the customer never touched.
+    tier2 = tier2_z if tier2_z is not None else (
+        stats.tier2_z if stats is not None else TIER2_Z)
+    tier1 = tier1_z if tier1_z is not None else (
+        stats.tier1_z if stats is not None else TIER1_Z)
     if z < tier2:
         return AnomalyTier.HARD_BLOCK
     if z < tier1:

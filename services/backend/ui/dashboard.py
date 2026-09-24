@@ -251,9 +251,12 @@ def protection_status(request: Request, ip: str | None = None,
     # seven real names: `feature` is used to INDEX a vector, so a value that
     # is not on the list must never reach that far.
     zoom = _feature_zoom(resource, tenant_id, selected, feature, stats, now_ts)
-    # Stored now, enforced when the nightly retrain copies it onto the model.
-    # Between those two moments the screen is showing a number that is not
-    # yet the number being applied, and it has to say which is which.
+    # Stored and enforced immediately: the ingest path reads the Tenants item
+    # on every batch anyway, to refuse a suspended tenant, so it judges by the
+    # value of record. What still lags is the COPY on the model, which the
+    # nightly retrain writes and which every path without a request context
+    # falls back to. The two differ for a while and the screen says which is
+    # which - it just no longer says the customer is waiting.
     pending = (state["gates_armed"]
                and abs(enforced_sigma - tier1_sigma) > 1e-9)
 
