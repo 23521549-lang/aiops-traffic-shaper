@@ -24,7 +24,10 @@ from services.backend.api.routes.admin import (
 from services.backend.schemas.admin import TenantCreateRequest
 from services.backend.api.routes.admin_usage import usage as usage_report
 from services.backend.core.dynamo import get_dynamo_resource
-from services.backend.core.usage import _DAILY_REQUEST_CEILING, tenant_requests_today
+from services.backend.core.usage import (
+    _DAILY_REQUEST_CEILING, tenant_daily_quota, tenant_requests_over,
+    tenant_requests_today,
+)
 from services.backend.core.tables import AgentsTable
 from services.backend.ui.csrf import CSRF_COOKIE_NAME, verify_csrf
 from services.backend.ui.hx import hx_return
@@ -142,12 +145,63 @@ def _tenants_ctx(resource) -> dict:
     must never become a scan per page load.
     """
     tenants = list_tenants(resource=resource)
+    ids = [t.tenant_id for t in tenants]
+
+    # Seven days for every tenant in one BatchGetItem rather than one GetItem
+    # per tenant. Bounded by what BatchGetItem allows, and a tenant past the
+    # bound is named on screen rather than dropped: a billing page that
+    # silently showed the first fourteen would be lying by omission.
+    shown, overflow = ids[:TENANTS_PER_PAGE], ids[TENANTS_PER_PAGE:]
+    trend = tenant_requests_over(resource, shown, days=TREND_DAYS) if shown else {}
+
     rows = []
     for t in tenants:
-        used = tenant_requests_today(resource, t.tenant_id)
-        rows.append({"tenant": t, "used": used,
-                     "registered": timestamp_pair(t.created_at)})
-    return {"tenants": rows, "tenant_count": len(tenants)}
+        if t.tenant_id in trend:
+            week = trend[t.tenant_id]
+            used = week[-1]
+        else:
+            # Past the batch bound. One GetItem, so the row is still true;
+            # the trend behind it is simply not drawn.
+            week, used = [], tenant_requests_today(resource, t.tenant_id)
+        rows.append({
+            "tenant": t,
+            # Never a bare number. `usage_share` has existed for this since it
+            # was written, with the docstring saying so, on the one screen
+            # that ignored it.
+            "usage": usage_share(used, tenant_daily_quota()),
+            "week": _spark(week),
+            "registered": timestamp_pair(t.created_at),
+        })
+    return {"tenants": rows, "tenant_count": len(tenants),
+            "not_charted": len(overflow)}
+
+
+# Seven days is what tells a tenant that has always been busy apart from one
+# that started flooding an hour ago, which is the only distinction the Suspend
+# lever needs. Fourteen tenants times seven days is 98 keys, inside the 100
+# BatchGetItem allows.
+TREND_DAYS = 7
+TENANTS_PER_PAGE = 14
+
+# Bucketed into five heights, drawn as five SVG rect attributes. Nothing is
+# computed into a style attribute, which CSP forbids, and SVG geometry is not
+# CSS so it is unaffected.
+_SPARK_LEVELS = 5
+
+
+def _spark(week: list[int]) -> list[dict]:
+    """A week as seven bars, each relative to that tenant's own busiest day.
+
+    Relative to itself, not to the quota: the quota is already stated beside
+    it as a percentage, and what this shape has to answer is "is today like
+    the rest of the week", which is a question about the tenant alone.
+    """
+    if not week:
+        return []
+    tallest = max(week) or 0
+    return [{"count": n,
+             "level": 0 if not tallest else max(1, round(n / tallest * _SPARK_LEVELS))}
+            for n in week]
 
 
 @router.get("/admin/ui/agents", response_class=HTMLResponse,

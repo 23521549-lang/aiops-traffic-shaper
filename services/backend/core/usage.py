@@ -122,6 +122,56 @@ def record_tenant_ingest(resource, tenant_id: str, count: int = 1) -> None:
     )
 
 
+# BatchGetItem takes at most 100 keys in one call. Seven days times fifteen
+# tenants crosses it, and a page that quietly showed the first fourteen would
+# be a billing screen lying by omission - the same class of defect as a gauge
+# showing a constant.
+_BATCH_KEY_LIMIT = 100
+
+
+def tenant_requests_over(resource, tenant_ids: list[str], days: int = 7,
+                         today: str | None = None) -> dict[str, list[int]]:
+    """Several days for several tenants, in as few round trips as possible.
+
+    Suspend is the operator's only lever and a single day's count cannot aim
+    it: a tenant that has always been busy and one that started flooding an
+    hour ago show the same number today and call for opposite decisions.
+
+    One GetItem per tenant per day is seventy calls for ten tenants on a page
+    load. BatchGetItem bills the same capacity for the same rows and costs one
+    call, which is what `get_many` was built for in Phase 0 and never used
+    for.
+
+    Oldest day first: a trend has a direction and a chart is read left to
+    right. A day with no row is a real zero rather than a gap - unlike
+    telemetry, the counter is written on every accepted batch, so its absence
+    is itself a measurement. Every tenant asked for gets a full-length list,
+    because the caller draws one row each and a short list misaligns the days
+    silently.
+    """
+    if not tenant_ids:
+        return {}
+    if len(tenant_ids) * days > _BATCH_KEY_LIMIT:
+        raise ValueError(
+            f"{len(tenant_ids)} tenants over {days} days is "
+            f"{len(tenant_ids) * days} keys, past the {_BATCH_KEY_LIMIT} "
+            f"BatchGetItem allows. Ask for fewer days or fewer tenants.")
+
+    end = datetime.strptime(today or _today(), "%Y-%m-%d").replace(
+        tzinfo=timezone.utc)
+    dates = [(end - timedelta(days=n)).strftime("%Y-%m-%d")
+             for n in range(days - 1, -1, -1)]
+    keys = [_tenant_counter_key(t, d) for t in tenant_ids for d in dates]
+    rows = UsageCountersTable(resource).get_many(keys)
+
+    return {
+        tenant_id: [int((rows.get(_tenant_counter_key(tenant_id, d)) or {})
+                        .get("total_requests", 0))
+                    for d in dates]
+        for tenant_id in tenant_ids
+    }
+
+
 def tenant_requests_today(resource, tenant_id: str) -> int:
     item = UsageCountersTable(resource).get(date=_tenant_counter_key(tenant_id)) or {}
     return int(item.get("total_requests", 0))

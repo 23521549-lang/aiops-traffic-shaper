@@ -551,3 +551,9 @@ kbd {
 }
 /* The hint sits after the button in source order and belongs under both. */
 .c-form-row .field-hint { flex-basis: 100%; margin: 0; }
+
+/* A tenant week, relative to that tenant's own busiest day. Bucketed into
+ * five heights and drawn as SVG geometry, which is not CSS and so needs no
+ * style attribute under style-src 'self'. */
+.console .c-spark { display: block; width: 68px; height: 20px; }
+.console .c-spark-bar { fill: var(--text-muted); }

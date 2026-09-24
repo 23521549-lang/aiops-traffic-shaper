@@ -11,6 +11,7 @@
         <th scope="col">Tenant</th>
         <th scope="col">Status</th>
         <th scope="col">Requests today</th>
+        <th scope="col">Last 7 days</th>
         <th scope="col">Registered</th>
         <th scope="col"><span class="sr-only">Actions</span></th>
       </tr>
@@ -32,8 +33,33 @@
           {% endif %}
         </td>
         {# Per-tenant usage was already written on every accepted batch and read
-           back by nothing, so the Suspend button was a lever with no aim. #}
-        <td class="d">{{ row.used }}</td>
+           back by nothing, so the Suspend button was a lever with no aim.
+           Never a bare number either: usage_share has existed for this since
+           it was written, and this is the screen it was written for. #}
+        <td class="d">
+          {{ "{:,}".format(row.usage.used) }}<span class="c-dim"> / {{ "{:,}".format(row.usage.ceiling) }}</span>
+          <span class="c-dim">({{ row.usage.pct_label }})</span>
+        </td>
+        {# The distinction the lever needs: a tenant at 60% that has been at
+           60% all week is a customer, and one at 60% that was at 2%
+           yesterday is an incident. Bucketed heights as SVG geometry, which
+           is not CSS, so nothing here needs a style attribute. #}
+        <td>
+          {% if row.week %}
+          <svg class="c-spark" viewBox="0 0 34 10" preserveAspectRatio="none"
+               focusable="false" role="img"
+               aria-label="Requests on each of the last 7 days: {% for d in row.week %}{{ d.count }}{{ ', ' if not loop.last }}{% endfor %}">
+            {% for d in row.week %}
+            {% if d.level %}
+            <rect class="c-spark-bar" x="{{ loop.index0 * 5 }}"
+                  y="{{ 10 - d.level * 2 }}" width="4" height="{{ d.level * 2 }}"/>
+            {% endif %}
+            {% endfor %}
+          </svg>
+          {% else %}
+          <span class="c-dim">not charted</span>
+          {% endif %}
+        </td>
         <td class="d" title="{{ row.registered.exact }}">
           {{ row.registered.label }} <span class="c-dim">{{ row.registered.relative }}</span>
         </td>
@@ -57,6 +83,14 @@
     </tbody>
   </table>
 </div>
+{% if not_charted %}
+<p class="c-summary">
+  The last 7 days are charted for the first {{ tenants|length - not_charted }}
+  tenants. {{ not_charted }} more {{ 'are' if not_charted != 1 else 'is' }}
+  listed with today's figure only, because a week for every tenant would be
+  more keys than one batch read allows.
+</p>
+{% endif %}
 {% else %}
 <div class="c-empty-state">
   <strong>No tenants yet</strong>
