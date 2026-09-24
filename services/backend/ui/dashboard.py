@@ -66,6 +66,7 @@ def _rows(mitigations, now, agents=None):
     agents = agents or []
     return [{
         "ip": m.ip,
+        "decided_at": m.decided_at,
         "reach": reach(m.decided_at, agents, now),
         "tier": m.tier,
         "tier_label": tier_label(m.tier),
@@ -260,12 +261,48 @@ def protection_status(request: Request, ip: str | None = None,
     pending = (state["gates_armed"]
                and abs(enforced_sigma - tier1_sigma) > 1e-9)
 
+    # What the machinery is doing, from figures this page already holds. The
+    # only rule for this block is that it may not read anything new: a vanity
+    # panel on a 14 RCU budget is how a console starts costing money.
+    lifecycle = None
+    if rows or measured or state["gates_armed"]:
+        tools = sorted({str(e) for a in agents for e in (a.get("enforcers") or [])})
+        reported = [a for a in agents if a.get("enforcers") is not None]
+        # Only decisions whose time was recorded can be asked "has the fleet
+        # collected this". Rows written before `decided_at` existed cannot,
+        # and counting them as NOT collected would accuse a healthy fleet of
+        # failing - which is the same merging of "we cannot tell" with "no"
+        # that reach() itself is careful never to do.
+        timed = [r for r in rows if r["decided_at"]]
+        lifecycle = {
+            "read": measured,
+            "agents": len(agents),
+            # The thirteen bins count READINGS below the gate, not distinct
+            # sources, and the product has never stored a distinct-source
+            # count. Labelled as what it is rather than as what would sound
+            # better.
+            "near": sum(bins.values()),
+            "acted": len(rows),
+            "blocked": sum(1 for r in rows if r["tier"] >= 2),
+            "slowed": sum(1 for r in rows if r["tier"] < 2),
+            "timed": len(timed),
+            "untimed": len(rows) - len(timed),
+            # Agents holding EVERY decision we can date. Same `reach` the
+            # table rows use, so the strip and the rows can never disagree
+            # about the same fact.
+            "holding": min((sum(1 for a in agents
+                                if reach(r["decided_at"], [a], now)["in_effect"])
+                            for r in timed), default=len(agents)),
+            "tools": ", ".join(tools) if tools else ("" if reported else "not reported"),
+        }
+
     return templates.TemplateResponse(request, "dashboard_status.html", _shell(
         request, tenant_id, "status",
         mitigations=rows, health=health, selected=selected,
         detail_open=selected is not None,
         axis=axis, axis_state=state, measured=measured,
         curve=curve, enforced_sigma=enforced_sigma, pending=pending,
+        lifecycle=lifecycle,
         zoom=zoom, track_width=FEATURE_TRACK_WIDTH,
         track_height=FEATURE_TRACK_HEIGHT,
         active_count=len(mitigations),

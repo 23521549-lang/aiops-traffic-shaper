@@ -166,7 +166,6 @@
   font-family: var(--font-mono); font-variant-numeric: tabular-nums;
   color: var(--text); white-space: nowrap;
 }
-.c-table .d-right { text-align: right; }
 .c-table tbody tr:hover { background: var(--surface-sunken); }
 .c-table tbody tr[aria-selected="true"] { background: var(--accent-subtle); }
 .c-table tbody tr[aria-selected="true"] th[scope="row"] { box-shadow: inset 3px 0 0 var(--accent); }
@@ -209,7 +208,8 @@ tr:hover .c-row-actions, tr:focus-within .c-row-actions { opacity: 1; }
   font-family: var(--font-mono); font-size: var(--text-lg);
   font-weight: 600; color: var(--text); word-break: break-all;
 }
-.c-detail-body { padding: 16px; display: grid; gap: 20px; align-content: start; }.c-section-label {
+.c-detail-body { padding: 16px; display: grid; gap: 20px; align-content: start; }
+.c-section-label {
   font-family: var(--font-mono); font-size: 10px; font-weight: 600;
   text-transform: uppercase; letter-spacing: .1em; color: var(--text-muted);
   padding-bottom: 6px; border-bottom: 1px solid var(--border); margin-bottom: 8px;

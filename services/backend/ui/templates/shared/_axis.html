@@ -22,10 +22,34 @@
 <div class="c-axis" data-plot="{{ plot }}" role="img" aria-label="{{ label }}">
   <svg class="c-axis-plot" viewBox="0 0 {{ a.width }} {{ a.height }}"
        preserveAspectRatio="none" focusable="false" aria-hidden="true">
+    {# Colour is the DISTANCE, not the verdict.
+
+       The bands used to be three flat fills, which asserts that a source at
+       3.9 sigma and one at 4.1 are opposite kinds of thing. They are nearly
+       the same thing. What changes between them is the decision this customer
+       asked for, and a decision is a line laid over a scale rather than a
+       property of the scale - so the gates are drawn as lines and the scale
+       runs continuously underneath them.
+
+       Every stop is a tier token. A literal colour here would be a second
+       palette living where no stylesheet test would ever find it. #}
+    <defs>
+      <linearGradient id="ramp-{{ label|replace(' ','')|truncate(12,True,'') }}" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0"    stop-color="var(--tier-normal)"  stop-opacity=".30"/>
+        <stop offset="0.52" stop-color="var(--tier-normal)"  stop-opacity=".30"/>
+        <stop offset="0.68" stop-color="var(--tier-limited)" stop-opacity=".42"/>
+        <stop offset="0.86" stop-color="var(--tier-blocked)" stop-opacity=".46"/>
+        <stop offset="1"    stop-color="var(--tier-blocked)" stop-opacity=".62"/>
+      </linearGradient>
+    </defs>
+    {# Cac dai van o day, mo hon, vi nhan cua chung la thu song sot khi in
+       den trang - WCAG 1.4.1 khong duoc thoa man bang mot mau dep hon. #}
     {% for b in a.bands %}
     <rect class="{{ b.css }}" x="{{ b.x }}" y="0"
-          width="{{ b.width }}" height="{{ a.height }}"/>
+          width="{{ b.width }}" height="{{ a.height }}" opacity=".35"/>
     {% endfor %}
+    <rect x="0" y="0" width="{{ a.width }}" height="{{ a.height }}"
+          fill="url(#ramp-{{ label|replace(' ','')|truncate(12,True,'') }})"/>
 
     {% if plot != "outline" %}
     {% for d in a.density %}
@@ -60,6 +84,13 @@
 
   <div class="c-axis-ticks">
     {% for value, text in a.ticks %}<span class="c-axis-tick">{{ text }}</span>{% endfor %}
+  </div>
+
+  {# The ticks read 0 to 6 and do not say which end is the good one. Two
+     words cost one line and remove the only question a first-time reader
+     has about this chart. #}
+  <div class="c-axis-ends">
+    <span>like your normal day</span><span>very unlike you</span>
   </div>
 </div>
 

@@ -17,7 +17,6 @@
  * defect as a screen contradicted by the product.
  */
 
-
 * { box-sizing: border-box; }
 
 body {
@@ -71,14 +70,16 @@ select:focus-visible,
   border: 1px solid var(--border-interactive);
   transition: top 120ms ease-out;
 }
-.skip-link:focus { top: 8px; text-decoration: none; }.sidebar {
+.skip-link:focus { top: 8px; text-decoration: none; }
+.sidebar {
   width: 220px; flex-shrink: 0; background: var(--surface);
   border-right: 1px solid var(--border); padding: 20px 16px;
 }
 .brand {
   font-weight: 700; font-size: 15px; margin-bottom: 24px;
   display: flex; align-items: center; gap: 8px;
-}.nav-link {
+}
+.nav-link {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding: 8px 10px; border-radius: 8px; color: var(--text);
   font-weight: 500; margin-bottom: 2px;
@@ -95,12 +96,14 @@ select:focus-visible,
   font-size: var(--text-xs); font-variant-numeric: tabular-nums;
   color: var(--text-muted); font-weight: 600;
 }
-.nav-count[data-tone="alarm"] { color: var(--danger); }.main { flex: 1; min-width: 0; }
+.nav-count[data-tone="alarm"] { color: var(--danger); }
+.main { flex: 1; min-width: 0; }
 .topbar {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
   padding: 16px 28px; border-bottom: 1px solid var(--border); background: var(--surface);
 }
-.topbar h1 { font-size: var(--text-xl); line-height: 1.25; margin: 0; }.content { padding: 28px; max-width: 1180px; }
+.topbar h1 { font-size: var(--text-xl); line-height: 1.25; margin: 0; }
+.content { padding: 28px; max-width: 1180px; }
 
 /* --- cards ------------------------------------------------------------ */
 
@@ -113,16 +116,7 @@ select:focus-visible,
   position: relative;
 }
 .card h2 { font-size: var(--text-lg); line-height: 1.25; margin: 0 0 4px; }
-.card .card-sub { color: var(--text-muted); font-size: var(--text-base); margin-bottom: 14px; }.stat .stat-value {
-  font-size: var(--text-stat); font-weight: 700; line-height: 1.25;
-  letter-spacing: -0.01em; font-variant-numeric: tabular-nums;
-}
-.stat .stat-value small { font-size: var(--text-body); font-weight: 500; color: var(--text-muted); }
-.stat .stat-label {
-  color: var(--text-muted); font-size: var(--text-sm);
-  text-transform: uppercase; letter-spacing: .03em;
-}
-
+.card .card-sub { color: var(--text-muted); font-size: var(--text-base); margin-bottom: 14px; }
 /* --- tables ----------------------------------------------------------- */
 
 /* WCAG 1.4.10: at 320px a 5-column table of IPs and timestamps is wider
@@ -185,7 +179,8 @@ tbody tr[data-tier="1"] th[scope="row"] { border-left: 3px solid var(--tier-limi
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .btn-primary { color: var(--ink); }
 }
-.btn-primary:hover { background: var(--accent-hover); }.btn-sm { padding: 4px 10px; font-size: var(--text-sm); }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-sm { padding: 4px 10px; font-size: var(--text-sm); }
 
 /* --- forms ------------------------------------------------------------ */
 
@@ -210,7 +205,8 @@ input[type=text], input[type=password], select {
 .empty-state .dot {
   display: inline-block; width: 8px; height: 8px; border-radius: 50%;
   margin-right: 7px; vertical-align: middle;
-}.alert {
+}
+.alert {
   padding: 12px 16px; border-radius: 8px; margin-bottom: 18px;
   font-size: var(--text-base); font-weight: 500;
 }
@@ -263,7 +259,9 @@ input[type=text], input[type=password], select {
 .login-card h1 { font-size: var(--text-lg); line-height: 1.25; margin: 0 0 14px; }
 .login-field { margin-bottom: 14px; }
 .login-field input { width: 100%; min-width: 0; }
-.login-submit { width: 100%; justify-content: center; }.stack-sm { margin-top: 8px; }.progress {
+.login-submit { width: 100%; justify-content: center; }
+.stack-sm { margin-top: 8px; }
+.progress {
   height: 8px; border-radius: 999px; background: var(--bg);
   overflow: hidden; margin: 10px 0 6px;
 }
@@ -271,7 +269,6 @@ input[type=text], input[type=password], select {
 .meter { height: 8px; border-radius: 999px; background: var(--bg); overflow: hidden; }
 .meter > span { display: block; height: 100%; background: var(--tier-normal); }
 .meter[data-tone="warn"] > span { background: var(--warning); }
-
 
 /* Bar widths as data-attribute rules rather than inline style="width:..".
  * CSP `style-src 'self'` blocks inline style attributes, and a width is the
@@ -328,7 +325,8 @@ input[type=text], input[type=password], select {
 .c-hatch-bg { fill: var(--tier-limited-bg); }
 .c-hatch-line { stroke: var(--tier-limited); stroke-width: 2; }
 .c-cross-bg { fill: var(--tier-blocked-bg); }
-.c-cross-line { stroke: var(--tier-blocked); stroke-width: 1.5; }.c-seg--normal { fill: var(--tier-normal-bg); }
+.c-cross-line { stroke: var(--tier-blocked); stroke-width: 1.5; }
+.c-seg--normal { fill: var(--tier-normal-bg); }
 .c-seg--limited { fill: var(--tier-limited-bg); }
 .c-seg--blocked { fill: var(--tier-blocked-bg); }/* --- stacked bar ------------------------------------------------------ */
 
@@ -411,7 +409,7 @@ input[type=text], input[type=password], select {
 .on-ink .muted { color: var(--ink-muted); }
 .on-ink a { color: var(--brand-cyan); }
 .on-ink .c-axis-label, .on-ink .c-empty { fill: var(--ink-muted); }
-.on-ink .c-rule, .on-ink .c-tick { stroke: var(--ink-muted); }
+.on-ink .c-rule { stroke: var(--ink-muted); }
 
 /* --- landing ---------------------------------------------------------- */
 
@@ -531,7 +529,6 @@ input[type=text], input[type=password], select {
   fill: var(--text-muted); font-size: 10px; font-family: var(--font-mono);
 }
 
-.lp-sigma .c-strip { max-width: 640px; margin: var(--s6) 0; }
 .lp-row-chosen th, .lp-row-chosen td { font-weight: 700; }
 
 .lp-gaps { list-style: none; padding: 0; display: grid; gap: var(--s4); }
@@ -590,7 +587,8 @@ input[type=text], input[type=password], select {
   .lp-hero, .lp-section { padding-left: var(--s4); padding-right: var(--s4); }
   .lp-section { padding-top: var(--s7); padding-bottom: var(--s7); }
   .lp-nav { gap: var(--s3); }
-}.card-head .card-sub { margin-bottom: 0; }.login-alt { margin-top: var(--s5); border-top: 1px solid var(--border); padding-top: var(--s3); }
+}
+.login-alt { margin-top: var(--s5); border-top: 1px solid var(--border); padding-top: var(--s3); }
 .login-alt summary {
   cursor: pointer; font-size: var(--text-base); color: var(--text-muted);
   font-weight: 600;
@@ -617,7 +615,8 @@ input[type=text], input[type=password], select {
  * the table past the viewport. On a 390px screen that carried the "Allow
  * this IP" button off the right edge, which made the single most urgent
  * action in the product unreachable on a phone. */
-.num { white-space: normal; }.severity { color: var(--text); }
+.num { white-space: normal; }
+.severity { color: var(--text); }
 @media (max-width: 720px) { .severity { min-width: 14ch; } }
 
 /* A column flex container whose child has a min-content wider than the
@@ -683,7 +682,6 @@ input[type=text], input[type=password], input[type=email], select {
 .theme-opt[aria-pressed="true"] { background: var(--surface); color: var(--text); }
 .theme-opt:hover { color: var(--text); }
 
-
 /* --- the sigma axis ---------------------------------------------------- */
 
 /* Both layers occupy the same grid cell and both are full width with zero
@@ -736,7 +734,6 @@ input[type=text], input[type=password], input[type=email], select {
   font-family: var(--font-mono); font-size: var(--text-xs);
   color: var(--text-muted); margin: 6px 0 0;
 }
-
 
 /* --- the gate control -------------------------------------------------- */
 /* Thirteen rows in the same panel as the axis they move. A slider would show
@@ -888,3 +885,84 @@ input[type=text], input[type=password], input[type=email], select {
   font-family: var(--font-mono); font-size: var(--text-xs);
   letter-spacing: .04em; color: var(--text-muted); margin-bottom: var(--space-2);
 }
+
+/* The unit, said in words. A Greek letter carries the whole argument of this
+ * product and no screen had ever defined it; a reader who has to translate
+ * before they can act is a reader who stops. */
+.c-plain {
+  font-size: var(--text-sm); color: var(--text-muted); line-height: 1.6;
+  margin: 0 0 var(--s4); padding: var(--s3) var(--s4);
+  border-left: 2px solid var(--accent); border-radius: 0 var(--r2) var(--r2) 0;
+  background: var(--accent-subtle); max-width: 62ch;
+}
+.c-plain b { color: var(--text); font-weight: 600; }
+
+/* Which end of the scale is the good one. The ticks are numbers and numbers
+ * do not answer that. */
+.c-axis-ends {
+  display: flex; justify-content: space-between;
+  font-size: var(--text-xs); color: var(--text-muted); margin-top: 2px;
+}
+
+/* --- what your agent is doing ------------------------------------------ */
+/* Four steps, read left to right, above the axis. The pulse is CSS and runs
+ * once per cycle in the browser: nothing here costs a request, because a
+ * console that polls eats the budget telemetry needs and one tab at five
+ * seconds is 52% of the whole account's daily ceiling. */
+
+.c-lifecycle {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+  background: var(--border); border: 1px solid var(--border);
+  border-radius: var(--r2); overflow: hidden;
+  margin: 0 0 var(--s5); padding: 0; list-style: none;
+}
+.c-lifecycle-step {
+  background: var(--surface); padding: var(--s3) var(--s4);
+  position: relative; overflow: hidden; display: block;
+}
+/* The flow, staggered so it reads left to right as one movement rather than
+ * four things blinking. Five seconds is the agent's real flush interval. */
+.c-lifecycle-step::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--tier-normal), transparent);
+  transform: translateX(-100%); animation: c-flow 5s linear infinite;
+}
+.c-lifecycle-step:nth-child(2)::after { animation-delay: .5s; }
+.c-lifecycle-step:nth-child(3)::after { animation-delay: 1s; }
+.c-lifecycle-step:nth-child(4)::after {
+  animation-delay: 1.5s;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+}
+@keyframes c-flow {
+  0%   { transform: translateX(-100%); }
+  45%  { transform: translateX(100%); }
+  100% { transform: translateX(100%); }
+}
+.c-lifecycle-k {
+  display: block; font-size: var(--text-xs); letter-spacing: .1em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.c-lifecycle-v {
+  display: block; font-size: var(--text-2xl); font-weight: 600;
+  letter-spacing: -.02em; margin: var(--s2) 0 2px;
+  font-variant-numeric: tabular-nums;
+}
+.c-lifecycle-of {
+  font-size: var(--text-sm); font-weight: 400; color: var(--text-muted);
+  margin-left: 5px;
+}
+.c-lifecycle-s {
+  display: block; font-size: var(--text-xs); color: var(--text-muted);
+}
+/* Never colour alone: each step is numbered and named in its own label, so
+ * the warning tone is the second channel and not the only one. */
+.c-lifecycle-s.is-warn { color: var(--warning); }
+
+@media (max-width: 52rem) {
+  .c-lifecycle { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* "We cannot tell" is not a number, and rendering it in the size reserved
+ * for one would make an absence look like a measurement. */
+.c-lifecycle-unknown { font-size: var(--text-base); font-weight: 400;
+                       color: var(--text-muted); }

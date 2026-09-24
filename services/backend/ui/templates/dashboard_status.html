@@ -3,6 +3,7 @@
 {% import "shared/_axis.html" as axis_macro %}
 {% import "_gate.html" as gate_macro %}
 {% import "_feature.html" as feature_macro %}
+{% import "_lifecycle.html" as lifecycle_macro %}
 {% block title %}Protection · Traffic Shaper{% endblock %}
 {% block page_title %}Protection{% endblock %}
 {% block page_summary %}
@@ -22,6 +23,13 @@ no agent has ever reported
 {{ charts.patterns() }}
 
 <div class="c-list">
+
+  {% if lifecycle %}
+  {# Above the axis on purpose. "Is the machinery running" comes before
+     "what did it decide": an operator reading decisions from a fleet that
+     stopped reporting an hour ago is reading fiction. #}
+  {{ lifecycle_macro.render(lifecycle) }}
+  {% endif %}
 
   {% if outcome %}
   {# Carried back as two integers through the redirect, because the action
@@ -60,6 +68,21 @@ no agent has ever reported
 
   <div class="c-panel">
     <div class="c-section-label">Current enforcement</div>
+    {# A Greek letter does not explain itself, and this one carries the whole
+       argument of the product. Said before the first number that uses it,
+       because a definition underneath the thing it defines has already
+       failed the reader who needed it.
+
+       Only when there is a reading on screen. Teaching a unit on a scale
+       that is showing nothing is a lesson about nothing. #}
+    {% if axis_state.gates_armed %}
+    <p class="c-plain">
+      <b>Sigma is how unusual a source is</b> compared with your own traffic,
+      not anyone else's. Zero looks like your ordinary day. The further out,
+      the less it looks like you, and you choose how far out is far enough to
+      act on.
+    </p>
+    {% endif %}
     {{ axis_macro.render(axis,
          "Every measured source on the sigma scale, with your gates",
          axis_state.sentence, axis_state.plot) }}

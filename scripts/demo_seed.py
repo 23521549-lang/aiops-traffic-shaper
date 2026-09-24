@@ -100,9 +100,13 @@ def seed(resource, primary_tenant: str) -> dict:
          [2.2, 0.20, 900.0, 0.08, 0.30, 0.70, 0.18]),
     ]
     for ip, tier, score, z, ttl, features in mitigations:
+        # `decided_at` matters as much as any other field here: without it the
+        # console correctly answers "we cannot tell whether your agents have
+        # this", and a demo that only ever shows the cannot-tell branch never
+        # shows what the product can actually do.
         fields = {"tenant_id": primary_tenant, "ip": ip, "tier": tier, "score": score,
                   "reason": "behavioral_anomaly", "expires_at": epoch + ttl,
-                  "features": features}
+                  "decided_at": epoch - 420, "features": features}
         if z is not None:
             fields["z"] = z
         MitigationStateTable(resource).put(**fields)
@@ -110,6 +114,8 @@ def seed(resource, primary_tenant: str) -> dict:
     # A row that has already lapsed. DynamoDB TTL deletes lazily — AWS says
     # up to 48 hours — so this is what the table really looks like, and the
     # portal must not list it as active.
+    # No `decided_at` on purpose: this is what a row written before the field
+    # existed looks like, and the console has a third state for exactly it.
     MitigationStateTable(resource).put(
         tenant_id=primary_tenant, ip="203.0.113.250", tier=1, score=-0.11, z=-4.3,
         reason="behavioral_anomaly", expires_at=epoch - 900,
@@ -141,10 +147,19 @@ def seed(resource, primary_tenant: str) -> dict:
     # than a flat line or a wall.
     shape = [140, 120, 95, 80, 70, 65, 90, 210, 380, 520, 610, 640,
              590, 620, 700, 660, 580, 540, 610, 720, 480, 330, 240, 180]
+    # The thirteen near-threshold bins, shaped like a real tail: many
+    # readings just past 3 sigma, very few out at 5. Without them the axis has
+    # no density below the gate and the gate control answers "0" at every one
+    # of its thirteen positions, which is the one part of this product a
+    # demo most needs to show.
+    tail = {"n300": 34, "n325": 21, "n350": 13, "n375": 8, "n400": 5,
+            "n425": 3, "n450": 2, "n475": 1, "n500": 1}
     for i, requests in enumerate(shape):
         hour = hour_now - (23 - i) * 3600
-        history.record_traffic(primary_tenant, hour_start=hour,
-                               requests=requests, tier1=0, tier2=0)
+        busy = requests > 400
+        history.record_traffic(
+            primary_tenant, hour_start=hour, requests=requests, tier1=0, tier2=0,
+            bins={k: max(1, v // (2 if busy else 6)) for k, v in tail.items()})
 
     # Episodes, placed where the traffic is busiest so the chart and the
     # table tell the same story.

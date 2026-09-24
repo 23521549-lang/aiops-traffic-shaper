@@ -12,10 +12,22 @@
 <div class="c-grid" role="img" aria-label="{{ label }}">
   <svg class="c-grid-plot" viewBox="0 0 {{ g.width }} {{ g.height }}"
        preserveAspectRatio="none" focusable="false" aria-hidden="true">
+    {# Cung thang do, cung dai mau. Hai truc voi hai cau chuyen mau con te
+       hon mot truc khong co mau nao. #}
+    <defs>
+      <linearGradient id="gramp" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0"    stop-color="var(--tier-normal)"  stop-opacity=".26"/>
+        <stop offset="0.52" stop-color="var(--tier-normal)"  stop-opacity=".26"/>
+        <stop offset="0.68" stop-color="var(--tier-limited)" stop-opacity=".36"/>
+        <stop offset="0.86" stop-color="var(--tier-blocked)" stop-opacity=".40"/>
+        <stop offset="1"    stop-color="var(--tier-blocked)" stop-opacity=".56"/>
+      </linearGradient>
+    </defs>
     {% for b in g.bands %}
     <rect class="{{ b.css }}" x="{{ b.x }}" y="0"
-          width="{{ b.width }}" height="{{ g.height }}"/>
+          width="{{ b.width }}" height="{{ g.height }}" opacity=".30"/>
     {% endfor %}
+    <rect x="0" y="0" width="{{ g.width }}" height="{{ g.height }}" fill="url(#gramp)"/>
 
     {% for r in g.rows %}
     {% if not r.live %}
@@ -37,6 +49,10 @@
 
   <div class="c-grid-ticks">
     {% for value, text in g.ticks %}<span class="c-axis-tick">{{ text }}</span>{% endfor %}
+  </div>
+  {# Same ruler, same obligation. #}
+  <div class="c-axis-ends">
+    <span>like your normal day</span><span>very unlike you</span>
   </div>
 </div>
 
