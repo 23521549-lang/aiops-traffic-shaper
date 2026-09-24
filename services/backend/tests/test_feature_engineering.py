@@ -74,7 +74,7 @@ def test_collect_training_vectors_across_ips_and_buckets(dynamo_resource):
     record_batch(dynamo_resource, "t-1", [_Log("9.9.9.9")] * 4, bucket_seconds=5, now=2000.0)
     record_batch(dynamo_resource, "t-2", [_Log("5.5.5.5")] * 10, bucket_seconds=5, now=1000.0)
 
-    vectors = collect_training_vectors(dynamo_resource, "t-1", bucket_seconds=5, min_requests_threshold=3)
+    vectors = collect_training_vectors(dynamo_resource, "t-1", bucket_seconds=5, min_requests_threshold=3).vectors
     # Two buckets across two different IPs for t-1 — t-2's data must not leak in.
     assert len(vectors) == 2
     for v in vectors:
@@ -84,10 +84,10 @@ def test_collect_training_vectors_across_ips_and_buckets(dynamo_resource):
 def test_collect_training_vectors_filters_below_threshold(dynamo_resource):
     create_all_tables(dynamo_resource)
     record_batch(dynamo_resource, "t-1", [_Log("1.2.3.4")], bucket_seconds=5, now=1000.0)  # only 1 request
-    vectors = collect_training_vectors(dynamo_resource, "t-1", bucket_seconds=5, min_requests_threshold=3)
+    vectors = collect_training_vectors(dynamo_resource, "t-1", bucket_seconds=5, min_requests_threshold=3).vectors
     assert vectors == []
 
 
 def test_collect_training_vectors_empty_tenant(dynamo_resource):
     create_all_tables(dynamo_resource)
-    assert collect_training_vectors(dynamo_resource, "no-such-tenant") == []
+    assert collect_training_vectors(dynamo_resource, "no-such-tenant").vectors == []

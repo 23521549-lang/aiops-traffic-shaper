@@ -386,6 +386,36 @@ class AgentsTable(_SimpleTable):
     def query_revoked(self) -> list[dict]:
         return self.query_by_status("revoked")
 
+    def set_enforcers(self, tenant_id: str, agent_id: str,
+                      enforcers: list[str]) -> bool:
+        """Record what this agent can actually write a rule with.
+
+        Conditional on the value having CHANGED, so in steady state this
+        costs nothing at all: the list is derived from what is installed on
+        the machine and changes about never, while the telemetry batch that
+        carries it arrives every few seconds. An unconditional write here
+        would spend real WCU on a constant, against the 20 the whole account
+        has.
+
+        Separate from `touch` rather than folded into it, because touch runs
+        in `agent_auth`, which authenticates before anything has parsed the
+        request body and so cannot know this value.
+        """
+        try:
+            self._table.update_item(
+                Key={"tenant_id": tenant_id, "agent_id": agent_id},
+                UpdateExpression="SET enforcers = :e",
+                ConditionExpression=("attribute_exists(tenant_id) "
+                                     "AND (attribute_not_exists(enforcers) "
+                                     "OR enforcers <> :e)"),
+                ExpressionAttributeValues={":e": list(enforcers)},
+            )
+            return True
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                return False
+            raise
+
     def touch(self, tenant_id: str, agent_id: str, now: datetime | None = None) -> bool:
         """Record that this agent just called in. Returns whether a write
         happened.
@@ -655,7 +685,7 @@ class ModelsTable(_SimpleTable):
         "tenant_id", "stage_version", "version", "trained_at",
         "training_samples", "contamination", "score_mean", "score_std",
         "feature_means", "feature_stds", "features", "stage",
-        "tier1_z", "tier2_z",
+        "tier1_z", "tier2_z", "excluded_whitelist_buckets",
     )
 
     def get_metadata(self, tenant_id: str,

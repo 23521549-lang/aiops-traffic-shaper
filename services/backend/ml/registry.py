@@ -41,6 +41,11 @@ class ModelMetadata:
     # writes this item.
     tier1_z: float = TIER1_Z_DEFAULT
     tier2_z: float = TIER2_Z_DEFAULT
+    # How many measured buckets the tenant's allowed list kept out of this
+    # baseline. None on models trained before the count existed, and on that
+    # item the console says "not measured yet" - which is not the same claim
+    # as zero, and merging them would be principle 1.4 with a number on it.
+    excluded_whitelist_buckets: int | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -53,7 +58,12 @@ def save_model(resource, tenant_id: str, model: IsolationForest,
     blob = gzip.compress(buf.getvalue())
 
     table = ModelsTable(resource)
-    table.put_model_blob(tenant_id, stage, blob, **metadata.to_dict())
+    # None means "not measured", and an absent attribute says that better
+    # than a stored NULL: a projection that finds nothing and a projection
+    # that finds NULL both have to be read as the same thing downstream, so
+    # only one of them should ever be written.
+    fields = {k: v for k, v in metadata.to_dict().items() if v is not None}
+    table.put_model_blob(tenant_id, stage, blob, **fields)
 
 
 @dataclass(frozen=True)

@@ -85,8 +85,13 @@ def list_whitelist(tenant_id: str = Depends(dashboard_auth),
         # read it back, so the field hint promised a column that could not
         # exist. Carried here rather than in a second call because the rows
         # are already in memory.
+        # `added_by` has been written from the verified token since Phase 0
+        # and was dropped here, so "who let this address in" had no answer on
+        # any screen - the fourth time in this rebuild that a field was
+        # written, declared, and never carried off the row.
         entries=[{"ip": i["ip"], "reason": i.get("reason", ""),
-                  "added_at": i.get("added_at", "")} for i in items],
+                  "added_at": i.get("added_at", ""),
+                  "added_by": i.get("added_by", "")} for i in items],
     )
 
 
@@ -159,6 +164,14 @@ def model_status(tenant_id: str = Depends(dashboard_auth),
         contamination=float(item["contamination"]) if "contamination" in item else None,
         score_mean=float(item["score_mean"]) if "score_mean" in item else None,
         score_std=float(item["score_std"]) if "score_std" in item else None,
+        # Already projected by get_metadata and dropped here, the fifth time
+        # in this rebuild that a field was written, declared, and never
+        # carried off the row.
+        feature_means=[float(v) for v in item.get("feature_means", [])],
+        feature_stds=[float(v) for v in item.get("feature_stds", [])],
+        features=[str(v) for v in item.get("features", [])],
+        tier1_z=float(item["tier1_z"]) if "tier1_z" in item else None,
+        tier2_z=float(item["tier2_z"]) if "tier2_z" in item else None,
     )
 
 

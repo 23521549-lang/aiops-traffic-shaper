@@ -24,7 +24,8 @@ N_ESTIMATORS = 50  # ADR-002 measured constraint — do not raise without
 
 
 def train_and_save(resource, tenant_id: str, feature_vectors: list[list[float]],
-                    stage: str = "staging", contamination: float = 0.01) -> ModelMetadata | None:
+                    stage: str = "staging", contamination: float = 0.01,
+                    excluded_whitelist: int | None = None) -> ModelMetadata | None:
     if len(feature_vectors) < MIN_TRAINING_SAMPLES:
         logger.warning(
             "Insufficient training data for tenant=%s: have=%d need=%d",
@@ -65,6 +66,12 @@ def train_and_save(resource, tenant_id: str, feature_vectors: list[list[float]],
         # reverted it every night.
         tier1_z=tier1_z,
         tier2_z=tier2_z,
+        # How many measured buckets the allowed list kept out of this
+        # baseline. Counted in the walk that already happened, carried on an
+        # item already being written. None where the caller did not measure
+        # it, which the console reads as "not measured yet" rather than as
+        # zero: those are different claims and one of them is a lie.
+        excluded_whitelist_buckets=excluded_whitelist,
     )
 
     save_model(resource, tenant_id, model, metadata, stage=stage)
