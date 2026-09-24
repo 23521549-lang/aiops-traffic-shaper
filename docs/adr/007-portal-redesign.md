@@ -102,11 +102,45 @@ Via `<meta name="htmx-config">`, which is markup and needs no CSP allowance:
 |---|---|---|---|
 | `allowScriptTags` | `true` | **`false`** | htmx executes `<script>` in swapped content. `innerHTML` does not. Taking the default would make the swap path strictly weaker than what it replaces. |
 | `allowEval` | `true` | **`false`** | Removes the `new Function` path entirely; `script-src 'self'` then holds without `'unsafe-eval'`. |
-| `historyEnabled` | `true` | **`false`** | htmx caches page HTML in `localStorage`. In a multi-tenant portal that is tenant-scoped markup persisted on a possibly-shared machine. |
+| `historyCacheSize` | `10` | **`0`** | htmx caches page HTML in `localStorage`. In a multi-tenant portal that is tenant-scoped markup persisted on a possibly-shared machine. At `0` the save function returns before any write, and removes a cache an earlier build left behind. |
+| `historyEnabled` | `true` | `true` | Left on. See the amendment below. |
 | `includeIndicatorStyles` | `true` | **`false`** | Stops htmx injecting an inline `<style>`, which is what makes the CSP tightening below possible. |
 
 The adopted surface is smaller than the library's defaults. Adoption here is
 a net reduction in exposed behaviour.
+
+#### Amended 2026-09-24 — `historyEnabled` false was too broad
+
+The row above originally read `historyEnabled` = **`false`**, justified by
+the `localStorage` concern. That concern is real and `historyCacheSize: 0`
+addresses it directly: in the vendored build the save function is
+
+```js
+historyCacheSize<=0){localStorage.removeItem("htmx-history-cache");return
+```
+
+so nothing is ever written, and a cache from an earlier build is actively
+removed. The two settings are independent.
+
+`historyEnabled: false` also disabled `hx-push-url`, which cost the console
+the one property it deliberately bought with `?ip=`: that a view can be
+pasted into a ticket and reproduce what was on screen. A swap left the
+address bar stale and the link showed something else, silently.
+
+This is not a reversal. It is the same decision reached with a more precise
+flag, and it obtains the stated security property at no cost.
+
+Two consequences recorded here rather than discovered later. `hx-boost`
+becomes functional; it is opt-in per element, so nothing changes unless the
+attribute is added, and adding it must be an explicit decision rather than a
+side effect. And back-navigation is now a Lambda invocation **and a metered
+`UsageCounters` write** — `/dashboard/ui` is not in
+`_UNMETERED_PATH_PREFIXES`, so back-button use is write traffic against the
+25 WCU envelope.
+
+The rule below — that config overrides are confirmed in a browser at
+rollout rather than inferred from the minified source — applies to this
+change and has not yet been discharged.
 
 ### The CSP gets tighter, not looser
 

@@ -171,16 +171,26 @@ def test_htmx_is_configured_down_from_its_defaults():
                        the innerHTML it replaced did not.
       allowEval        removes the new Function() path so script-src 'self'
                        holds with no 'unsafe-eval'.
-      historyEnabled   htmx caches page HTML in localStorage — tenant-scoped
-                       markup persisted on a possibly shared machine.
+      historyCacheSize htmx caches page HTML in localStorage — tenant-scoped
+                       markup persisted on a possibly shared machine. 0 is
+                       what stops that; the save function returns before any
+                       write and removes a cache an earlier build left.
       includeIndicatorStyles
                        htmx injects an inline <style>, which would force
                        style-src back open.
+
+    `historyEnabled` used to be false here and is deliberately not any more.
+    It bought the localStorage guarantee at the price of hx-push-url, so a
+    swap left the address bar stale and a pasted link reproduced a different
+    view than the one on screen. The two settings are independent and only
+    `historyCacheSize` carries the security property — see the 2026-09-24
+    amendment in ADR-007, and test_htmx_config.py, which reads the vendored
+    bytes to prove the build honours it.
     """
     shell = _static("templates/base.html")
     assert 'name="htmx-config"' in shell
     for setting in ('"allowEval":false', '"allowScriptTags":false',
-                    '"includeIndicatorStyles":false', '"historyEnabled":false'):
+                    '"includeIndicatorStyles":false', '"historyCacheSize":0'):
         assert setting in shell, setting
 
 

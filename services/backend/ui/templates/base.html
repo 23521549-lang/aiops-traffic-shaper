@@ -19,9 +19,19 @@
                         swap path weaker than what it replaced.
     allowEval           removes the new Function() path, so script-src
                         'self' holds without needing 'unsafe-eval'.
-    historyEnabled      htmx caches page HTML in localStorage. In a
+    historyCacheSize    0. This is the flag carrying the security property:
+                        htmx caches page HTML in localStorage, and in a
                         multi-tenant portal that is tenant-scoped markup
-                        persisted on a possibly shared machine.
+                        persisted on a possibly shared machine. At 0 the
+                        save function returns before any write, and removes
+                        a cache an earlier build left behind. Verified by
+                        reading the vendored bytes; confirmed in a browser
+                        at rollout, per ADR-007.
+    historyEnabled      stays ON. It was previously off, which bought the
+                        line above at the cost of hx-push-url: a swap left
+                        the address bar stale, so a pasted link reproduced a
+                        different view than the one on screen. The two flags
+                        are independent, and only the first is needed.
     includeIndicatorStyles
                         stops htmx injecting an inline <style>, which is
                         what allows style-src to stay 'self' with no
@@ -30,7 +40,7 @@
 
   A <meta> tag is markup, not script, so this needs no CSP allowance.
 #}
-<meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"includeIndicatorStyles":false,"historyEnabled":false}'>
+<meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"includeIndicatorStyles":false,"historyEnabled":true,"historyCacheSize":0}'>
 <script src="/ui/static/htmx.min.js" defer></script>
 {% block head %}{% endblock %}
 </head>
