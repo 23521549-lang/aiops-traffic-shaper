@@ -198,7 +198,7 @@ def test_no_em_dash_reaches_any_page(dynamo_resource, cognito_test_keys):
     pages = [
         (public, "/"), (public, "/ui/login"), (public, "/not-a-page"),
         (tenant, "/dashboard/ui"), (tenant, "/dashboard/ui/history"),
-        (tenant, "/dashboard/ui/whitelist"), (tenant, "/dashboard/ui/model"),
+        (tenant, "/dashboard/ui/allowed"), (tenant, "/dashboard/ui/model"),
         (admin, "/admin/ui"), (admin, "/admin/ui/tenants"),
         (admin, "/admin/ui/tenants/new"), (admin, "/admin/ui/agents"),
     ]

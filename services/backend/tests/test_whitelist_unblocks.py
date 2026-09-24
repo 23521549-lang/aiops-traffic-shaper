@@ -138,10 +138,10 @@ def test_the_dashboard_stops_listing_it_immediately(dynamo_resource, cognito_tes
     # whitelist table (cell, hx-delete URL, hx-confirm text).
     assert "Blocked" in client.get("/dashboard/ui").text
 
-    resp = client.post("/dashboard/ui/whitelist?ip=203.0.113.4",
+    resp = client.post("/dashboard/ui/allowed?ip=203.0.113.4",
                        headers={"X-CSRF-Token": client.cookies["csrf_token"]})
     assert resp.status_code == 200
 
     page = client.get("/dashboard/ui").text
     assert "Blocked" not in page
-    assert client.get("/dashboard/ui/whitelist").text.count("203.0.113.4") >= 1
+    assert client.get("/dashboard/ui/allowed").text.count("203.0.113.4") >= 1

@@ -28,11 +28,12 @@ from services.backend.api.routes.dashboard import (
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.api.routes.agent import _try_history
 from services.backend.core.tables import (
-    AgentsTable, TenantHistoryTable, TenantsTable,
+    AgentsTable, ModelsTable, TenantHistoryTable, TenantsTable,
 )
 from services.backend.core.usage import (
     protection_status as usage_protection_status,
 )
+from services.backend.ml.feature_engineering import FEATURE_NAMES
 from services.backend.ml.model import TIER1_Z, TIER2_Z, ModelManager
 from services.backend.ui.charts import (
     FEATURE_TRACK_HEIGHT, FEATURE_TRACK_WIDTH, build_axis, feature_runs,
@@ -43,7 +44,8 @@ from services.backend.schemas.whitelist import WhitelistRequest
 from services.backend.ui.csrf import CSRF_COOKIE_NAME, verify_csrf
 from services.backend.ui.hx import hx_return
 from services.backend.ui.presenters import (
-    absolute_expiry, agent_health, agent_state, axis_state, decompose,
+    absolute_expiry, agent_health, agent_state, axis_state, baseline_rows,
+    decompose,
     reach, reason_label, relative_expiry, severity_detail,
     tier_css, tier_label,
     timestamp_pair,
@@ -84,14 +86,60 @@ def _rows(mitigations, now, agents=None):
 
 
 def _whitelist_rows(whitelist):
-    """The form has always asked for a reason. Nothing displayed it, so the
-    field hint promised a column that did not exist."""
-    return [{
+    """A register, not a list. Spec 4.5 asks for four facts per entry: the
+    address, who allowed it, when, and why.
+
+    The form has always asked for a reason and `added_by` has been written
+    since Phase 0. Neither was ever read back, so the field hint promised a
+    column that did not exist and "who let this address in" had no answer on
+    screen.
+
+    Newest first, because the pattern that matters is a CLUSTER added inside
+    one incident. Sorted by address, that cluster is invisible.
+    """
+    rows = [{
         "ip": e.get("ip", ""),
         "reason": e.get("reason", ""),
+        "added_by": e.get("added_by", ""),
+        "added_at": e.get("added_at", ""),
         "added": timestamp_pair(e.get("added_at"))["label"],
         "added_exact": timestamp_pair(e.get("added_at"))["exact"],
     } for e in whitelist.entries]
+    rows.sort(key=lambda r: r["added_at"], reverse=True)
+    return rows
+
+
+def _baseline_cost(resource, tenant_id: str) -> dict | None:
+    """How much of this tenant's measured traffic the allowed list keeps out
+    of their own baseline.
+
+    Counted by the nightly walk, carried on the model item, read here through
+    the projection that already exists - about 0.5 RCU, and never the 238KB
+    blob. None when no model has been trained; a dict with `measured: False`
+    when the model predates the count. "Not measured yet" and "zero" are
+    different claims and this screen may not merge them.
+    """
+    item = ModelsTable(resource).get_metadata(tenant_id=tenant_id,
+                                              stage_version="production")
+    if item is None:
+        # The mechanism is true whether or not a baseline has been computed
+        # yet, so the sentence stands and only the figure is missing.
+        return {"state": "no_model"}
+    if "excluded_whitelist_buckets" not in item:
+        return {"state": "not_counted"}
+    excluded = int(item["excluded_whitelist_buckets"])
+    used = int(item.get("training_samples", 0))
+    total = used + excluded
+    return {
+        "state": "measured",
+        "excluded": excluded,
+        "used": used,
+        "total": total,
+        # Of everything measured, not of what survived: the denominator a
+        # customer means by "how much of my traffic" includes the part that
+        # was taken out.
+        "share": round(100 * excluded / total) if total else 0,
+    }
 
 
 def _shell(request, tenant_id, active, **extra):
@@ -304,6 +352,10 @@ def _agents_page(request, tenant_id, resource, selected_id=None,
         request, tenant_id, "agents",
         agents=rows, selected=selected, detail_open=selected is not None,
         live_count=live, quiet_count=sum(1 for r in rows if r["state"] == "quiet"),
+        # Reporting and protecting are two different claims, and this is the
+        # count for the second one. Only agents that actually said so: an
+        # agent that has never reported its backends is unknown, not broken.
+        toothless_count=sum(1 for r in rows if r["can_enforce"] == "no"),
         agent_count=len(rows), created=created, error=error,
         new_label=label,
         # The command on screen has to point at THIS deployment. Read from
@@ -323,7 +375,7 @@ BULK_ALLOW_LIMIT = 50
 # FastAPI matches in declaration order, so the other way round this reads as
 # an attempt to allow an address named "bulk" and loses the whole selection
 # behind a success-shaped response.
-@router.post("/dashboard/ui/whitelist/bulk", response_class=HTMLResponse,
+@router.post("/dashboard/ui/allowed/bulk", response_class=HTMLResponse,
              dependencies=[Depends(verify_csrf)])
 def bulk_allow_ui(ip: list[str] = Query(default=[]),
                   tenant_id: str = Depends(dashboard_auth),
@@ -457,14 +509,18 @@ def move_gate(tier: int = 1, sigma: float = 0.0,
     return Response(status_code=200, headers={"HX-Redirect": "/dashboard/ui"})
 
 
-@router.get("/dashboard/ui/whitelist", response_class=HTMLResponse)
+@router.get("/dashboard/ui/allowed", response_class=HTMLResponse)
 def whitelist_page(request: Request, tenant_id: str = Depends(dashboard_auth),
                    resource=Depends(get_dynamo_resource)):
     whitelist = list_whitelist(tenant_id=tenant_id, resource=resource)
-    return templates.TemplateResponse(request, "dashboard_whitelist.html", _shell(
+    rows = _whitelist_rows(whitelist)
+    return templates.TemplateResponse(request, "dashboard_allowed.html", _shell(
         request, tenant_id, "whitelist",
-        whitelist=_whitelist_rows(whitelist),
+        whitelist=rows,
         whitelist_count=len(whitelist.whitelisted_ips),
+        # Only when something has actually been allowed. On an empty register
+        # the warning is a lecture about a cost the customer has not paid.
+        cost=_baseline_cost(resource, tenant_id) if rows else None,
     ))
 
 
@@ -472,24 +528,50 @@ def whitelist_page(request: Request, tenant_id: str = Depends(dashboard_auth),
 def model_page(request: Request, tenant_id: str = Depends(dashboard_auth),
                resource=Depends(get_dynamo_resource)):
     model = model_status(tenant_id=tenant_id, resource=resource)
+
+    # The gate of record is on Tenants; the model carries last night's copy.
+    # This screen had 4.0 and 5.0 written into the template and read the
+    # module constants, so a customer who had moved their gate was shown
+    # somebody else's threshold on the page that explains their own model.
+    tenant = TenantsTable(resource).get(tenant_id=tenant_id) or {}
+    tier1_sigma = abs(float(tenant.get("tier1_z", model.tier1_z or TIER1_Z)))
+    tier2_sigma = abs(float(tenant.get("tier2_z", model.tier2_z or TIER2_Z)))
+
     thresholds = None
     if model.model_ready and model.score_std:
         # The thresholds expressed in this tenant's own units. "Mean score
         # -0.015" told a customer nothing; "we slow at -0.073 for your
         # traffic" is the same two numbers doing something useful.
-        from services.backend.ml.model import TIER1_Z, TIER2_Z
         thresholds = {
-            "slow": model.score_mean + TIER1_Z * model.score_std,
-            "block": model.score_mean + TIER2_Z * model.score_std,
+            "slow": model.score_mean - tier1_sigma * model.score_std,
+            "block": model.score_mean - tier2_sigma * model.score_std,
+            "slow_sigma": tier1_sigma,
+            "block_sigma": tier2_sigma,
         }
+
+    # The staging model, which is written every night even when promotion is
+    # refused - deliberately, because it is the evidence for why - and which
+    # no screen has ever read. Evidence nobody can see is not evidence. One
+    # more projected GetItem, about 0.5 RCU, never the 238KB blob.
+    staged = ModelsTable(resource).get_metadata(tenant_id=tenant_id,
+                                                stage_version="staging")
+    # Only worth a word when it differs from what is serving. On an ordinary
+    # night both stages hold the same version and a panel headed "not
+    # promoted" would be alarming and wrong.
+    if staged and staged.get("version") == model.version:
+        staged = None
+
     return templates.TemplateResponse(request, "dashboard_model.html", _shell(
         request, tenant_id, "model", model=model, thresholds=thresholds,
+        baseline=baseline_rows(model.features or list(FEATURE_NAMES),
+                               model.feature_means, model.feature_stds),
+        staged=staged,
     ))
 
 
 # --- mutations, swapped in place by htmx ---------------------------------
 
-@router.post("/dashboard/ui/whitelist", response_class=HTMLResponse,
+@router.post("/dashboard/ui/allowed", response_class=HTMLResponse,
              dependencies=[Depends(verify_csrf)])
 def add_whitelist_form(request: Request, ip: str = "", reason: str = "",
                        tenant_id: str = Depends(dashboard_auth),
@@ -508,7 +590,7 @@ def add_whitelist_form(request: Request, ip: str = "", reason: str = "",
 _WHITELIST_RETURNS = {"status": "/dashboard/ui"}
 
 
-@router.post("/dashboard/ui/whitelist/{ip}", response_class=HTMLResponse,
+@router.post("/dashboard/ui/allowed/{ip}", response_class=HTMLResponse,
              dependencies=[Depends(verify_csrf)])
 def add_whitelist_ui(request: Request, ip: str, reason: str = "", back: str = "",
                      because: str = "",
@@ -550,12 +632,12 @@ def add_whitelist_ui(request: Request, ip: str, reason: str = "", back: str = ""
         if sent_back is not None:
             return sent_back
     whitelist = list_whitelist(tenant_id=tenant_id, resource=resource)
-    return templates.TemplateResponse(request, "_whitelist_table.html", {
+    return templates.TemplateResponse(request, "_allowed_table.html", {
         "whitelist": _whitelist_rows(whitelist), "error": error, "message": message,
     })
 
 
-@router.delete("/dashboard/ui/whitelist/{ip}", response_class=HTMLResponse,
+@router.delete("/dashboard/ui/allowed/{ip}", response_class=HTMLResponse,
                dependencies=[Depends(verify_csrf)])
 def remove_whitelist_ui(request: Request, ip: str, tenant_id: str = Depends(dashboard_auth),
                         claims: dict = Depends(dashboard_claims),
@@ -565,7 +647,7 @@ def remove_whitelist_ui(request: Request, ip: str, tenant_id: str = Depends(dash
     # marker object rather than the resolved claims.
     remove_whitelist(ip, tenant_id=tenant_id, claims=claims, resource=resource)
     whitelist = list_whitelist(tenant_id=tenant_id, resource=resource)
-    return templates.TemplateResponse(request, "_whitelist_table.html", {
+    return templates.TemplateResponse(request, "_allowed_table.html", {
         "whitelist": _whitelist_rows(whitelist),
         "message": f"{ip} removed. It will be checked like any other IP from now on.",
     })

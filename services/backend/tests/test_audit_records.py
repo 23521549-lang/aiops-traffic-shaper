@@ -94,7 +94,7 @@ def test_the_whitelist_records_who_added_the_entry(dynamo_resource, cognito_test
         cognito_test_keys["private_pem"],
         {"custom:tenant_id": "t-1", "email": "ops@example.com"})})
 
-    client.post("/dashboard/ui/whitelist/203.0.113.4",
+    client.post("/dashboard/ui/allowed/203.0.113.4",
                 headers={"X-CSRF-Token": client.cookies["csrf_token"]})
 
     entry = WhitelistTable(dynamo_resource).get(tenant_id="t-1", ip="203.0.113.4")

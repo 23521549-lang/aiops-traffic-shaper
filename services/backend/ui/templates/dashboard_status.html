@@ -15,7 +15,7 @@ no agent has ever reported
 {%- endif %} · {{ mitigations|length }} active
 {% endblock %}
 {% block page_actions %}
-<a class="c-btn" href="/dashboard/ui/whitelist">Allowed IPs</a>
+<a class="c-btn" href="/dashboard/ui/allowed">Allowed IPs</a>
 <a class="c-btn c-btn--primary" href="/dashboard/ui/history">History</a>
 {% endblock %}
 {% block page_content %}
@@ -106,7 +106,7 @@ no agent has ever reported
      query string (data-params-in-url), so this POST has no body and needs
      no CloudFront payload hash. #}
   <form data-bulk-form data-params-in-url
-        hx-post="/dashboard/ui/whitelist/bulk" hx-target="body" hx-swap="none"
+        hx-post="/dashboard/ui/allowed/bulk" hx-target="body" hx-swap="none"
         hx-confirm="Allow every selected source? They stop being slowed or blocked immediately, and are left out of future model training.">
   <div class="c-table-scroll" tabindex="0" role="region"
        aria-label="Active mitigations">
@@ -151,7 +151,7 @@ no agent has ever reported
                response, so without it the row stayed here, still labelled
                Blocked, until someone thought to reload. #}
             <button type="button" class="c-btn c-btn--sm"
-                    hx-post="/dashboard/ui/whitelist/{{ m.ip }}?back=status"
+                    hx-post="/dashboard/ui/allowed/{{ m.ip }}?back=status"
                     hx-target="body" hx-swap="none"
                     hx-confirm="Allow {{ m.ip }}? It stops being slowed or blocked immediately, and is left out of future model training."
                     aria-label="Allow {{ m.ip }}">Allow</button>
@@ -245,7 +245,7 @@ no agent has ever reported
             <td class="c-why-act">
               {% if f.drives %}
               <button type="button" class="c-btn c-btn--sm"
-                      hx-post="/dashboard/ui/whitelist/{{ selected.ip }}?back=status&because={{ f.name }}"
+                      hx-post="/dashboard/ui/allowed/{{ selected.ip }}?back=status&because={{ f.name }}"
                       hx-target="body" hx-swap="none"
                       hx-confirm="Allow {{ selected.ip }} because its {{ f.label|lower }} is explainable? It stops being slowed or blocked immediately, and is left out of future model training."
                       aria-label="Allow {{ selected.ip }} because its {{ f.label|lower }} is explainable">
@@ -282,7 +282,7 @@ no agent has ever reported
     {# data-key is the binding, and it sits on the control so the key does
        exactly what the button does, confirmation prompt included. #}
     <button type="button" class="c-btn c-btn--primary" data-key="a"
-            hx-post="/dashboard/ui/whitelist/{{ selected.ip }}?back=status"
+            hx-post="/dashboard/ui/allowed/{{ selected.ip }}?back=status"
             hx-target="body" hx-swap="none"
             hx-confirm="Allow {{ selected.ip }}? It stops being slowed or blocked immediately, and is left out of future model training.">
       Allow this source <kbd class="c-key">A</kbd>

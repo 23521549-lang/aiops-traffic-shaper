@@ -6,7 +6,7 @@
 {% block page_title %}History{% endblock %}
 {% block page_summary %}
 {% if filter_ip %}{{ filter_ip }} · {% endif -%}
-{{ total_blocked }} blocked · {{ total_slowed }} slowed · {{ episodes|length }} {{ 'episode' if filter_ip else 'source' }}{{ 's' if episodes|length != 1 }} over the last {{ '24 hours' if days == 1 else '7 days' }}
+{{ total_blocked + total_slowed }} decision{{ 's' if total_blocked + total_slowed != 1 }} ({{ total_blocked }} to block, {{ total_slowed }} to slow) across {{ episodes|length }} {{ 'episode' if filter_ip else 'source' }}{{ 's' if episodes|length != 1 }} over the last {{ '24 hours' if days == 1 else '7 days' }}
 {% endblock %}
 {% block page_actions %}
 {% if unread %}

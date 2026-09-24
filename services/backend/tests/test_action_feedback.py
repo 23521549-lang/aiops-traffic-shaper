@@ -49,21 +49,21 @@ def _csrf(client):
 def test_allowing_from_the_mitigation_table_sends_the_operator_back_to_it(client):
     """hx-swap="none" throws the body away, so the instruction has to be in
     a header or the click produces no visible effect at all."""
-    r = client.post("/dashboard/ui/whitelist/9.9.9.9?back=status",
+    r = client.post("/dashboard/ui/allowed/9.9.9.9?back=status",
                     headers=_csrf(client))
     assert r.status_code == 200
     assert r.headers.get("HX-Redirect") == "/dashboard/ui"
 
 
 def test_and_the_source_is_gone_when_they_land(client):
-    client.post("/dashboard/ui/whitelist/9.9.9.9?back=status", headers=_csrf(client))
+    client.post("/dashboard/ui/allowed/9.9.9.9?back=status", headers=_csrf(client))
     assert "9.9.9.9" not in client.get("/dashboard/ui").text
 
 
 def test_the_allowed_list_page_still_swaps_its_table_in_place(client):
     """No redirect there: the operator is already looking at the thing that
     changed, and a full page load would lose their place in it."""
-    r = client.post("/dashboard/ui/whitelist/9.9.9.9", headers=_csrf(client))
+    r = client.post("/dashboard/ui/allowed/9.9.9.9", headers=_csrf(client))
     assert "HX-Redirect" not in r.headers
     assert "9.9.9.9" in r.text
 
@@ -71,7 +71,7 @@ def test_the_allowed_list_page_still_swaps_its_table_in_place(client):
 def test_a_return_path_the_product_did_not_choose_is_ignored(client):
     """The alternative design threads the destination through the query
     string, which turns every action button into an open redirect."""
-    r = client.post("/dashboard/ui/whitelist/9.9.9.9?back=https://evil.example",
+    r = client.post("/dashboard/ui/allowed/9.9.9.9?back=https://evil.example",
                     headers=_csrf(client))
     assert "HX-Redirect" not in r.headers
 

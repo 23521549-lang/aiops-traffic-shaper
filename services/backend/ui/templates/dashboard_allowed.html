@@ -1,0 +1,74 @@
+{% extends "app_shell.html" %}
+{% block title %}Allowed IPs · Traffic Shaper{% endblock %}
+{% block page_title %}Allowed IPs{% endblock %}
+{% block page_summary %}
+{{ whitelist|length }} address{{ 'es' if whitelist|length != 1 }} exempt from mitigation and from model training
+{% endblock %}
+{% block page_content %}
+
+<div class="c-list">
+
+  {% if cost %}
+  {# The cost, named. Allowing an address does not only exempt it from
+     mitigation - it removes it from the definition of normal, permanently,
+     because collect_training_vectors skips its buckets on every retrain.
+     Take your largest traffic source out of your own baseline and sigma for
+     everything that remains goes up, which produces the next false block.
+
+     The product has done this since it was written and said nothing, and a
+     customer clearing CDN addresses one by one during an incident is doing
+     the most damage at the moment they are least able to notice. #}
+  <div class="c-panel">
+    <div class="c-section-label">What this list costs you</div>
+    <p class="c-summary">
+      An allowed address is left out of your baseline permanently, not just
+      exempt from being slowed or blocked. Your normal is measured from the
+      traffic that remains, so removing a large source makes everything else
+      look further out than it did, and the next thing to cross your gate may
+      be something that never would have.
+    </p>
+    {% if cost.state == "measured" %}
+    <p class="c-summary">
+      <strong>{{ cost.share }}%</strong> of the traffic measured for your last
+      baseline was left out this way: {{ "{:,}".format(cost.excluded) }} of
+      {{ "{:,}".format(cost.total) }} measurements.
+    </p>
+    {% elif cost.state == "not_counted" %}
+    <p class="c-summary">
+      How much that has cost your baseline has not been measured. Your current
+      model was trained before the product counted it, and the figure appears
+      after the next nightly retrain.
+    </p>
+    {% else %}
+    <p class="c-summary">
+      How much that has cost your baseline has not been measured, because no
+      baseline has been built yet. The figure appears with your first model.
+    </p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="c-panel">
+    {# data-params-in-url moves the values into the query string, so this
+       POST carries no body and needs no CloudFront payload hash. #}
+    <form class="c-form" data-params-in-url
+          hx-post="/dashboard/ui/allowed" hx-target="#whitelist-table">
+      <div class="field">
+        <label for="wl-ip">IP address</label>
+        <input type="text" id="wl-ip" name="ip" required aria-describedby="wl-ip-hint">
+        <span class="field-hint" id="wl-ip-hint">A single IPv4 or IPv6 address</span>
+      </div>
+      <div class="field">
+        <label for="wl-reason">Reason</label>
+        <input type="text" id="wl-reason" name="reason" aria-describedby="wl-reason-hint">
+        <span class="field-hint" id="wl-reason-hint">Optional. Shown in the list below.</span>
+      </div>
+      <button type="submit" class="c-btn c-btn--primary">Add</button>
+    </form>
+  </div>
+
+  <div id="whitelist-table">
+    {% include "_allowed_table.html" %}
+  </div>
+</div>
+{% endblock %}

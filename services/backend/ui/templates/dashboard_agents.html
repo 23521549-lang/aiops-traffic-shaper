@@ -5,6 +5,7 @@
 {%- if agent_count -%}
 {{ live_count }} of {{ agent_count }} reporting
 {%- if quiet_count %} · {{ quiet_count }} quiet{% endif -%}
+{%- if toothless_count %} · {{ toothless_count }} enforcing nothing{% endif -%}
 {%- else -%}
 nothing registered yet
 {%- endif -%}
@@ -43,6 +44,22 @@ traffic-shaper run</code></pre>
   </div>
   {% endif %}
 
+  {% if toothless_count %}
+  {# The loudest thing on this page when it is true. An agent in this state
+     is reporting, is green everywhere else in the product, and is protecting
+     nothing at all. #}
+  <div class="c-panel">
+    <div class="alert alert-warning">
+      <strong>{{ toothless_count }} agent{{ 's' if toothless_count != 1 }} can enforce nothing.</strong>
+      {{ 'They are' if toothless_count != 1 else 'It is' }} sending telemetry
+      and we are scoring it, but {{ 'they' if toothless_count != 1 else 'it' }}
+      found no nginx and no iptables to write a rule with, so nothing we
+      decide is being applied. Install one of those on the machine, or run the
+      agent with permission to use it, and it starts enforcing on its own.
+    </div>
+  </div>
+  {% endif %}
+
   {% if quiet_count %}
   <div class="c-panel">
     <div class="alert alert-warning">
@@ -62,6 +79,7 @@ traffic-shaper run</code></pre>
         <tr>
           <th scope="col">Agent</th>
           <th scope="col">State</th>
+          <th scope="col">Enforcing with</th>
           <th scope="col">Last seen</th>
           <th scope="col">Version</th>
         </tr>
@@ -75,6 +93,11 @@ traffic-shaper run</code></pre>
             <a href="/dashboard/ui/agents?id={{ a.agent_id }}">{{ a.label }}</a>
           </th>
           <td><span class="c-state c-state--{{ a.state }}">{{ a.state_label }}</span></td>
+          {# Reporting is not protecting. An agent that found no nginx and no
+             iptables sends telemetry forever and enforces none of the
+             decisions it is handed, and every screen here called it
+             healthy. #}
+          <td><span class="c-enforce c-enforce--{{ a.can_enforce }}">{{ a.enforce_label }}</span></td>
           <td class="d" title="{{ a.last_seen_exact }}">{{ a.last_seen }}</td>
           <td class="d">{{ a.version }}</td>
         </tr>

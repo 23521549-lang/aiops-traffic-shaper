@@ -63,7 +63,7 @@ def test_whitelist_add_via_ui_form(dynamo_resource, cognito_test_keys):
     request out of the signing shim: CloudFront's OAC only demands a payload
     hash when there IS a body (ADR-005/ADR-007)."""
     client = _client(dynamo_resource, cognito_test_keys)
-    resp = client.post("/dashboard/ui/whitelist?ip=203.0.113.4&reason=office",
+    resp = client.post("/dashboard/ui/allowed?ip=203.0.113.4&reason=office",
                        headers=_csrf(client))
     assert resp.status_code == 200
     assert "203.0.113.4" in resp.text
@@ -72,7 +72,7 @@ def test_whitelist_add_via_ui_form(dynamo_resource, cognito_test_keys):
 
 def test_whitelist_add_invalid_ip_shows_error(dynamo_resource, cognito_test_keys):
     client = _client(dynamo_resource, cognito_test_keys)
-    resp = client.post("/dashboard/ui/whitelist?ip=not-an-ip", headers=_csrf(client))
+    resp = client.post("/dashboard/ui/allowed?ip=not-an-ip", headers=_csrf(client))
     assert resp.status_code == 200
     assert "not a valid IP" in resp.text
     assert WhitelistTable(dynamo_resource).get(tenant_id="t-1", ip="not-an-ip") is None
@@ -81,7 +81,7 @@ def test_whitelist_add_invalid_ip_shows_error(dynamo_resource, cognito_test_keys
 def test_whitelist_remove_via_ui(dynamo_resource, cognito_test_keys):
     client = _client(dynamo_resource, cognito_test_keys)
     WhitelistTable(dynamo_resource).put(tenant_id="t-1", ip="203.0.113.4", added_at="x")
-    resp = client.request("DELETE", "/dashboard/ui/whitelist/203.0.113.4",
+    resp = client.request("DELETE", "/dashboard/ui/allowed/203.0.113.4",
                           headers=_csrf(client))
     assert resp.status_code == 200
     # The address still appears once, in the confirmation sentence. What must

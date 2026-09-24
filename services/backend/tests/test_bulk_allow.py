@@ -53,7 +53,7 @@ def _bulk(client, ips, **extra):
     q = "&".join(f"ip={i}" for i in ips)
     for k, v in extra.items():
         q += f"&{k}={v}"
-    return client.post(f"/dashboard/ui/whitelist/bulk?{q}", headers=_csrf(client))
+    return client.post(f"/dashboard/ui/allowed/bulk?{q}", headers=_csrf(client))
 
 
 def test_several_sources_are_allowed_in_one_action(client, dynamo_resource):

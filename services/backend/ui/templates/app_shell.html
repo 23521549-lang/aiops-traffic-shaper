@@ -33,7 +33,7 @@
       </a>
 
       <div class="c-nav-label">Control</div>
-      <a class="c-nav-link" href="/dashboard/ui/whitelist"
+      <a class="c-nav-link" href="/dashboard/ui/allowed"
          {% if active == 'whitelist' %}aria-current="page"{% endif %}>
         <span>Allowed IPs</span>
         {% if whitelist_count %}<span class="c-nav-count">{{ whitelist_count }}</span>{% endif %}
@@ -93,7 +93,7 @@
           <h1 class="c-title">{% block page_title %}{% endblock %}</h1>
           {# A live summary, not a restatement of the nav item already
              highlighted three inches to the left. #}
-          <p class="c-summary">{% block page_summary %}{% endblock %}</p>
+          <p class="c-summary c-page-summary">{% block page_summary %}{% endblock %}</p>
         </div>
         <div class="c-header-actions">{% block page_actions %}{% endblock %}</div>
       </div>

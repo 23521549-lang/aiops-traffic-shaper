@@ -136,21 +136,21 @@ def test_ui_state_change_without_csrf_header_is_rejected(dynamo_resource, cognit
     only thing standing between an attacker and these endpoints — no token,
     no Origin check, nothing the application itself verified."""
     client = _logged_in(dynamo_resource, cognito_test_keys, {"custom:tenant_id": "t-1"})
-    resp = client.post("/dashboard/ui/whitelist", data={"ip": "203.0.113.4"})
+    resp = client.post("/dashboard/ui/allowed", data={"ip": "203.0.113.4"})
     assert resp.status_code == 403
 
 
 def test_ui_state_change_with_mismatched_csrf_token_is_rejected(dynamo_resource,
                                                                  cognito_test_keys):
     client = _logged_in(dynamo_resource, cognito_test_keys, {"custom:tenant_id": "t-1"})
-    resp = client.post("/dashboard/ui/whitelist", data={"ip": "203.0.113.4"},
+    resp = client.post("/dashboard/ui/allowed", data={"ip": "203.0.113.4"},
                        headers={"X-CSRF-Token": "not-the-right-token"})
     assert resp.status_code == 403
 
 
 def test_ui_state_change_with_matching_csrf_token_succeeds(dynamo_resource, cognito_test_keys):
     client = _logged_in(dynamo_resource, cognito_test_keys, {"custom:tenant_id": "t-1"})
-    resp = client.post("/dashboard/ui/whitelist?ip=203.0.113.4",
+    resp = client.post("/dashboard/ui/allowed?ip=203.0.113.4",
                        headers={"X-CSRF-Token": client.cookies["csrf_token"]})
     assert resp.status_code == 200
     assert "203.0.113.4" in resp.text

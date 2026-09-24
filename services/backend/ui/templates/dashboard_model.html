@@ -24,12 +24,53 @@
     <p class="c-summary">Trained {{ model.trained_at }}</p>
   </div>
 
+  {% if baseline %}
+  {# The sentence this product exists to be able to say. A rule engine can
+     describe its rules; an IP-reputation service can describe somebody
+     else's traffic. Neither can print this table, because neither has a
+     per-customer baseline to print. The numbers have been on the model item
+     since Phase 0 and nothing carried them off it. #}
+  <div class="c-panel">
+    <div class="c-section-label">The shape of your normal</div>
+    <p class="c-summary">
+      Measured from your own traffic over the window this model was trained
+      on. Every distance the product reports is measured against these.
+    </p>
+    <div class="c-table-scroll" tabindex="0" role="region"
+         aria-label="Your baseline, by feature">
+      <table class="c-table">
+        <caption class="sr-only">This tenant baseline, one row per feature</caption>
+        <thead>
+          <tr>
+            <th scope="col">Feature</th>
+            <th scope="col">Your normal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in baseline %}
+          <tr>
+            <th scope="row">{{ f.label }}</th>
+            <td>{{ f.normal }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
   {% if thresholds %}
   <div class="c-panel">
     <div class="c-section-label">Sensitivity</div>
+    {# This tenant own gates, from Tenants. The figures here used to be
+       written into the template and read from the module constants, so a
+       customer who had moved their gate was shown somebody else threshold on
+       the one page that claims to explain their model. #}
     <dl class="c-kv">
-      <dt>Slow a source at</dt><dd>4.0σ · score {{ "%.4f"|format(thresholds.slow) }}</dd>
-      <dt>Block a source at</dt><dd>5.0σ · score {{ "%.4f"|format(thresholds.block) }}</dd>
+      <dt>Slow a source at</dt>
+      <dd>{{ "%.2f"|format(thresholds.slow_sigma) }} sigma · score {{ "%.4f"|format(thresholds.slow) }}</dd>
+      <dt>Block a source at</dt>
+      <dd>{{ "%.2f"|format(thresholds.block_sigma) }} sigma · score {{ "%.4f"|format(thresholds.block) }}</dd>
     </dl>
     <p class="c-summary">
       These thresholds move with your traffic. Each night of retraining
@@ -43,6 +84,35 @@
     </p>
   </div>
   {% endif %}
+
+  {% if staged %}
+  {# Written every night even when promotion is refused, deliberately,
+     because it is the evidence for why. No screen has ever read it, so the
+     evidence has never been evidence to anyone. #}
+  <div class="c-panel">
+    <div class="c-section-label">Trained last night, not promoted</div>
+    <p class="c-summary">
+      Version <strong>{{ staged.version }}</strong> was trained on
+      {{ staged.training_samples }} measurements and did not replace the model
+      above. The product keeps a refused model rather than discarding it, and
+      production keeps serving until one passes. Nothing about your protection
+      changed.
+    </p>
+  </div>
+  {% endif %}
+
+  {# Spec 4.8, said plainly rather than answered with a number that looks
+     like the answer. #}
+  <div class="c-panel">
+    <div class="c-section-label">What we cannot tell you</div>
+    <p class="c-summary">
+      We cannot tell you how many requests were actually refused. The agent
+      enforces on your own server and does not report back what it turned
+      away, so the only honest figure this product has is the number of
+      decisions it made. Every count you see here and on History is a count
+      of decisions, not of requests.
+    </p>
+  </div>
 
   {% else %}
   <div class="c-empty-state">

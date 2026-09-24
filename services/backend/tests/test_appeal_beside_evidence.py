@@ -97,7 +97,7 @@ def test_allowing_a_source_is_recorded_at_all(client, dynamo_resource):
     no append-only row, so removing the entry afterwards erased every trace
     that the appeal had ever been made."""
     _blocked_source(dynamo_resource)
-    client.post("/dashboard/ui/whitelist/10.0.0.7?back=status", headers=_csrf(client))
+    client.post("/dashboard/ui/allowed/10.0.0.7?back=status", headers=_csrf(client))
 
     rows = _audit(dynamo_resource)
 
@@ -108,7 +108,7 @@ def test_allowing_a_source_is_recorded_at_all(client, dynamo_resource):
 
 def test_the_recorded_appeal_says_which_line_convinced_them(client, dynamo_resource):
     _blocked_source(dynamo_resource)
-    client.post("/dashboard/ui/whitelist/10.0.0.7?back=status&because=post_ratio",
+    client.post("/dashboard/ui/allowed/10.0.0.7?back=status&because=post_ratio",
                 headers=_csrf(client))
 
     assert _audit(dynamo_resource)[0]["because"] == "post_ratio"
@@ -119,7 +119,7 @@ def test_an_appeal_with_no_feature_is_still_recorded(client, dynamo_resource):
     operator forced to attribute their reasoning to one feature would pick
     one at random."""
     _blocked_source(dynamo_resource)
-    client.post("/dashboard/ui/whitelist/10.0.0.7?back=status", headers=_csrf(client))
+    client.post("/dashboard/ui/allowed/10.0.0.7?back=status", headers=_csrf(client))
 
     assert "because" not in _audit(dynamo_resource)[0]
 
@@ -135,8 +135,8 @@ def test_removing_an_entry_is_recorded_too(client, dynamo_resource):
     its own - they have to come back the way they happened.
     """
     _blocked_source(dynamo_resource)
-    client.post("/dashboard/ui/whitelist/10.0.0.7?back=status", headers=_csrf(client))
-    client.delete("/dashboard/ui/whitelist/10.0.0.7", headers=_csrf(client))
+    client.post("/dashboard/ui/allowed/10.0.0.7?back=status", headers=_csrf(client))
+    client.delete("/dashboard/ui/allowed/10.0.0.7", headers=_csrf(client))
 
     assert [r["what"] for r in _audit(dynamo_resource)] == [
         "whitelist_add", "whitelist_remove"]
@@ -148,7 +148,7 @@ def test_an_invented_feature_name_is_refused(client, dynamo_resource):
     stored as given."""
     _blocked_source(dynamo_resource)
     response = client.post(
-        "/dashboard/ui/whitelist/10.0.0.7?back=status&because=%3Cscript%3E",
+        "/dashboard/ui/allowed/10.0.0.7?back=status&because=%3Cscript%3E",
         headers=_csrf(client))
 
     assert response.status_code == 400
@@ -159,7 +159,7 @@ def test_a_refused_appeal_does_not_allow_the_source_anyway(client, dynamo_resour
     """The validation runs before the whitelist write, not after it. A 400
     that has already let the source through is worse than no check."""
     _blocked_source(dynamo_resource)
-    client.post("/dashboard/ui/whitelist/10.0.0.7?back=status&because=nonsense",
+    client.post("/dashboard/ui/allowed/10.0.0.7?back=status&because=nonsense",
                 headers=_csrf(client))
 
     assert MitigationStateTable(dynamo_resource).get(

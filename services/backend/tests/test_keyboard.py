@@ -112,7 +112,7 @@ def test_the_palette_is_server_rendered_not_fetched(tenant):
     the network is the thing going wrong."""
     html = tenant.get("/dashboard/ui").text
     dialog = html.split('id="palette"', 1)[1].split("</dialog>", 1)[0]
-    assert "/dashboard/ui/whitelist" in dialog
+    assert "/dashboard/ui/allowed" in dialog
     assert "Detection model" in dialog
     assert "data-palette-item" in dialog
 
