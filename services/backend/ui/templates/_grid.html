@@ -42,21 +42,38 @@
 
 {% if caption %}<p class="c-axis-caption">{{ caption }}</p>{% endif %}
 
-{# A SUMMARY, not a matrix. Several hundred cell counts read out one at a time
-   answer no question anyone has. #}
+{# Position on an axis is the one thing a screen reader cannot read, so this
+   table is mandatory rather than optional.
+
+   One row per hour, three columns, exactly as spec 8 sets out. NOT a matrix:
+   24 hours by 13 bins is 312 numbers, and nobody wants 312 numbers read
+   aloud. And not an aggregate either, which is what shipped first - "three
+   hours had a source past the gate" cannot tell you WHICH three, and which
+   three is the question the picture answers at a glance. #}
 <div class="sr-only">
   <table>
     <caption>{{ label }}</caption>
     <thead>
-      <tr><th scope="col">Hours</th><th scope="col">Count</th></tr>
+      <tr>
+        <th scope="col">Hour</th>
+        <th scope="col">Sources past {{ "%.2f"|format(g.gate1_sigma) }} sigma</th>
+        <th scope="col">Furthest reading</th>
+      </tr>
     </thead>
     <tbody>
-      <tr><th scope="row">In this window</th><td>{{ g.rows|length }}</td></tr>
-      <tr><th scope="row">With telemetry</th>
-          <td>{{ g.rows|selectattr("live")|list|length }}</td></tr>
-      <tr><th scope="row">With a source past {{ "%.2f"|format(g.gate1_sigma) }} sigma</th>
-          <td>{{ g.hours_with_sources }}</td></tr>
-      <tr><th scope="row">Busiest single reading</th><td>{{ g.busiest }}</td></tr>
+      {% for r in g.rows %}
+      <tr>
+        <th scope="row">{{ r.label }}</th>
+        <td>{{ r.past_gate }}</td>
+        <td>
+          {%- if r.peak_sigma is none -%}
+          {{ "no reading" if not r.live else "nothing measured" }}
+          {%- else -%}
+          {{ "%.2f"|format(r.peak_sigma) }} sigma
+          {%- endif -%}
+        </td>
+      </tr>
+      {% endfor %}
     </tbody>
   </table>
 </div>

@@ -138,3 +138,58 @@ def test_no_sigma_label_is_uppercased_into_summation(client, dynamo_resource):
     _hours_of_traffic(dynamo_resource)
 
     assert "Σ" not in client.get("/dashboard/ui/history").text
+
+
+def test_the_table_has_one_row_per_hour(client, dynamo_resource):
+    """Spec 8: 24 rows by 3 columns. The first version shipped a four-row
+    aggregate, which can say that three hours had a source past the gate and
+    cannot say which three - and which three is the question the picture
+    answers at a glance."""
+    _hours_of_traffic(dynamo_resource)
+
+    page = client.get("/dashboard/ui/history").text
+    table = page[page.index("<caption>"):page.index("</table>",
+                                                    page.index("<caption>"))]
+
+    # 25 data rows, not 24: query_series zero-fills inclusively from the hour
+    # containing `since` to the hour containing `until`, and a 24-hour window
+    # starting mid-hour touches 25 of them. The invariant is one row per
+    # charted hour, not a round number.
+    data_rows = table.count('<th scope="row">')
+
+    assert data_rows in (24, 25)
+    assert table.count("<tr>") == data_rows + 1
+    assert table.count("<td>") == data_rows * 2
+
+
+def test_the_table_is_not_a_matrix_of_every_bin(client, dynamo_resource):
+    """312 numbers read aloud answer no question anyone has."""
+    _hours_of_traffic(dynamo_resource)
+
+    page = client.get("/dashboard/ui/history").text
+    table = page[page.index("<caption>"):page.index("</table>",
+                                                    page.index("<caption>"))]
+
+    assert table.count("<td>") < 100
+
+
+def test_the_table_names_the_hour_rather_than_an_epoch(client, dynamo_resource):
+    """Read aloud one row at a time, so a raw timestamp would be the worst
+    possible thing in the first column."""
+    _hours_of_traffic(dynamo_resource)
+
+    page = client.get("/dashboard/ui/history").text
+    table = page[page.index("<caption>"):page.index("</table>",
+                                                    page.index("<caption>"))]
+
+    assert ":00" in table
+
+
+def test_an_hour_with_no_reading_says_so_rather_than_saying_zero(client, dynamo_resource):
+    """Zero sigma means "exactly normal". An hour with no telemetry measured
+    nothing, and those are opposite claims."""
+    _hours_of_traffic(dynamo_resource)
+
+    page = client.get("/dashboard/ui/history").text
+
+    assert "no reading" in page

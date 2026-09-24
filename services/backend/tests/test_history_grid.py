@@ -210,3 +210,45 @@ def test_an_hour_with_no_near_misses_carries_an_empty_dict_not_a_none(dynamo_res
                          tenant_id="t-1", resource=dynamo_resource)
 
     assert points and all(p.near == {} for p in points)
+
+
+# --- the parallel table spec 8 asks for ------------------------------------
+
+
+def test_each_row_carries_the_two_figures_the_table_needs():
+    """Spec 8: hour, sources past the gate, peak sigma. Computed on the row
+    rather than in the template, because a Jinja expression nobody can read
+    is how the first version of this summary went wrong."""
+    grid = history_grid(_hours(3), [_episode(7200, -5.5), _episode(7200, -4.2)],
+                        4.0, 5.0)
+
+    assert grid.rows[1].past_gate == 2
+    assert grid.rows[1].peak_sigma == 5.5
+
+
+def test_an_hour_with_no_reading_has_no_peak():
+    """None, not zero. Zero sigma is a measurement meaning "exactly normal",
+    and an hour with no telemetry measured nothing at all."""
+    grid = history_grid(_hours(2), [], 4.0, 5.0)
+
+    assert grid.rows[0].peak_sigma is None
+    assert grid.rows[0].past_gate == 0
+
+
+def test_the_peak_is_the_furthest_out_and_not_the_last():
+    grid = history_grid(_hours(1), [_episode(3600, -6.1), _episode(3600, -4.4)],
+                        4.0, 5.0)
+
+    assert grid.rows[0].peak_sigma == 6.1
+
+
+def test_the_peak_counts_the_near_misses_when_nothing_crossed():
+    """An hour with traffic that never reached the gate still has a furthest
+    reading, and it is the answer to "was this hour quiet or was it close"."""
+    hours = _hours(1)
+    hours[0].near = {"n375": 4}
+
+    grid = history_grid(hours, [], 4.0, 5.0)
+
+    assert grid.rows[0].past_gate == 0
+    assert grid.rows[0].peak_sigma == 3.75

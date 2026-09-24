@@ -562,6 +562,21 @@ class GridRow:
     y: float
     live: bool
     cells: list[GridCell] = field(default_factory=list)
+    # The two figures spec 8 asks the parallel table for, beside the hour.
+    # Position on an axis is what a screen reader cannot read, so the table is
+    # mandatory - and it is a SUMMARY per row, not a matrix: 24 by 13 is 312
+    # numbers and nobody wants 312 numbers read aloud.
+    past_gate: int = 0
+    peak_sigma: float | None = None
+
+    @property
+    def label(self) -> str:
+        """The hour, as a person says it. Read aloud one row at a time, so a
+        raw epoch would be the worst possible thing here."""
+        from datetime import datetime, timezone
+
+        return datetime.fromtimestamp(self.hour_start,
+                                      tz=timezone.utc).strftime("%d %b %H:00")
 
 
 @dataclass
@@ -577,15 +592,6 @@ class Grid:
     gate1_sigma: float = 0.0
     gate2_sigma: float = 0.0
     ticks: list[tuple[int, str]] = field(default_factory=list)
-
-    @property
-    def hours_with_sources(self) -> int:
-        """For the screen-reader summary. Computed here rather than in the
-        template: a Jinja expression nobody can read is worse than a property
-        with a name."""
-        return sum(1 for r in self.rows
-                   if any(c.identified for c in r.cells))
-
 
 def history_grid(series, episodes, tier1_sigma: float,
                  tier2_sigma: float) -> Grid:
@@ -642,12 +648,18 @@ def history_grid(series, episodes, tier1_sigma: float,
             cells.append(GridCell(x=axis_x(magnitude), width=2.0, count=1,
                                   level=GRID_LEVELS, sigma=magnitude,
                                   identified=True))
+        # None rather than zero where nothing was read: zero sigma is a
+        # measurement meaning "exactly normal", and an hour with no telemetry
+        # measured nothing at all.
+        peak = max((c.sigma for c in cells), default=None)
         rows.append(GridRow(
             hour_start=hour, y=round(i * row_height, 2),
             # An hour whose only record is a block it issued has plainly not
             # lost its feed, whatever the batch counter says.
             live=bool(point.batches) or bool(cells),
-            cells=cells))
+            cells=cells,
+            past_gate=sum(1 for c in cells if c.identified),
+            peak_sigma=peak))
 
     # Bucketed after the fact, because the busiest cell is not known until
     # every row has been read.
