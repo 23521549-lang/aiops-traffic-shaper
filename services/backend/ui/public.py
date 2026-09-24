@@ -25,6 +25,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from services.backend.ml.model import TIER1_Z, TIER2_Z
 from services.backend.ui.charts import build_axis, deviation_chart
+from services.backend.core.config import settings
 from services.backend.ui.templates_env import templates
 
 router = APIRouter()
@@ -94,6 +95,10 @@ def landing(request: Request, id_token: str | None = Cookie(default=None)):
         # the public page has never had a tenant to measure.
         "axis": build_axis(abs(TIER1_Z), abs(TIER2_Z), {}, []),
         "theme": request.cookies.get(THEME_COOKIE, ""),
+        # The one next action that exists. Read from settings rather than
+        # written into the template so a deployment can point it somewhere
+        # real without editing markup.
+        "access_email": settings.access_request_email,
     })
 
 

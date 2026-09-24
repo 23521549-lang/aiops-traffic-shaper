@@ -34,9 +34,28 @@
       measure every source IP in standard deviations from <em>that</em>.
       Past 4σ we slow it. Past 5σ we stop it.
     </p>
+    {# One next action, and it is one a stranger can actually take. The
+       primary button used to be "Install the agent", whose first step is
+       signing in to an account nobody can create: there is no self-service
+       signup, and a button pointing at one that does not exist is worse than
+       admitting the constraint. Admitting constraints is the only asset this
+       page has.
+
+       A mailto and not a form. This page reads and writes no DynamoDB, which
+       is what lets it sit behind a cache behaviour and cost nothing, and a
+       public endpoint that stores anything is an abuse surface on a 20 WCU
+       budget with no rate limiting in front of it. #}
     <p class="lp-cta">
-      <a href="#proof" class="btn btn-primary">Read the measurements</a>
-      <a href="#install" class="btn btn-ghost">Install the agent</a>
+      <a href="mailto:{{ access_email }}?subject=Traffic%20Shaper%20access%20request"
+         class="btn btn-primary">Request access</a>
+      <a href="#proof" class="btn btn-ghost">Read the measurements</a>
+    </p>
+    <p class="muted lp-fineprint">
+      Invite only. One person reads these and replies by hand, usually within
+      a day or two. There is no signup form and no instant provisioning,
+      because there is no one on call to fix it at three in the morning and
+      saying otherwise would be the first thing on this page that was not
+      true.
     </p>
     <p class="muted lp-fineprint">
       Free forever. No card. The whole backend runs inside AWS’s Always-Free
@@ -256,7 +275,7 @@
        If you cross it, we stop accepting telemetry for the rest of the UTC
        day and the console tells you at 80%. We do not bill you, and we do
        not silently degrade.</p>
-    <p><a href="#install" class="btn btn-primary">Install the agent</a></p>
+    <p><a href="#install" class="btn btn-ghost">See what installing takes</a></p>
   </div>
   <p class="muted">A paid tier would exist to raise that cap. It does not exist yet.</p>
 </section>
@@ -274,7 +293,8 @@ traffic-shaper connect \
 
 traffic-shaper run</code></pre>
   <p class="muted">
-    Sign in, open Agents, and add one. The console prints that command with
+    This is what happens once you have access. Sign in, open Agents, and add
+    one. The console prints that command with
     your values already filled in. The key is shown once, because only its
     hash is stored. The agent writes its credentials to
     <code>~/.aiops-agent/config.json</code>, owner-readable only, and needs
