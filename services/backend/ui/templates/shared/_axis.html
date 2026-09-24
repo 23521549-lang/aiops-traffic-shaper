@@ -38,8 +38,8 @@
     {% endfor %}
 
     {% for m in a.marks %}
-    <line class="{{ m.css }}" x1="{{ m.x }}" y1="0"
-          x2="{{ m.x }}" y2="{{ a.height }}"/>
+    <line class="{{ m.css }}{% if m.selected %} c-mark--on{% endif %}"
+          x1="{{ m.x }}" y1="0" x2="{{ m.x }}" y2="{{ a.height }}"/>
     {% endfor %}
     {% endif %}
 

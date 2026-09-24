@@ -328,23 +328,37 @@ class Mark:
     sigma: float
     css: str
     ip: str
+    # Selection is a second state ON TOP of severity, never instead of it. A
+    # selected blocked source that stops rendering as blocked would be a lie
+    # about what was done to it.
+    selected: bool = False
 
 
-def source_marks(rows: list[dict]) -> list[Mark]:
+def source_marks(rows: list[dict],
+                 selected_ip: str | None = None) -> list[Mark]:
     """One tick per identified source, above the gate.
 
     A row whose z is None is dropped rather than placed. z is None when the
     model had no usable spread, and drawing it at zero would put a blocked
     source inside the band labelled "your normal traffic".
+
+    `selected_ip` lights the source the operator opened. Without it the one
+    picture on the screen does not react to the selection at all, and the
+    detail pane reads as a separate page that happens to sit beside it.
     """
     marks = []
     for row in rows:
         z = row.get("z")
         if z is None:
             continue
+        ip = row.get("ip", "")
         marks.append(Mark(x=axis_x(z), sigma=abs(z),
                           css=_tier_css(abs(z)).replace("c-bar", "c-mark"),
-                          ip=row.get("ip", "")))
+                          ip=ip,
+                          # `?ip=` with nothing after it arrives as an empty
+                          # string, which would otherwise match every row
+                          # whose ip is also missing.
+                          selected=bool(selected_ip) and ip == selected_ip))
     return marks
 
 
@@ -363,7 +377,8 @@ class Axis:
 
 
 def build_axis(tier1_sigma: float, tier2_sigma: float,
-               bins: dict[str, int], rows: list[dict]) -> Axis:
+               bins: dict[str, int], rows: list[dict],
+               selected_ip: str | None = None) -> Axis:
     """Everything the macro needs, in one object.
 
     Its size is constant in the number of sources below the gate: those
@@ -376,7 +391,7 @@ def build_axis(tier1_sigma: float, tier2_sigma: float,
         height=48,
         bands=axis_bands(tier1_sigma, tier2_sigma),
         density=density_bars(bins),
-        marks=source_marks(rows),
+        marks=source_marks(rows, selected_ip),
         # Integer sigma only. Sitting at integers is precisely why these need
         # no computed position, and therefore no enumerated CSS rule: in the
         # HTML layer they are grid columns.

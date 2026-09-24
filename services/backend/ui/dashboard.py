@@ -175,7 +175,8 @@ def protection_status(request: Request, ip: str | None = None,
     # No feed, no reading. The marks are withheld here rather than hidden in
     # CSS, so there is genuinely nothing on the page to misread.
     axis = build_axis(tier1_sigma, tier2_sigma, bins,
-                      rows if state["plot"] == "live" else [])
+                      rows if state["plot"] == "live" else [],
+                      selected_ip=selected["ip"] if selected else None)
 
     # What each of the thirteen legal gates would have caught. The sources
     # already past the current gate count at every line below it too - they

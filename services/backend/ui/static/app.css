@@ -896,3 +896,8 @@ input[type=text], input[type=password], input[type=email], select {
   .c-gate-row { grid-template-columns: 6rem 1fr; }
   .c-gate-count { grid-column: 2; text-align: left; }
 }
+
+/* The source the operator opened. Drawn as a thicker rule rather than a
+ * different colour: the mark already carries its tier in colour, and a second
+ * meaning on the same channel is unreadable in a greyscale screenshot. */
+.c-mark--on { stroke-width: 4; }
