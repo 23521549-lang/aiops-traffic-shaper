@@ -386,3 +386,56 @@ def build_axis(tier1_sigma: float, tier2_sigma: float,
         gate1_sigma=tier1_sigma,
         gate2_sigma=tier2_sigma,
     )
+
+
+@dataclass
+class GateOption:
+    sigma: float
+    count: int
+    width: float        # 0..1, relative to the widest row
+    current: bool
+    recommended: bool
+
+
+# Below this the measured false-positive rate climbs steeply: ADR-006 found
+# 0.82% at 3.5 sigma against 0.27% at 4.0. The control may offer these
+# positions - a tenant with a genuinely narrow baseline may want one - and
+# must not present them as ordinary.
+GATE_RECOMMENDED_FLOOR = 4.0
+
+
+def gate_curve(bins: dict[str, int], current_sigma: float,
+               blocked_total: int = 0) -> list[GateOption]:
+    """What each of the thirteen legal gates would have caught.
+
+    Cumulative on purpose. "How many sources sit in the 3.5 bin" is trivia;
+    "how many would a gate here catch" is the decision, and that is every
+    source at or past the line - including the ones already past the current
+    gate, which is what `blocked_total` adds. Leaving those out would tell an
+    operator that lowering the gate catches FEWER sources than raising it,
+    which is backwards.
+
+    A rendered curve rather than a slider, because there are thirteen
+    answers and a slider shows one of them at a time.
+    """
+    from services.backend.core.tables import TenantHistoryTable
+
+    edges = TenantHistoryTable.NEAR_BINS
+    counts = [int(bins.get("n%d" % round(s * 100), 0)) for s in edges]
+
+    # Walk down from the ceiling so each edge learns what is strictly above
+    # it, then fold in the bin sitting on the line itself.
+    above: list[int] = []
+    running = int(blocked_total)
+    for count in reversed(counts):
+        above.append(running)
+        running += count
+    above.reverse()
+    totals = [a + c for a, c in zip(above, counts)]
+
+    widest = max(totals) if totals else 0
+    return [GateOption(sigma=s, count=t,
+                       width=(t / widest) if widest else 0.0,
+                       current=(abs(s - current_sigma) < 1e-9),
+                       recommended=(s >= GATE_RECOMMENDED_FLOOR))
+            for s, t in zip(edges, totals)]
