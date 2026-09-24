@@ -35,7 +35,7 @@ _THEMES = ("light", "dark", "system")
 # Representative, not live. Shaped from the real production case in ADR-006:
 # a quiet day with one brute force that reached 5.4 sigma and one milder
 # abuser at 4.6. Hardcoded so the page needs no database and no clock.
-_HERO_SHAPE = [
+_EXAMPLE_SHAPE = [
     1.1, 0.8, 1.4, 0.9, 1.2, 0.7, 1.6, 1.0, 0.9, 1.3, 1.1, 0.6,
     1.5, 0.8, 1.2, 1.0, 0.7, 1.4, 1.1, 0.9, 4.6, 1.3, 1.0, 0.8,
     1.2, 1.5, 0.9, 1.1, 0.7, 1.3, 1.0, 1.4, 0.8, 1.2, 5.4, 1.1,
@@ -44,8 +44,19 @@ _HERO_SHAPE = [
 
 
 def _hero_points():
-    """48 buckets of 30 minutes, oldest first."""
-    return [(i * 1800, -v) for i, v in enumerate(_HERO_SHAPE)]
+    """48 buckets of 30 minutes, oldest first.
+
+    An ILLUSTRATION, and the page has to say so. These are forty-eight
+    hardcoded floats: no site produced them, and the captions used to read
+    "24 hours of one site's traffic" and "one source reached 5.4 sigma and was
+    blocked", which are sentences about events that did not happen. The page
+    spends its credibility admitting constraints, and its most prominent
+    element was spending it the other way.
+
+    Kept rather than removed, because showing a reader what these units look
+    like is the page's actual job.
+    """
+    return [(i * 1800, -v) for i, v in enumerate(_EXAMPLE_SHAPE)]
 
 
 def _hero_label(ts: int) -> str:
@@ -74,7 +85,7 @@ def landing(request: Request, id_token: str | None = Cookie(default=None)):
 
     chart = deviation_chart(
         _hero_points(),
-        caption="24 hours of one site's traffic, measured against its own baseline.",
+        caption="Example only. No customer traffic is published here.",
         label_for=_hero_label,
     )
     return templates.TemplateResponse(request, "landing.html", {

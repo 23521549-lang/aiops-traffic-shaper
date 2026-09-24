@@ -44,9 +44,14 @@
     </p>
   </div>
   <div class="lp-hero-art">
+    {# An illustration, and it says so on the chart rather than under it.
+       These are forty-eight hardcoded numbers: no site produced them, and
+       captioning them as a real measurement was the one place this page
+       spent its credibility in the wrong direction. #}
+    <p class="lp-example-tag">Example, not customer data</p>
     {{ charts.deviation(chart,
-        "24 hours of traffic in standard deviations from this site's own normal",
-        "Most buckets sit inside the calm band. One source reached 4.6 sigma and was slowed; one reached 5.4 sigma and was blocked.") }}
+        "Example: 24 hours shown in standard deviations from a site's own normal",
+        "An illustration of the scale, not a measurement of any site. Most buckets sit inside the calm band; two rise past the lines where this product would slow and then stop a source.") }}
   </div>
 </section>
 

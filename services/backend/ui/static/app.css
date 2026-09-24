@@ -978,3 +978,10 @@ input[type=text], input[type=password], input[type=email], select {
 }
 .c-enforce--yes { border-color: var(--tier-normal); color: var(--text); }
 .c-enforce--no { border-color: var(--tier-blocked); color: var(--tier-blocked); }
+
+/* An illustration has to be labelled where a reader who reads nothing else
+ * still sees it, which is on the chart and not under it. */
+.lp-example-tag {
+  font-family: var(--font-mono); font-size: var(--text-xs);
+  letter-spacing: .04em; color: var(--text-muted); margin-bottom: var(--space-2);
+}
