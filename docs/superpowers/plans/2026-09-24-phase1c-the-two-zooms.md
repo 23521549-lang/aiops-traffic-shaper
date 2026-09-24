@@ -1008,3 +1008,79 @@ use as the `because=` and `feature=` value and both validate against
 which happens on no default page load. Task 4 adds a `ModelManager` load to
 the history page, which is cached per warm container and costs nothing on the
 common path. Neither touches the scoring path.
+
+
+---
+
+## What the plan got wrong
+
+Written after execution, against the shipped code.
+
+**1. The settings ledger was not append-only, and the plan did not know it.**
+
+Task 2 needed an audit row for a whitelist add. Writing one immediately
+exposed that `setting_sk` was the timestamp at **one-second resolution**, so
+two audited actions inside one second were one PutItem overwriting the other.
+The pair this hits hardest is an add followed by its own removal, which is
+exactly the sequence a dispute turns on.
+
+The first fix, a random suffix, separated the rows and then returned them in
+random order within the second, which for a log is its own kind of wrong. The
+shipped key leads with a fixed-width nanosecond field taken from the **same**
+clock reading as the second above it - derived separately the two drift and
+invert the pair the nonce exists to order - with a short random tail only for
+a genuine tie. `record_setting` now takes a float `now`, and its callers pass
+`time.time()` rather than throwing the sub-second part away.
+
+`query_settings` needed its upper bound widened to `+ "~"` to reach rows in
+the final second, the same trap `query_episodes` documents on its own key.
+
+**2. Three of the four audited actions were never wired.**
+
+Spec 2.5 names four. Phase 0 built the mechanism and wired only the threshold
+move, so the single lever a customer has for "you got this wrong" left no
+append-only trace, and removing the whitelist entry erased the only record
+that the appeal had been made. Task 2 wired both halves of the whitelist pair.
+
+Still unwired, and owed by Phase 2: **tenant suspend/reactivate** and **agent
+key mint/revoke**, both of which live in the operations console.
+
+**3. `list_history` dropped the evidence it was querying.**
+
+Task 4 could not pass until this was found: `record_decision` has written
+`last_features` and `stats_version` onto every episode since Phase 0, the
+`MitigationEpisode` schema declares both, and `list_history` never copied
+either off the row. Every caller therefore saw an empty vector, so a decision
+could be explained only while it was still active - which makes the
+per-feature breakdown a monitoring feature rather than the thing being sold.
+
+**4. `list_history` already had the `ip` parameter the UI route lacked.**
+
+The plan described adding filtering. The JSON route has had `ip` since it was
+written; `history_page` simply never passed anything. The shipped version
+still filters in Python, deliberately: the chart and the unread count need the
+**unfiltered** episodes, so one Query serves both rather than two.
+
+**5. `templates/shared/` means shared, and two new macros were misfiled.**
+
+`_gate.html` and `_feature.html` went into `shared/` next to `_axis.html`
+because that is where the last macro went. `_axis.html` is genuinely shared -
+the landing page renders it - and these two are console-only. Putting them
+there made them use `c-btn`, `c-kv`, `c-section-label` and `c-summary`, which
+`console.css` styles unscoped, and `test_shared_chart_styles.py` failed
+exactly as designed. Both moved to `templates/`.
+
+**6. Minor.** The plan's Task 3 put `_runs` in `dashboard.py`. It is chart
+geometry with nothing route-shaped about it, so it shipped in `charts.py` as
+`feature_runs`, with its own tests.
+
+## Still outstanding after this phase
+
+- ADR-007's htmx configuration needs confirming in a real browser at rollout
+  (`historyEnabled: true`, `historyCacheSize: 0`), not inferred from minified
+  source.
+- Production is missing `bulk-select.js` and `keys.js`; nothing in this phase
+  has been deployed.
+- A gate move reaches enforcement at the next nightly retrain. The zero-RCU
+  path to making it immediate is described at the end of the Phase 1b plan and
+  was deliberately left out of both phases.
