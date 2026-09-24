@@ -11,8 +11,8 @@ Links carry their own state, and the URL becomes shareable.
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 
 from pydantic import ValidationError
 
@@ -65,6 +65,7 @@ def overview(request: Request, resource=Depends(get_dynamo_resource)):
 @router.get("/admin/ui/tenants", response_class=HTMLResponse,
             dependencies=[Depends(admin_auth)])
 def tenants_page(request: Request, id: str | None = None,
+                 created: str | None = None,
                  resource=Depends(get_dynamo_resource)):
     """The list, and the selected tenant beside it.
 
@@ -78,9 +79,17 @@ def tenants_page(request: Request, id: str | None = None,
     selected = next((r for r in ctx["tenants"] if r["tenant"].tenant_id == id), None)
     if selected:
         selected = {**selected, **_tenant_detail(resource, id)}
+    # Carried back through the redirect that keeps the email out of the URL.
+    # Rendered only when it names a tenant that exists, so a hand-edited value
+    # cannot put arbitrary text on the page.
+    message = None
+    if created and any(r["tenant"].tenant_id == created for r in ctx["tenants"]):
+        message = (f"{created} created. A temporary password has been emailed "
+                   f"to its first user.")
+
     return templates.TemplateResponse(request, "admin_tenants.html", _shell(
         request, "tenants", resource, selected=selected,
-        detail_open=selected is not None, **ctx,
+        detail_open=selected is not None, message=message, **ctx,
     ))
 
 
@@ -237,31 +246,38 @@ def new_tenant_form(request: Request, resource=Depends(get_dynamo_resource)):
 
 @router.post("/admin/ui/tenants", response_class=HTMLResponse,
              dependencies=[Depends(admin_auth), Depends(verify_csrf)])
-def create_tenant_ui(request: Request, name: str = "",
-                     contact_email: str = "",
-                     tenant_id: str = "",
+def create_tenant_ui(request: Request,
+                     name: str = Form(default=""),
+                     contact_email: str = Form(default=""),
+                     tenant_id: str = Form(default=""),
                      resource=Depends(get_dynamo_resource),
                      cognito=Depends(get_cognito_client)):
-    # Query parameters, not a form body. The template marks this form
-    # data-params-in-url so htmx moves its values into the query string,
-    # which is what keeps the request body-less and therefore free of
-    # CloudFront's x-amz-content-sha256 requirement (ADR-005). Declaring
-    # Form(...) here would have made the template and the route disagree —
-    # a test caught exactly that.
-    error = None
-    message = None
+    """A real form body, and the only route besides sign-in that has one.
+
+    This carries another person's email address. Riding in a query string it
+    would be written into CloudFront access logs, Referer headers and browser
+    history by the operator who was trying to onboard them, which is exactly
+    what spec 12.8 refuses. So the form is marked data-signed-post and
+    signed-post.js computes the payload hash CloudFront's OAC requires
+    (ADR-005) - the mechanism that file was built for.
+
+    Its contract dictates the shape of both answers here. It follows a
+    REDIRECT and prints anything else as text, so success is a 303 and
+    failure is plain text. HTML in the failure path would print markup at the
+    operator.
+    """
     try:
         created = create_tenant(
             TenantCreateRequest(name=name, contact_email=contact_email,
                                 tenant_id=tenant_id),
             resource=resource, cognito=cognito)
-        message = (f"{created.tenant_id} created. A temporary password has been "
-                   f"emailed to {created.first_user_email}.")
     except ValidationError:
-        error = "Check the name and email address."
+        return PlainTextResponse("Check the name and email address.",
+                                 status_code=400)
     except HTTPException as e:
-        error = str(e.detail)
+        return PlainTextResponse(str(e.detail), status_code=400)
 
-    return templates.TemplateResponse(request, "_tenants_table.html", {
-        **_tenants_ctx(resource), "message": message, "error": error,
-    })
+    # The tenant id and nothing else. Carrying the address back in the
+    # location header would have moved the leak rather than closed it.
+    return RedirectResponse(url=f"/admin/ui/tenants?created={created.tenant_id}",
+                            status_code=303)

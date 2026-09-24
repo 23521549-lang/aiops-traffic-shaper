@@ -370,6 +370,14 @@ def _agents_page(request, tenant_id, resource, selected_id=None,
 # never served the first fifty in silence.
 BULK_ALLOW_LIMIT = 50
 
+# Values that ride in the query string to keep a POST body-less (ADR-005)
+# land in CloudFront access logs, Referer headers and browser history. Spec
+# 12.8 refuses long or free-form fields there; these two are neither secret
+# nor another party's data, so they are bounded rather than moved into a
+# signed body. The numbers match the maxlength in the markup.
+AGENT_LABEL_MAX = 60
+ALLOW_REASON_MAX = 120
+
 
 # Registered BEFORE /whitelist/{ip}, and that ordering is load-bearing:
 # FastAPI matches in declaration order, so the other way round this reads as
@@ -442,7 +450,12 @@ def add_agent_ui(request: Request, label: str = "",
     existing route, unchanged, including the suspended-tenant check that
     stops a session outliving its suspension.
     """
-    label = label.strip()
+    # Capped here as well as in the markup. A maxlength attribute is a
+    # courtesy to a browser, not a control: this value rides in the query
+    # string to keep the request body-less (ADR-005), so an unbounded one
+    # reaches CloudFront access logs and browser history, which is the half
+    # of spec 12.8 a cap can answer.
+    label = label.strip()[:AGENT_LABEL_MAX]
     error = None
     created = None
     if not label:
@@ -616,6 +629,10 @@ def add_whitelist_ui(request: Request, ip: str, reason: str = "", back: str = ""
     check at all.
     """
     from services.backend.ml.feature_engineering import FEATURE_NAMES
+
+    # Same reasoning as the agent label: it travels in the URL, so its bound
+    # is enforced here rather than trusted to the markup.
+    reason = reason.strip()[:ALLOW_REASON_MAX]
 
     if because and because not in FEATURE_NAMES:
         raise HTTPException(status_code=400,

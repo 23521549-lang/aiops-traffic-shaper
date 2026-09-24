@@ -13,13 +13,14 @@
        previous version — which replaced document.documentElement on a
        failed sign-in — produced complete silence for a screen-reader user
        at the front door of the product. #}
-    <div class="alert alert-danger" data-login-error role="alert" tabindex="-1"
+    <div class="alert alert-danger" data-post-error role="alert" tabindex="-1"
          {% if not error %}hidden{% endif %}>{{ error or "" }}</div>
 
-    {# The one POST in the product that must carry a real body: a password
+    {# One of two POSTs in the product that must carry a real body: a token
        in a query string lands in access logs, Referer headers and browser
-       history. data-signed-post routes it through the shim that computes
-       the payload hash CloudFront's OAC requires. #}
+       history. The other is tenant creation, which carries somebody else's
+       email address. data-signed-post routes both through the shim that
+       computes the payload hash CloudFront's OAC requires. #}
     <form method="post" action="/ui/login" data-signed-post>
       <div class="field login-field">
         <label for="email">Email <span class="req" aria-hidden="true">*</span></label>

@@ -129,7 +129,7 @@ traffic-shaper run</code></pre>
           hx-post="/dashboard/ui/agents" hx-target="body" hx-swap="innerHTML">
       <div class="field">
         <label for="agent-label">Machine name</label>
-        <input type="text" id="agent-label" name="label" required
+        <input type="text" id="agent-label" name="label" required maxlength="60"
                placeholder="web-01" aria-describedby="agent-label-hint">
       </div>
       <button type="submit" class="c-btn c-btn--primary">Add</button>

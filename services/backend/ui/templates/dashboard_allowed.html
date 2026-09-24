@@ -55,13 +55,23 @@
           hx-post="/dashboard/ui/allowed" hx-target="#whitelist-table">
       <div class="field">
         <label for="wl-ip">IP address</label>
-        <input type="text" id="wl-ip" name="ip" required aria-describedby="wl-ip-hint">
+        <input type="text" id="wl-ip" name="ip" required maxlength="45"
+               aria-describedby="wl-ip-hint">
         <span class="field-hint" id="wl-ip-hint">A single IPv4 or IPv6 address</span>
       </div>
       <div class="field">
         <label for="wl-reason">Reason</label>
-        <input type="text" id="wl-reason" name="reason" aria-describedby="wl-reason-hint">
-        <span class="field-hint" id="wl-reason-hint">Optional. Shown in the list below.</span>
+        {# Bounded, and the bound is stated. This value rides in the query
+           string so the request stays body-less (ADR-005), which means it
+           lands in CloudFront access logs and browser history - so spec
+           12.8's "long, free-form" half is answered by capping it rather
+           than by pretending a note is not free text. #}
+        <input type="text" id="wl-reason" name="reason" maxlength="120"
+               aria-describedby="wl-reason-hint">
+        <span class="field-hint" id="wl-reason-hint">
+          Optional, up to 120 characters. Shown in the list below, and it
+          travels in the address bar, so keep it free of anything private.
+        </span>
       </div>
       <button type="submit" class="c-btn c-btn--primary">Add</button>
     </form>

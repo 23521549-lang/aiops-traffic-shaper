@@ -10,8 +10,19 @@ creates the tenant record and its first user · Cognito emails a temporary passw
   <div id="tenants-table"></div>
 
   <div class="c-panel">
-    <form class="c-form-stack" hx-post="/admin/ui/tenants" hx-target="#tenants-table"
-          hx-swap="innerHTML" data-params-in-url>
+    {# A real body, not a query string. This form carries another person's
+       email address, and moving its values into the query string would
+       write them into CloudFront
+       access logs, Referer headers and browser history - which spec 12.8
+       refuses and which signed-post.js was built to avoid.
+
+       The cost is that it does not swap a fragment: it redirects, and the
+       confirmation comes back as ?created=<tenant id>, which is a value
+       already in every URL on this screen. #}
+    <div class="alert alert-danger" data-post-error role="alert" tabindex="-1"
+         hidden></div>
+    <form class="c-form-stack" method="post" action="/admin/ui/tenants"
+          data-signed-post>
       {# Minted server-side and carried here so a double submit collides on
          attribute_not_exists and reads as "already exists" rather than
          quietly creating a second tenant. No idempotency-key table. #}

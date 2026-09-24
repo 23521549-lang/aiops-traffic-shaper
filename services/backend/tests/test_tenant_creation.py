@@ -230,10 +230,24 @@ def test_the_form_carries_a_server_minted_id(admin):
 
 
 def test_creating_from_the_form_shows_the_new_tenant(admin):
+    """The values travel as a request BODY, not in the query string.
+
+    They used to ride in the URL, which kept the request free of
+    CloudFront's payload-hash requirement and also wrote a customer's email
+    address into the platform's access logs, Referer headers and browser
+    history - what spec 12.8 refuses. The form is signed instead, so the
+    answer is a redirect carrying only the tenant id.
+    """
     _use(FakeCognito())
-    resp = admin.post(
-        "/admin/ui/tenants?name=Acme&contact_email=owner@acme.test&tenant_id=acme-1",
-        headers=_csrf(admin))
-    assert resp.status_code == 200
-    assert "acme-1" in resp.text
-    assert "temporary password has been emailed" in resp.text
+    resp = admin.post("/admin/ui/tenants",
+                      data={"name": "Acme", "contact_email": "owner@acme.test",
+                            "tenant_id": "acme-1"},
+                      headers=_csrf(admin), follow_redirects=False)
+
+    assert resp.status_code == 303
+    assert "acme-1" in resp.headers["location"]
+    assert "acme.test" not in resp.headers["location"]
+
+    page = admin.get(resp.headers["location"]).text
+    assert "acme-1" in page
+    assert "temporary password has been emailed" in page

@@ -226,6 +226,9 @@ def test_a_failed_sign_in_reports_itself_without_replacing_the_document():
     assert "box.focus()" in js
 
     page = _static("templates/login.html")
-    assert 'data-login-error' in page
+    # Renamed from data-login-error when tenant creation became the second
+    # form that has to carry a real body: the shim stopped being about
+    # sign-in, so its error hook stopped being named after it.
+    assert 'data-post-error' in page
     assert 'role="alert"' in page
     assert 'tabindex="-1"' in page
