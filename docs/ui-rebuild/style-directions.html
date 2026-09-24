@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hệ thống thiết kế · Traffic Shaper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;450;500;600&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   MỘT hệ thống, HAI chế độ. Cùng token, cùng ngữ nghĩa màu,
+   chỉ đổi nhiệt độ bề mặt. Không có "bản sáng" và "bản tối" là
+   hai thiết kế khác nhau - đó là cách người ta làm hỏng cả hai.
+
+   Mọi chuyển động là CSS/SVG thuần, chạy trong trình duyệt,
+   KHÔNG một request nào. Chi phí = 0 là luật số một.
+   ═══════════════════════════════════════════════════════════════ */
+*,*::before,*::after{box-sizing:border-box}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{
+  animation:none!important;transition:none!important}}
+
+:root{
+  --calm:#2DD4BF; --near:#FACC15; --hot:#FB7185; --stop:#F43F5E; --act:#A78BFA;
+  --void:#07070A; --deck:#0E0E13; --deck2:#13131A;
+  --line:#1C1C24; --line2:#2B2B36;
+  --ink:#F4F4F6; --dim:#8A8A96; --faint:#55555F;
+  --glow:.16;
+  --r:7px;
+  --f-d:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+  --f-m:"IBM Plex Mono",ui-monospace,monospace;
+}
+body:has(#ml:checked){
+  --calm:#0D9488; --near:#B45309; --hot:#E11D48; --stop:#BE123C; --act:#4F46E5;
+  --void:#FBFBF9; --deck:#FFFFFF; --deck2:#F6F6F3;
+  --line:#E6E5E0; --line2:#D2D1CA;
+  --ink:#121316; --dim:#6C6C74; --faint:#9A9A9F;
+  --glow:.10;
+}
+
+body{margin:0;background:var(--void);color:var(--ink);font-family:var(--f-d);
+     font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;
+     font-feature-settings:"ss02","cv05";
+     transition:background .25s,color .25s}
+.wrap{max-width:1240px;margin:0 auto;padding:36px 22px 110px}
+
+/* ── thanh trên cùng ── */
+.hdr{display:flex;align-items:center;justify-content:space-between;
+     padding-bottom:18px;border-bottom:1px solid var(--line);margin-bottom:34px}
+.hdr .b{display:flex;align-items:center;gap:10px;font-weight:600;font-size:16px;
+        letter-spacing:-.01em}
+.beacon{width:8px;height:8px;border-radius:50%;background:var(--calm);
+        animation:beat 5s ease-out infinite}
+@keyframes beat{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--calm) 60%,transparent)}
+  60%{box-shadow:0 0 0 11px transparent}100%{box-shadow:0 0 0 0 transparent}}
+
+/* chuyển chế độ: CSS thuần, không JS */
+.toggle{display:flex;border:1px solid var(--line2);border-radius:99px;overflow:hidden;
+        font-size:12px;font-weight:600}
+.toggle label{padding:6px 15px;cursor:pointer;color:var(--dim);user-select:none;
+              transition:background .15s,color .15s}
+.toggle input{position:absolute;opacity:0;pointer-events:none}
+body:has(#md:checked) .toggle label[for=md]{background:var(--act);color:var(--void)}
+body:has(#ml:checked) .toggle label[for=ml]{background:var(--act);color:var(--void)}
+
+h2.sh{font-size:25px;margin:0 0 8px;letter-spacing:-.018em;font-weight:600;
+      line-height:1.25}
+p.sn{color:var(--dim);line-height:1.75;max-width:72ch;margin:0 0 22px;font-size:15px}
+p.sn b{color:var(--ink);font-weight:500}
+code{font-family:var(--f-m);font-size:.88em;background:var(--deck2);
+     padding:1px 5px;border-radius:3px;color:var(--ink)}
+.sec{margin-top:52px}
+.eyebrow{font-family:var(--f-m);font-size:11px;letter-spacing:.14em;
+         text-transform:uppercase;color:var(--faint);margin:0 0 8px}
+
+/* ── khung sơ đồ ── */
+.stage{background:var(--deck);border:1px solid var(--line);border-radius:var(--r);
+       overflow:hidden}
+.stage-h{display:flex;align-items:center;justify-content:space-between;gap:12px;
+         padding:12px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.stage-h .t{font-size:13.5px;font-weight:600}
+.stage-h .m{font-family:var(--f-m);font-size:11px;color:var(--dim)}
+.diagram{width:100%;height:auto;display:block;background:var(--deck)}
+
+/* ── các nút điều khiển ── */
+.ctl{display:flex;gap:8px;flex-wrap:wrap;padding:14px 18px;
+     border-top:1px solid var(--line);background:var(--deck2)}
+.btn{font-family:var(--f-d);font-size:12.5px;font-weight:500;padding:7px 14px;
+     border:1px solid var(--line2);color:var(--ink);background:transparent;
+     border-radius:5px;cursor:pointer;transition:border-color .13s,color .13s,background .13s}
+.btn:hover{border-color:var(--act);color:var(--act)}
+.btn--p{background:var(--act);border-color:var(--act);color:var(--void)}
+.btn--d{border-color:color-mix(in srgb,var(--stop) 45%,transparent);color:var(--stop)}
+.btn--d:hover{background:color-mix(in srgb,var(--stop) 12%,transparent);color:var(--stop);
+              border-color:var(--stop)}
+.ctl .sp{flex:1}
+
+/* ── ô số liệu ── */
+.pipe{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
+      border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin:20px 0}
+.st{background:var(--deck);padding:15px 17px;position:relative;overflow:hidden}
+.st::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--calm),transparent);
+  transform:translateX(-100%);animation:sweep 5s linear infinite}
+.st:nth-child(2)::after{animation-delay:.5s}
+.st:nth-child(3)::after{animation-delay:1s}
+.st:nth-child(4)::after{animation-delay:1.5s;
+  background:linear-gradient(90deg,transparent,var(--stop),transparent)}
+@keyframes sweep{0%{transform:translateX(-100%)}45%{transform:translateX(100%)}
+                 100%{transform:translateX(100%)}}
+.st .k{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint)}
+.st .v{font-size:28px;font-weight:600;letter-spacing:-.02em;margin:9px 0 4px;
+       font-variant-numeric:tabular-nums}
+.st .s{font-size:12px;color:var(--dim);font-family:var(--f-m)}
+.st .s.ok{color:var(--calm)} .st .s.bad{color:var(--hot)}
+
+/* ── màn hình console ── */
+.app{border:1px solid var(--line);border-radius:var(--r);overflow:hidden;
+     background:var(--void)}
+.app .bar{display:flex;align-items:center;justify-content:space-between;
+          padding:12px 18px;border-bottom:1px solid var(--line);background:var(--deck)}
+.app .bd{display:flex;align-items:center;gap:9px;font-weight:700;font-size:14px}
+.app .who{font-family:var(--f-m);font-size:11px;color:var(--dim)}
+.app .cols{display:grid;grid-template-columns:180px 1fr}
+.app nav{border-right:1px solid var(--line);padding:14px 0;background:var(--deck)}
+.app nav a{display:flex;justify-content:space-between;align-items:center;padding:9px 19px;
+           color:var(--dim);text-decoration:none;font-size:13.5px}
+.app nav a.on{color:var(--ink);font-weight:600;background:var(--deck2);
+              box-shadow:inset 2px 0 0 var(--act)}
+.app nav a em{font-style:normal;font-family:var(--f-m);font-size:11px;color:var(--stop)}
+.app nav .g{font-size:10px;letter-spacing:.13em;text-transform:uppercase;
+            color:var(--faint);padding:16px 19px 6px}
+.app main{padding:22px 24px}
+.app h1{font-size:26px;margin:0 0 6px;letter-spacing:-.02em;font-weight:600;
+        line-height:1.2}
+.app .lead{color:var(--dim);font-size:14px;margin:0 0 22px;line-height:1.65;max-width:58ch}
+.app .lead b{color:var(--ink);font-weight:500;font-family:var(--f-m)}
+.card{background:var(--deck);border:1px solid var(--line);border-radius:var(--r);
+      margin-bottom:16px}
+.card .h{padding:11px 16px;border-bottom:1px solid var(--line);display:flex;
+         justify-content:space-between;align-items:center;gap:10px}
+.card .h .t{font-size:13.5px;font-weight:500}
+.card .h .m{font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--faint)}
+.card .b{padding:17px 16px}
+.say{font-size:13.5px;color:var(--dim);line-height:1.65;margin:0 0 16px}
+.say b{color:var(--ink);font-weight:500}
+.scale{display:flex;justify-content:space-between;font-family:var(--f-m);
+       font-size:10.5px;color:var(--faint);margin-top:6px}
+/* Nhan bang chu o hai dau thang do. Mot ky hieu Hy Lap khong tu giai thich duoc,
+   va bat nguoi doc tra nghia la dieu dau tien lam ho bo cuoc. */
+.scale-words{display:flex;justify-content:space-between;font-size:11.5px;
+             color:var(--dim);margin-top:3px}
+.plain{font-size:13.5px;color:var(--dim);line-height:1.6;margin:-10px 0 22px;
+       padding:11px 14px;border-left:2px solid var(--act);
+       background:color-mix(in srgb,var(--act) 7%,transparent);border-radius:0 5px 5px 0;
+       max-width:62ch}
+.plain b{color:var(--ink);font-weight:500}
+.legend{display:flex;gap:17px;flex-wrap:wrap;margin-top:11px;font-size:11.5px;color:var(--dim)}
+.legend i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:6px;
+          vertical-align:-1px}
+.grow{display:grid;grid-template-columns:66px 1fr 62px 124px;align-items:center;gap:13px;
+      padding:7px 9px;border-radius:4px;cursor:pointer;font-family:var(--f-m);
+      font-size:12.5px;transition:background .12s}
+.grow:hover{background:var(--deck2)}
+.grow[aria-current]{background:color-mix(in srgb,var(--act) 12%,transparent);
+                    box-shadow:inset 2px 0 0 var(--act);font-weight:600}
+.gbar{height:8px;border-radius:2px;background:var(--line2);overflow:hidden}
+.gbar span{display:block;height:100%;border-radius:2px;transform-origin:left;
+  background:linear-gradient(90deg,var(--calm),var(--near));
+  animation:grow .75s cubic-bezier(.2,.8,.2,1) both}
+@keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.gn{text-align:right;font-variant-numeric:tabular-nums}
+.gw{font-size:10.5px;color:var(--near);font-family:var(--f-d)}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font-size:10px;letter-spacing:.11em;text-transform:uppercase;
+   color:var(--faint);font-weight:600;padding:0 12px 9px 0;border-bottom:1px solid var(--line2)}
+td{padding:11px 12px 11px 0;border-bottom:1px solid var(--line);
+   font-variant-numeric:tabular-nums}
+td.m{font-family:var(--f-m)}
+.tag{font-family:var(--f-m);font-size:10.5px;padding:2px 7px;border-radius:3px;
+     border:1px solid currentColor;white-space:nowrap}
+.t-b{color:var(--stop)} .t-s{color:var(--near)} .t-ok{color:var(--calm)}
+.sig{display:inline-flex;align-items:center;gap:7px}
+.sig i{width:3px;height:15px;border-radius:1px;display:inline-block}
+
+/* ── hoạt ảnh SVG ── */
+.pkt{animation:run 5s linear infinite}
+@keyframes run{0%{opacity:0}4%{opacity:1}92%{opacity:1}100%{opacity:0}}
+.ret{animation:runb 5s linear infinite}
+@keyframes runb{0%{opacity:0}4%{opacity:1}92%{opacity:1}100%{opacity:0}}
+.breathe{animation:breathe 4s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:.35}50%{opacity:.95}}
+.blink{animation:blink 5s steps(1) infinite}
+@keyframes blink{0%,58%{opacity:.25}60%,70%{opacity:1}72%,100%{opacity:.25}}
+.draw{stroke-dasharray:300;stroke-dashoffset:300;animation:draw 1.4s ease-out .15s both}
+@keyframes draw{to{stroke-dashoffset:0}}
+.settle{animation:settle 1.1s cubic-bezier(.16,1,.3,1) both}
+@keyframes settle{from{opacity:0;transform:translateY(-24px)}to{opacity:1;transform:translateY(0)}}
+.rise{animation:rise 1s cubic-bezier(.16,1,.3,1) both;transform-origin:bottom}
+@keyframes rise{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;
+       margin-top:20px}
+.rule{border:1px solid var(--line);border-radius:var(--r);padding:15px 16px;background:var(--deck)}
+.rule .n{font-family:var(--f-m);font-size:10.5px;color:var(--act);letter-spacing:.1em}
+.rule .t{font-size:14.5px;font-weight:500;margin:8px 0 7px}
+.rule .d{font-size:13px;color:var(--dim);line-height:1.6}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="hdr">
+  <div class="b"><span class="beacon"></span>Traffic Shaper · hệ thống thiết kế</div>
+  <div class="toggle">
+    <input type="radio" name="mode" id="ml"><label for="ml">Sáng</label>
+    <input type="radio" name="mode" id="md" checked><label for="md">Tối</label>
+  </div>
+</div>
+
+<p class="eyebrow">Phần 1</p>
+<h2 class="sh">Agent của bạn đang chạy như thế nào</h2>
+<p class="sn">
+  Sơ đồ này <b>không phải hình minh hoạ</b>. Mọi tên file, mọi lệnh, mọi con số nhịp
+  đều lấy từ code đang chạy. Nhịp đập của hoạt ảnh là <b>5 giây</b>, đúng bằng chu kỳ
+  agent gom log và gửi đi thật. Vòng chảy đi hết một lượt rồi quay lại chính là vòng đời
+  thật của một quyết định.
+</p>
+
+<div class="stage">
+  <div class="stage-h">
+    <span class="t">Vòng đời một quyết định · máy của bạn ↔ nền tảng</span>
+    <span class="m">chu kỳ 5 giây · 0 request từ trang này</span>
+  </div>
+
+  <svg class="diagram" viewBox="0 0 1160 480" role="img"
+       aria-label="Sơ đồ agent đọc log, gửi telemetry, nhận quyết định và ghi luật chặn">
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6"
+              markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+      </marker>
+      <linearGradient id="wire" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="var(--calm)" stop-opacity=".25"/>
+        <stop offset="1" stop-color="var(--calm)" stop-opacity=".85"/>
+      </linearGradient>
+      <linearGradient id="wireb" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="var(--stop)" stop-opacity=".85"/>
+        <stop offset="1" stop-color="var(--stop)" stop-opacity=".25"/>
+      </linearGradient>
+    </defs>
+
+    <!-- ══ NHÃN CỘT ══ -->
+    <text x="118" y="26" text-anchor="middle" fill="var(--faint)" font-size="10.5"
+          font-family="IBM Plex Mono" letter-spacing="2">MÁY CHỦ CỦA BẠN</text>
+    <text x="620" y="26" text-anchor="middle" fill="var(--faint)" font-size="10.5"
+          font-family="IBM Plex Mono" letter-spacing="2">NỀN TẢNG · AWS LAMBDA</text>
+    <text x="1055" y="26" text-anchor="middle" fill="var(--faint)" font-size="10.5"
+          font-family="IBM Plex Mono" letter-spacing="2">BỘ NHỚ</text>
+
+    <!-- ══ KHỐI: MÁY CHỦ KHÁCH HÀNG ══ -->
+    <rect x="22" y="40" width="192" height="300" rx="8" fill="var(--deck2)"
+          stroke="var(--line2)"/>
+    <!-- nginx -->
+    <rect x="40" y="58" width="156" height="52" rx="5" fill="var(--deck)" stroke="var(--line2)"/>
+    <text x="52" y="78" fill="var(--ink)" font-size="12.5" font-weight="600">nginx</text>
+    <text x="52" y="96" fill="var(--dim)" font-size="10.5" font-family="IBM Plex Mono">
+      access.log</text>
+    <circle cx="180" cy="76" r="3.5" fill="var(--calm)" class="blink"/>
+
+    <!-- mũi tên đọc log -->
+    <line x1="118" y1="110" x2="118" y2="138" stroke="var(--line2)" stroke-width="1.5"
+          marker-end="url(#ar)" color="var(--line2)"/>
+    <text x="126" y="128" fill="var(--faint)" font-size="10" font-family="IBM Plex Mono">
+      tail -f</text>
+
+    <!-- agent -->
+    <rect x="40" y="140" width="156" height="66" rx="5" fill="var(--deck)"
+          stroke="var(--calm)" stroke-opacity=".5"/>
+    <text x="52" y="161" fill="var(--ink)" font-size="12.5" font-weight="600">
+      traffic-shaper agent</text>
+    <text x="52" y="178" fill="var(--dim)" font-size="10.5" font-family="IBM Plex Mono">
+      gom 100 dòng / 5 giây</text>
+    <text x="52" y="194" fill="var(--dim)" font-size="10.5" font-family="IBM Plex Mono">
+      đệm tối đa 1.000</text>
+
+    <!-- công cụ thi hành -->
+    <text x="40" y="230" fill="var(--faint)" font-size="9.5" font-family="IBM Plex Mono"
+          letter-spacing="1.6">CÔNG CỤ NÓ GHI LUẬT</text>
+    <rect x="40" y="240" width="74" height="42" rx="5" fill="var(--deck)"
+          stroke="var(--stop)" stroke-opacity=".45"/>
+    <text x="50" y="257" fill="var(--ink)" font-size="11" font-weight="600">nginx</text>
+    <text x="50" y="272" fill="var(--dim)" font-size="8.5" font-family="IBM Plex Mono">
+      deny.conf</text>
+    <rect x="122" y="240" width="74" height="42" rx="5" fill="var(--deck)"
+          stroke="var(--stop)" stroke-opacity=".45"/>
+    <text x="132" y="257" fill="var(--ink)" font-size="11" font-weight="600">iptables</text>
+    <text x="132" y="272" fill="var(--dim)" font-size="8.5" font-family="IBM Plex Mono">
+      DROP</text>
+    <text x="40" y="303" fill="var(--faint)" font-size="9.5" font-family="IBM Plex Mono">
+      /etc/nginx/conf.d/</text>
+    <text x="40" y="317" fill="var(--faint)" font-size="9.5" font-family="IBM Plex Mono">
+      aiops-agent-deny.conf</text>
+    <text x="40" y="331" fill="var(--faint)" font-size="9.5" font-family="IBM Plex Mono">
+      → nginx -s reload</text>
+
+    <!-- ══ DÂY ĐI: agent → nền tảng ══ -->
+    <line x1="214" y1="172" x2="470" y2="172" stroke="url(#wire)" stroke-width="2"/>
+    <text x="342" y="163" text-anchor="middle" fill="var(--dim)" font-size="10"
+          font-family="IBM Plex Mono">POST /agent/v1/telemetry</text>
+    <text x="342" y="190" text-anchor="middle" fill="var(--faint)" font-size="9.5"
+          font-family="IBM Plex Mono">HTTPS · X-Agent-Key</text>
+    <g class="pkt"><circle r="4" fill="var(--calm)">
+      <animateMotion dur="5s" repeatCount="indefinite"
+                     path="M214,172 L470,172"/></circle></g>
+    <g class="pkt" style="animation-delay:.9s"><circle r="3" fill="var(--calm)" opacity=".6">
+      <animateMotion dur="5s" begin="0.9s" repeatCount="indefinite"
+                     path="M214,172 L470,172"/></circle></g>
+
+    <!-- ══ KHỐI: NỀN TẢNG ══ -->
+    <rect x="470" y="40" width="300" height="300" rx="8" fill="var(--deck2)"
+          stroke="var(--line2)"/>
+    <!-- 4 tầng xử lý -->
+    <rect x="488" y="58" width="264" height="44" rx="5" fill="var(--deck)" stroke="var(--line2)"/>
+    <text x="502" y="80" fill="var(--faint)" font-size="15" font-weight="600" font-family="IBM Plex Mono">1</text>
+    <text x="524" y="80" fill="var(--ink)" font-size="12.5" font-weight="500">Gom log theo khoang 5 giây</text>
+    <text x="524" y="95" fill="var(--dim)" font-size="11">mỗi địa chỉ một bản ghi</text>
+
+    <rect x="488" y="112" width="264" height="52" rx="5" fill="var(--deck)" stroke="var(--line2)"/>
+    <text x="502" y="134" fill="var(--faint)" font-size="15" font-weight="600" font-family="IBM Plex Mono">2</text>
+    <text x="524" y="134" fill="var(--ink)" font-size="12.5" font-weight="500">Đo 7 thói quen của địa chỉ đó</text>
+    <text x="524" y="150" fill="var(--dim)" font-size="11">tốc độ, tỷ lệ lỗi, dung lượng, thời gian,</text>
+    <text x="524" y="163" fill="var(--dim)" font-size="11">số URL, trình duyệt, tỷ lệ POST</text>
+
+    <rect x="488" y="174" width="264" height="52" rx="5" fill="var(--deck)"
+          stroke="var(--act)" stroke-opacity=".5"/>
+    <text x="502" y="196" fill="var(--act)" font-size="15" font-weight="600" font-family="IBM Plex Mono">3</text>
+    <text x="524" y="196" fill="var(--ink)" font-size="12.5" font-weight="500">So với thói quen của CHÍNH BẠN</text>
+    <text x="524" y="212" fill="var(--dim)" font-size="11">không phải của site nào khác.</text>
+    <text x="524" y="225" fill="var(--dim)" font-size="11">Kết quả: khác thường bao nhiêu (σ)</text>
+
+    <rect x="488" y="236" width="264" height="52" rx="5" fill="var(--deck)"
+          stroke="var(--near)" stroke-opacity=".5"/>
+    <text x="502" y="258" fill="var(--near)" font-size="15" font-weight="600" font-family="IBM Plex Mono">4</text>
+    <text x="524" y="258" fill="var(--ink)" font-size="12.5" font-weight="500">Đối chiếu ngưỡng bạn đặt</text>
+    <text x="524" y="274" fill="var(--dim)" font-size="11">quá 4.00σ  →  làm chậm 5 phút</text>
+    <text x="524" y="287" fill="var(--dim)" font-size="11">quá 5.00σ  →  chặn hẳn 1 tiếng</text>
+
+    <text x="620" y="318" text-anchor="middle" fill="var(--calm)" font-size="11">Bạn đổi ngưỡng lúc nào, batch tiếp theo áp dụng ngay lúc đó.</text>
+
+    <!-- ══ DÂY SANG BỘ NHỚ ══ -->
+    <line x1="770" y1="190" x2="960" y2="190" stroke="var(--line2)" stroke-width="1.5"
+          marker-end="url(#ar)" color="var(--line2)"/>
+    <rect x="960" y="60" width="190" height="260" rx="8" fill="var(--deck2)"
+          stroke="var(--line2)"/>
+    <text x="974" y="84" fill="var(--ink)" font-size="11.5" font-weight="600">DynamoDB</text>
+    <text x="974" y="104" fill="var(--dim)" font-size="10" font-family="IBM Plex Mono">
+      quyết định đang hiệu lực</text>
+    <text x="974" y="122" fill="var(--dim)" font-size="10" font-family="IBM Plex Mono">
+      lịch sử 30 ngày</text>
+    <text x="974" y="140" fill="var(--dim)" font-size="10" font-family="IBM Plex Mono">
+      13 khoang sát ngưỡng</text>
+    <text x="974" y="158" fill="var(--dim)" font-size="10" font-family="IBM Plex Mono">
+      nhật ký 4 hành động</text>
+    <rect x="974" y="180" width="162" height="1" fill="var(--line2)"/>
+    <text x="974" y="204" fill="var(--calm)" font-size="10.5" font-family="IBM Plex Mono">
+      14 RCU / 20 WCU</text>
+    <text x="974" y="222" fill="var(--faint)" font-size="9.5" font-family="IBM Plex Mono">
+      trên 25/25 Always-Free</text>
+    <text x="974" y="248" fill="var(--ink)" font-size="17" font-weight="700">$0,00</text>
+    <text x="974" y="266" fill="var(--faint)" font-size="9.5" font-family="IBM Plex Mono">
+      hoá đơn tháng</text>
+    <text x="974" y="294" fill="var(--faint)" font-size="9" font-family="IBM Plex Mono">
+      chạm trần thì TỪ CHỐI,</text>
+    <text x="974" y="306" fill="var(--faint)" font-size="9" font-family="IBM Plex Mono">
+      không bao giờ tính tiền</text>
+
+    <!-- ══ DÂY VỀ: quyết định quay lại ══ -->
+    <path d="M770,300 L770,388 L214,388" fill="none" stroke="url(#wireb)" stroke-width="2"/>
+    <text x="492" y="378" text-anchor="middle" fill="var(--dim)" font-size="10"
+          font-family="IBM Plex Mono">decisions[] + active_ips[]</text>
+    <g class="ret"><circle r="4" fill="var(--stop)">
+      <animateMotion dur="5s" begin="2.3s" repeatCount="indefinite"
+                     path="M770,300 L770,388 L214,388"/></circle></g>
+
+    <!-- ══ PHỐI HỢP NHIỀU AGENT ══ -->
+    <rect x="22" y="404" width="1128" height="62" rx="8" fill="var(--deck2)"
+          stroke="var(--act)" stroke-opacity=".35"/>
+    <text x="40" y="426" fill="var(--act)" font-size="11.5" font-weight="600">
+      Các agent phối hợp với nhau qua đây</text>
+    <text x="40" y="445" fill="var(--dim)" font-size="12">Máy web-01 phát hiện kẻ tấn công. Web-02 và web-03 chặn luôn kẻ đó,</text>
+    <text x="40" y="460" fill="var(--dim)" font-size="12">dù chúng chưa từng nhận một request nào từ nó. Đây là thứ một WAF theo luật không làm được.</text>
+
+    <!-- ba agent nhận cùng một tập -->
+    <g class="settle" style="animation-delay:.5s">
+      <circle cx="812" cy="428" r="12" fill="var(--deck)" stroke="var(--calm)"/>
+      <text x="812" y="432" text-anchor="middle" fill="var(--calm)" font-size="9"
+            font-family="IBM Plex Mono">01</text>
+      <circle cx="852" cy="428" r="12" fill="var(--deck)" stroke="var(--calm)"/>
+      <text x="852" y="432" text-anchor="middle" fill="var(--calm)" font-size="9"
+            font-family="IBM Plex Mono">02</text>
+      <circle cx="892" cy="428" r="12" fill="var(--deck)" stroke="var(--near)"/>
+      <text x="892" y="432" text-anchor="middle" fill="var(--near)" font-size="9"
+            font-family="IBM Plex Mono">03</text>
+      <text x="918" y="425" fill="var(--dim)" font-size="10" font-family="IBM Plex Mono">
+        2/3 đã ghi luật</text>
+      <text x="918" y="439" fill="var(--near)" font-size="10" font-family="IBM Plex Mono">
+        03 chưa lấy về</text>
+    </g>
+    <text x="1055" y="432" text-anchor="end" fill="var(--faint)" font-size="9.5"
+          font-family="IBM Plex Mono">hết hạn → agent tự gỡ luật</text>
+  </svg>
+
+  <div class="ctl">
+    <button class="btn btn--p">Tạm dừng chặn</button>
+    <button class="btn">Đẩy luật xuống ngay</button>
+    <button class="btn">Xem file nginx agent đã ghi</button>
+    <span class="sp"></span>
+    <button class="btn btn--d">Gỡ mọi luật trên cả 3 máy</button>
+  </div>
+</div>
+
+<div class="pipe">
+  <div class="st"><div class="k">1 · Đọc log</div><div class="v">184.220</div>
+    <div class="s ok">5 agent đang gửi</div></div>
+  <div class="st"><div class="k">2 · Đo khoảng cách</div><div class="v">3.910</div>
+    <div class="s">nguồn khác nhau</div></div>
+  <div class="st"><div class="k">3 · Vượt cổng</div><div class="v">2</div>
+    <div class="s bad">1 chậm · 1 chặn</div></div>
+  <div class="st"><div class="k">4 · Đã ghi luật</div>
+    <div class="v">2<span style="font-size:15px;color:var(--faint)">/3</span></div>
+    <div class="s bad">1 agent chưa nhận</div></div>
+</div>
+
+<!-- ════════════════ PHẦN 2 ════════════════ -->
+<div class="sec">
+  <p class="eyebrow">Phần 2</p>
+  <h2 class="sh">Màn hình điều khiển</h2>
+  <p class="sn">
+    Cùng hệ token, cùng ngữ nghĩa màu. Trên trục σ, <b>màu chính là khoảng cách</b> khỏi
+    bình thường của bạn — người xem hiểu ngay chỗ nào đáng lo mà không cần đọc chú giải.
+    Bấm nút <b>Sáng/Tối</b> ở đầu trang để xem cả hai chế độ.
+  </p>
+
+  <div class="app">
+    <div class="bar">
+      <div class="bd"><span class="beacon"></span>Traffic Shaper</div>
+      <div class="who">acme-prod · owner@acme.example</div>
+    </div>
+    <div class="cols">
+      <nav>
+        <div class="g">Điều khiển</div>
+        <a href="#" class="on">Cổng <em>2</em></a>
+        <a href="#">Lịch sử</a>
+        <a href="#">Cho qua</a>
+        <div class="g">Hạ tầng</div>
+        <a href="#">Agents <em>1</em></a>
+        <a href="#">Mô hình</a>
+      </nav>
+      <main>
+        <h1>Cổng</h1>
+        <p class="lead">5 agent đang báo cáo · lần gần nhất <b>8 giây trước</b> ·
+          đo được <b>184.220</b> request trong 24 giờ</p>
+        <p class="plain"><b>σ đọc là "khác thường bao nhiêu"</b> so với chính traffic
+          của bạn. 0 là giống hệt ngày thường. Càng lớn càng lạ. Bạn chọn ngưỡng
+          bắt đầu hành động.</p>
+
+        <div class="card">
+          <div class="h"><span class="t">Traffic của bạn, xếp theo khoảng cách khỏi bình thường</span>
+            <span class="m">24 giờ</span></div>
+          <div class="b">
+            <p class="say">Mỗi chấm là một nguồn. Càng sang phải càng khác thường.
+              <b>Màu chính là khoảng cách.</b> Hai đường đứt là hai cổng bạn đặt.</p>
+
+            <svg viewBox="0 0 900 200" preserveAspectRatio="none"
+                 style="width:100%;height:200px;display:block" role="img"
+                 aria-label="Phân bố nguồn theo khoảng cách sigma">
+              <defs>
+                <linearGradient id="sp" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" stop-color="var(--calm)"/>
+                  <stop offset=".55" stop-color="var(--calm)"/>
+                  <stop offset=".70" stop-color="var(--near)"/>
+                  <stop offset=".85" stop-color="var(--hot)"/>
+                  <stop offset="1" stop-color="var(--stop)"/>
+                </linearGradient>
+                <linearGradient id="rg" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="var(--calm)" stop-opacity=".45"/>
+                  <stop offset="1" stop-color="var(--calm)" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <rect x="600" y="0" width="150" height="168" fill="var(--near)" opacity=".06"/>
+              <rect x="750" y="0" width="150" height="168" fill="var(--stop)" opacity=".08"/>
+              <path class="draw" d="M0,168 L60,164 L140,150 L220,124 L300,88 L380,70
+                       L450,84 L520,116 L580,142 L640,158 L720,165 L820,167 L900,168"
+                    fill="none" stroke="url(#sp)" stroke-width="2.5"/>
+              <path class="rise" d="M0,168 L60,164 L140,150 L220,124 L300,88 L380,70 L450,84
+                       L520,116 L580,142 L640,158 L720,165 L820,167 L900,168 L0,168 Z"
+                    fill="url(#rg)"/>
+              <g class="settle" style="animation-delay:.2s">
+                <circle cx="185" cy="142" r="3" fill="var(--calm)" opacity=".8"/>
+                <circle cx="243" cy="130" r="3" fill="var(--calm)" opacity=".8"/>
+                <circle cx="302" cy="112" r="3.5" fill="var(--calm)" opacity=".9"/>
+                <circle cx="356" cy="124" r="3" fill="var(--calm)" opacity=".8"/>
+                <circle cx="404" cy="104" r="3" fill="var(--calm)" opacity=".75"/>
+                <circle cx="468" cy="118" r="3.5" fill="var(--calm)" opacity=".85"/>
+              </g>
+              <g class="settle" style="animation-delay:.36s">
+                <circle cx="512" cy="132" r="3" fill="var(--near)" opacity=".8"/>
+                <circle cx="548" cy="110" r="3" fill="var(--near)" opacity=".85"/>
+                <circle cx="576" cy="126" r="3" fill="var(--near)" opacity=".8"/>
+              </g>
+              <g class="settle" style="animation-delay:.55s">
+                <circle cx="686" cy="96" r="12" fill="var(--hot)" opacity=".16" class="breathe"/>
+                <circle cx="686" cy="96" r="5" fill="var(--hot)"/>
+                <circle cx="836" cy="80" r="14" fill="var(--stop)" opacity=".18" class="breathe"/>
+                <circle cx="836" cy="80" r="6" fill="var(--stop)"/>
+              </g>
+              <line x1="600" y1="0" x2="600" y2="168" stroke="var(--near)" stroke-width="1.5"
+                    stroke-dasharray="3 3"/>
+              <line x1="750" y1="0" x2="750" y2="168" stroke="var(--stop)" stroke-width="1.5"
+                    stroke-dasharray="3 3"/>
+              <text x="606" y="15" fill="var(--near)" font-size="12"
+                    font-family="IBM Plex Mono">4.00σ làm chậm</text>
+              <text x="756" y="15" fill="var(--stop)" font-size="12"
+                    font-family="IBM Plex Mono">5.00σ chặn</text>
+              <line x1="0" y1="168" x2="900" y2="168" stroke="var(--line2)" stroke-width="1"/>
+            </svg>
+            <div class="scale"><span>0σ</span><span>1σ</span><span>2σ</span><span>3σ</span>
+              <span>4σ</span><span>5σ</span><span>6σ</span></div>
+            <div class="scale-words"><span>giống bạn thường ngày</span>
+              <span>rất khác bạn</span></div>
+            <div class="legend">
+              <span><i style="background:var(--calm)"></i>giống bình thường của bạn</span>
+              <span><i style="background:var(--near)"></i>đang tiến sát cổng</span>
+              <span><i style="background:var(--stop)"></i>đã bị hành động</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="h"><span class="t">Kéo cổng làm chậm</span>
+            <span class="m">13 vị trí · bấm là đổi</span></div>
+          <div class="b">
+            <p class="say"><b>Bấm một dòng là đổi ngưỡng.</b> Con số bên phải cho biết nếu đặt
+              ở đó thì 24 giờ qua sẽ có bấy nhiêu nguồn bị chặn lại. Đặt càng thấp càng
+              bắt nhiều, và càng dễ chặn nhầm khách thật.</p>
+            <div class="grow"><span>3.50σ</span>
+              <div class="gbar"><span style="width:100%;animation-delay:.05s"></span></div>
+              <span class="gn">1.482</span><span class="gw">nhiều báo nhầm hơn</span></div>
+            <div class="grow"><span>3.75σ</span>
+              <div class="gbar"><span style="width:63%;animation-delay:.1s"></span></div>
+              <span class="gn">940</span><span class="gw">nhiều báo nhầm hơn</span></div>
+            <div class="grow" aria-current="true"><span>4.00σ</span>
+              <div class="gbar"><span style="width:25%;animation-delay:.15s"></span></div>
+              <span class="gn">371</span>
+              <span style="font-size:10.5px;color:var(--act);font-family:var(--f-d)">đang dùng</span></div>
+            <div class="grow"><span>4.25σ</span>
+              <div class="gbar"><span style="width:11%;animation-delay:.2s"></span></div>
+              <span class="gn">164</span><span></span></div>
+            <div class="grow"><span>4.50σ</span>
+              <div class="gbar"><span style="width:4%;animation-delay:.25s"></span></div>
+              <span class="gn">61</span><span></span></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="h"><span class="t">Hai nguồn đang bị hành động</span>
+            <span class="m"><button class="btn">Xuất CSV</button></span></div>
+          <div class="b" style="padding-top:12px">
+            <table>
+              <thead><tr><th>Nguồn</th><th>Khoảng cách</th><th>Đang làm gì</th>
+                <th>Tại máy chủ của bạn</th><th></th></tr></thead>
+              <tbody>
+                <tr><td class="m">203.0.113.44</td>
+                  <td class="m"><span class="sig"><i style="background:var(--stop)"></i>6.41σ</span></td>
+                  <td><span class="tag t-b">CHẶN</span></td>
+                  <td><span class="tag t-ok">đã ghi luật · 3/3 agent</span></td>
+                  <td style="text-align:right"><button class="btn">Cho qua</button></td></tr>
+                <tr><td class="m">198.51.100.7</td>
+                  <td class="m"><span class="sig"><i style="background:var(--hot)"></i>4.28σ</span></td>
+                  <td><span class="tag t-s">LÀM CHẬM</span></td>
+                  <td><span class="tag t-s">1/3 agent chưa nhận</span></td>
+                  <td style="text-align:right"><button class="btn">Cho qua</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ PHẦN 3 ════════════════ -->
+<div class="sec">
+  <p class="eyebrow">Phần 3</p>
+  <h2 class="sh">Năm luật cứng, và chỗ chúng nằm trong thiết kế này</h2>
+  <div class="rules">
+    <div class="rule"><div class="n">LUẬT 01</div><div class="t">Chi phí = 0</div>
+      <div class="d">Mọi chuyển động trên trang là CSS/SVG chạy trong trình duyệt.
+        <b>Không một request nào</b>. Sơ đồ nói thẳng con số 14 RCU / 20 WCU trên trần
+        25/25, và nói rằng chạm trần thì hệ thống <b>từ chối</b> chứ không tính tiền.</div></div>
+    <div class="rule"><div class="n">LUẬT 02</div><div class="t">Giải được bài toán doanh nghiệp</div>
+      <div class="d">Sơ đồ trả lời đúng ba câu một người mua hỏi: agent chạy ở đâu, nó
+        <b>ghi luật bằng công cụ gì</b>, và nhiều máy chủ có phối hợp không. Câu thứ ba
+        là thứ WAF theo luật không làm được.</div></div>
+    <div class="rule"><div class="n">LUẬT 03</div><div class="t">Thẩm mỹ cao</div>
+      <div class="d"><b>Một họ chữ duy nhất</b>: IBM Plex Sans cho chữ, Plex Mono cho số và
+        định danh. Tối giản nghĩa là không có họ thứ hai. Màu <b>mang nghĩa</b> chứ
+        không trang trí.</div></div>
+    <div class="rule"><div class="n">LUẬT 04</div><div class="t">Tối ưu UI/UX</div>
+      <div class="d">Chuyển động <b>giải thích</b> chứ không mua vui: hạt rơi vào chỗ của
+        nó, cột mọc từ đáy, quầng thở ở nguồn còn bị giữ. Có
+        <code>prefers-reduced-motion</code>, mọi trạng thái có chữ kèm màu.</div></div>
+    <div class="rule"><div class="n">LUẬT 05</div><div class="t">Táo bạo · hữu ích · phù hợp</div>
+      <div class="d">Táo bạo: không ai vẽ vòng đời agent ra màn hình chính. Hữu ích: bốn
+        nút dưới sơ đồ là <b>điều khiển thật</b>. Phù hợp: nhịp hoạt ảnh đặt đúng 5 giây,
+        bằng chu kỳ flush thật.</div></div>
+  </div>
+</div>
+
+</div>
+</body>
+</html>
