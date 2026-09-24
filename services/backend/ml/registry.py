@@ -10,6 +10,12 @@ from services.backend.core.tables import ModelsTable
 
 logger = logging.getLogger(__name__)
 
+# Duplicated from ml.model rather than imported: ml.model imports THIS
+# module, so the dependency only runs one way. test_per_tenant_thresholds.py
+# asserts the two copies have not drifted.
+TIER1_Z_DEFAULT = -4.0
+TIER2_Z_DEFAULT = -5.0
+
 
 @dataclass
 class ModelMetadata:
@@ -29,6 +35,12 @@ class ModelMetadata:
     # rate". Empty on models trained before this field existed.
     feature_means: list[float] = field(default_factory=list)
     feature_stds: list[float] = field(default_factory=list)
+    # Copied from Tenants each night so classify() finds the tenant's gate in
+    # the stats it already has cached. The value of record is on Tenants: a
+    # model-only home would be silently reverted by the very retrain that
+    # writes this item.
+    tier1_z: float = TIER1_Z_DEFAULT
+    tier2_z: float = TIER2_Z_DEFAULT
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -58,6 +70,11 @@ class ScoreStats:
     # the baseline is read live - without this the two halves of the
     # explanation can describe different models and nothing would say so.
     version: str | None = None
+    # The tenant's own gate, defaulting to the shipped one. It rides with the
+    # stats because those are already in ModelManager._cache when classify()
+    # runs, so a per-tenant threshold costs nothing on the scoring path.
+    tier1_z: float = TIER1_Z_DEFAULT
+    tier2_z: float = TIER2_Z_DEFAULT
 
 
 def load_model_and_stats(resource, tenant_id: str, stage: str = "production",
@@ -81,6 +98,8 @@ def load_model_and_stats(resource, tenant_id: str, stage: str = "production",
             # Carried so every decision can name the baseline it was measured
             # against. The item has always had it; it simply never travelled.
             version=item.get("version"),
+            tier1_z=float(item["tier1_z"]) if "tier1_z" in item else TIER1_Z_DEFAULT,
+            tier2_z=float(item["tier2_z"]) if "tier2_z" in item else TIER2_Z_DEFAULT,
         )
     return _deserialize(item, tenant_id, stage), stats
 

@@ -159,9 +159,15 @@ def classify(score: float, stats: ScoreStats | None) -> AnomalyTier:
     z = z_score(score, stats)
     if z is None:
         return classify_score(score)
-    if z < TIER2_Z:
+    # The tenant's own gate, riding on the stats that are already cached for
+    # scoring. TIER1_Z/TIER2_Z are the default a tenant that never set one
+    # gets, not a global rule any more: a console that explains a decision
+    # and cannot change it is a dashboard, whatever it looks like.
+    tier2 = stats.tier2_z if stats is not None else TIER2_Z
+    tier1 = stats.tier1_z if stats is not None else TIER1_Z
+    if z < tier2:
         return AnomalyTier.HARD_BLOCK
-    if z < TIER1_Z:
+    if z < tier1:
         return AnomalyTier.RATE_LIMIT
     return AnomalyTier.NORMAL
 
