@@ -46,16 +46,25 @@
        public endpoint that stores anything is an abuse surface on a 20 WCU
        budget with no rate limiting in front of it. #}
     <p class="lp-cta">
+      {% if access_email %}
       <a href="mailto:{{ access_email }}?subject=Traffic%20Shaper%20access%20request"
          class="btn btn-primary">Request access</a>
       <a href="#proof" class="btn btn-ghost">Read the measurements</a>
+      {% else %}
+      {# No address configured. A placeholder mailto would open a mail
+         client, send, and bounce somewhere the reader never sees, which is
+         the worst of the available failures: it looks like it worked. #}
+      <a href="#proof" class="btn btn-primary">Read the measurements</a>
+      {% endif %}
     </p>
     <p class="muted lp-fineprint">
-      Invite only. One person reads these and replies by hand, usually within
-      a day or two. There is no signup form and no instant provisioning,
-      because there is no one on call to fix it at three in the morning and
-      saying otherwise would be the first thing on this page that was not
-      true.
+      Invite only.
+      {% if access_email %}One person reads these and replies by hand, usually
+      within a day or two.{% else %}Access is arranged directly with whoever
+      invited you; no address is published here.{% endif %}
+      There is no signup form and no instant provisioning, because there is
+      no one on call to fix it at three in the morning and saying otherwise
+      would be the first thing on this page that was not true.
     </p>
     <p class="muted lp-fineprint">
       Free forever. No card. The whole backend runs inside AWS’s Always-Free

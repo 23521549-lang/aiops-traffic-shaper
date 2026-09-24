@@ -14,7 +14,11 @@ class Settings(BaseSettings):
     # writes. A public write endpoint would be an abuse surface on a 20 WCU
     # account budget with no rate limiting in front of it, and it would make
     # the page uncacheable, which is what keeps it free.
-    access_request_email: str = "access@traffic-shaper.example"
+    # Empty by default, not a plausible-looking placeholder. A deployment
+    # that shipped `access@traffic-shaper.example` would put a mailto on the
+    # front door that opens a mail client, sends, and bounces somewhere the
+    # reader never sees - which is worse than publishing no address at all.
+    access_request_email: str = ""
 
 
 settings = Settings()

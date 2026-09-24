@@ -37,14 +37,33 @@ def _hero(page):
 def test_the_primary_action_is_one_a_stranger_can_take(page):
     """Not "install the agent", whose first step is signing in to an account
     that cannot be created."""
-    hero = _hero(page)
+    monkeypatch_free = _hero(page)
 
-    assert "btn-primary" in hero
-    assert "request access" in hero.lower()
+    assert "btn-primary" in monkeypatch_free
+    assert "install the agent" not in monkeypatch_free.lower()
 
 
-def test_the_action_routes_to_the_operator(page):
-    assert f"mailto:{settings.access_request_email}" in page
+def test_the_action_routes_to_the_operator(page, monkeypatch):
+    monkeypatch.setattr(settings, "access_request_email", "ops@example.com")
+    fresh = TestClient(app, base_url="https://testserver").get("/").text
+
+    assert "mailto:ops@example.com" in fresh
+
+
+def test_no_address_configured_publishes_no_dead_link(page):
+    """The default is empty, not a plausible placeholder. A mailto to a
+    domain that does not exist opens a mail client, sends, and bounces
+    somewhere the reader never sees - which looks like it worked."""
+    assert "mailto:" not in page
+    assert "no address is published" in page.lower()
+
+
+def test_readiness_reports_the_missing_address_without_refusing_traffic(page):
+    """A deploy gate can see it. Taking a serving instance out of rotation
+    over a marketing link would be the larger mistake."""
+    response = TestClient(app, base_url="https://testserver").get("/ready")
+
+    assert response.json()["warnings"]["access_request_email"] is False
 
 
 def test_the_page_says_it_is_invite_only(page):
@@ -53,10 +72,14 @@ def test_the_page_says_it_is_invite_only(page):
     assert "invite" in page.lower()
 
 
-def test_the_page_says_a_person_reads_the_requests(page):
+def test_the_page_says_a_person_reads_the_requests(monkeypatch):
     """One operator, by hand. A reader who expects an instant provisioning
-    email and waits for one has been misled by omission."""
-    lowered = page.lower()
+    email and waits for one has been misled by omission.
+
+    Asserted with an address configured, because that is the only case in
+    which the page invites anyone to send anything."""
+    monkeypatch.setattr(settings, "access_request_email", "ops@example.com")
+    lowered = TestClient(app, base_url="https://testserver").get("/").text.lower()
 
     assert "one person" in lowered or "by hand" in lowered
 

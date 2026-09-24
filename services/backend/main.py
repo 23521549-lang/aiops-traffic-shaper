@@ -270,10 +270,19 @@ def ready(resource=Depends(get_dynamo_resource)):
         "cognito_config": bool(settings.cognito_user_pool_id
                                and settings.cognito_app_client_id),
     }
+    # Reported, deliberately NOT gating. Without an address the landing page
+    # offers no request-access button and says access is arranged directly,
+    # so nothing is broken and nothing bounces - the page is simply quieter
+    # than it could be. Taking a serving instance out of rotation over a
+    # marketing link would be the larger mistake, and a deploy gate that
+    # wants to refuse this can read the field.
+    warnings = {"access_request_email": bool(settings.access_request_email)}
+
     if all(checks.values()):
-        return {"status": "ready", "checks": checks}
+        return {"status": "ready", "checks": checks, "warnings": warnings}
     return JSONResponse(status_code=503,
-                        content={"status": "not_ready", "checks": checks})
+                        content={"status": "not_ready", "checks": checks,
+                                 "warnings": warnings})
 
 
 handler = Mangum(app)
