@@ -407,7 +407,6 @@ kbd {
 .console .stack-sm { margin-top: 10px; }
 
 /* Charts inside the console lose the marketing spacing. */
-.console .chart { margin: 0; }
 .console .chart-caption { font-family: var(--font-mono); font-size: 10px; margin-top: 6px; }
 
 

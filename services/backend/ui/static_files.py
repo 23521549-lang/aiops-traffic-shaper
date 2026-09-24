@@ -31,6 +31,10 @@ _STATIC_DIR = Path(__file__).parent / "static"
 # is dead because the browser got a 404. test_static_assets.py now compares
 # this dict against every template, in both directions.
 _ASSETS = {
+    # Loaded before app.css by base.html. Every surface gets both; only the
+    # console gets console.css, which is what makes the shared-macro rule in
+    # test_shared_chart_styles.py structural rather than a convention.
+    "tokens.css": "text/css",
     "app.css": "text/css",
     "console.css": "text/css",
     "htmx.min.js": "application/javascript",

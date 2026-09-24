@@ -18,7 +18,13 @@ from pathlib import Path
 
 import pytest
 
-_CSS = Path(__file__).resolve().parents[1] / "ui" / "static" / "app.css"
+_UI = Path(__file__).resolve().parents[1] / "ui" / "static"
+# `.on-ink` stayed in app.css: it declares tokens but also sets
+# background and color on an element, which makes it a component
+# carrying a theme rather than a theme. The dark ramp it is compared
+# against moved to tokens.css with the rest of the ramps.
+_CSS = _UI / "app.css"
+_TOKENS = _UI / "tokens.css"
 
 # The ramp, and only the ramp. Surfaces and text differ between the two
 # scopes on purpose.
@@ -28,7 +34,8 @@ _SHARED = ("--tier-normal", "--tier-normal-bg", "--tier-limited",
 
 
 def _block(selector: str) -> str:
-    css = re.sub(r"/\*.*?\*/", "", _CSS.read_text(encoding="utf-8"), flags=re.S)
+    source = _TOKENS if selector.startswith("[data-theme") else _CSS
+    css = re.sub(r"/\*.*?\*/", "", source.read_text(encoding="utf-8"), flags=re.S)
     start = css.index(selector)
     return css[start:css.index("}", start)]
 

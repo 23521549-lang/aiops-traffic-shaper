@@ -8,7 +8,7 @@ once, against white, and declared passing. On `--bg` the same value is
 so the failing case was reachable on the shipped page.
 
 Measuring by eye, or once, does not survive a redesign. This reads the real
-token values out of `app.css` and computes the real ratios, so a token that
+token values out of `tokens.css` and computes the real ratios, so a token that
 drifts fails here rather than in someone's browser.
 
 Ratios use the WCAG 2.x relative-luminance formula. Thresholds:
@@ -20,7 +20,14 @@ from pathlib import Path
 
 import pytest
 
-CSS = Path(__file__).resolve().parents[1] / "ui" / "static" / "app.css"
+# The ramps moved to tokens.css when app.css was split, so that every
+# surface loads them and only the console loads console.css.
+# The ramps live in tokens.css; the component rules that carry them stayed
+# in app.css. Two paths, because this file asks two different questions:
+# "is this pair readable" is about tokens, and "does this component rely
+# on colour alone" is about rules.
+CSS = Path(__file__).resolve().parents[1] / "ui" / "static" / "tokens.css"
+RULES = Path(__file__).resolve().parents[1] / "ui" / "static" / "app.css"
 
 
 def _linear(channel: int) -> float:
@@ -123,7 +130,7 @@ def test_a_tier_is_never_conveyed_by_colour_alone():
     # and a grep would pass or fail for reasons unrelated to the guarantee.
     from services.backend.ui.presenters import tier_css, tier_label
 
-    css = CSS.read_text(encoding="utf-8")
+    css = RULES.read_text(encoding="utf-8")
     for tier in (1, 2):
         assert f".{tier_css(tier)}" in css, tier_css(tier)
         assert tier_label(tier).strip(), tier
@@ -191,7 +198,7 @@ def test_scroll_containers_contain_their_absolutely_positioned_children():
     Found by walking the rendered box tree in a real browser. No assertion
     on a response body can see it, which is why the structural guard is
     pinned here instead."""
-    css = CSS.read_text(encoding="utf-8")
+    css = RULES.read_text(encoding="utf-8")
     for selector in (".table-scroll", ".card"):
         block = css[css.index(selector + " {"):]
         block = block[:block.index("}")]
@@ -203,7 +210,7 @@ def test_the_screen_reader_table_cannot_widen_the_page():
     carry every chart's numbers were laying out at full min-content width.
     Two defences, because `clip` is deprecated and `clip-path` is the
     replacement, and both are cheap."""
-    css = CSS.read_text(encoding="utf-8")
+    css = RULES.read_text(encoding="utf-8")
     block = css[css.index(".sr-only {"):]
     block = block[:block.index("}")]
     assert "clip-path: inset(50%)" in block
