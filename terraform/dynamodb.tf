@@ -13,11 +13,11 @@
 #   MitigationState      3    3
 #   Models               2    1
 #   TelemetryEvents      2    5   + TenantIndex     2 / 5
-#   UsageCounters        1    2
+#   UsageCounters        2    2
 #   ------------------------------
-#   TOTAL               14   20    of 25 / 25
+#   TOTAL               15   20    of 25 / 25
 #
-# Budget sums to 14 RCU / 20 WCU, so the real headroom is ELEVEN RCU and
+# Budget sums to 15 RCU / 20 WCU, so the real headroom is TEN RCU and
 # five WCU. This line said "five RCU" for the life of the project, which
 # made every read look six units more expensive than it was — and is a
 # large part of why nobody costed a chart. Writes are the scarce
@@ -254,9 +254,15 @@ resource "aws_dynamodb_table" "usage_counters" {
   # human and software error was.
   deletion_protection_enabled = true
 
-  name           = "UsageCounters"
-  billing_mode   = "PROVISIONED"
-  read_capacity  = 1
+  name         = "UsageCounters"
+  billing_mode = "PROVISIONED"
+  # 2, not 1. `protection_status` runs on every console page and issues one
+  # BatchGetItem of two keys — the tenant's own counter and the global one,
+  # because the global ceiling refuses ingest platform-wide and a tenant
+  # inside its own share can still be unmeasured. At one page view per
+  # second a 1-RCU table sits exactly on the line and survives only on burst
+  # credit. Headroom was eleven RCU; this spends one, leaving ten.
+  read_capacity  = 2
   write_capacity = 2
   hash_key       = "date"
 

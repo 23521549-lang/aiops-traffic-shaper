@@ -666,6 +666,23 @@ class UsageCountersTable(_SimpleTable):
     _table_name = "UsageCounters"
     _key_names = ("date",)
 
+    def get_many(self, keys: list[str]) -> dict[str, dict]:
+        """Several counter rows in one round trip.
+
+        BatchGetItem bills the same RCU as the same number of GetItems and
+        costs one network call instead of N. The publisher's tenant page
+        issues one GetItem per tenant today; this is the shape that replaces
+        it, and it is what makes "am I protected right now" affordable on
+        every page rather than one.
+        """
+        if not keys:
+            return {}
+        resp = self._table.meta.client.batch_get_item(RequestItems={
+            self._table.name: {"Keys": [{"date": k} for k in keys]},
+        })
+        rows = resp.get("Responses", {}).get(self._table.name, [])
+        return {row["date"]: row for row in rows}
+
     def add_invocation(self, date: str, estimated_gb_seconds: float) -> None:
         """Atomic ADD via the shared `update()` helper — NOT a raw
         `resource.Table(...).update_item(...)` call. `estimated_gb_seconds`

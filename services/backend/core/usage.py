@@ -103,3 +103,46 @@ def tenant_requests_today(resource, tenant_id: str) -> int:
 
 def is_tenant_over_quota(resource, tenant_id: str) -> bool:
     return tenant_requests_today(resource, tenant_id) >= tenant_daily_quota()
+
+
+def protection_status(resource, tenant_id: str) -> dict:
+    """Whether this tenant's traffic is being measured right now, and why not.
+
+    Three facts from two keys on one table, in one BatchGetItem.
+
+    The global one matters as much as the tenant's own, and nothing has ever
+    shown it: `enforce_usage_ceiling` refuses ingest platform-wide, so a
+    tenant sitting comfortably inside its 25% share can still be unmeasured
+    because the day filled up elsewhere. The agent sees that as a 429 and the
+    console said nothing at all, so the screen and the agent disagreed about
+    whether the customer was protected.
+
+    The two reasons are different sentences to the customer: one they can act
+    on by sending less, one they cannot act on at all.
+    """
+    today = _today()
+    # Reuse the key builder rather than formatting the string here. The
+    # marker that makes a tenant row uncollidable with the global row is
+    # documented next to it, and a second copy of that format is a second
+    # place for it to drift.
+    tenant_key = _tenant_counter_key(tenant_id, today)
+    rows = UsageCountersTable(resource).get_many([today, tenant_key])
+
+    global_used = int(rows.get(today, {}).get("total_requests", 0))
+    tenant_used = int(rows.get(tenant_key, {}).get("total_requests", 0))
+    tenant_ceiling = tenant_daily_quota()
+
+    reason = None
+    if global_used >= _DAILY_REQUEST_CEILING:
+        reason = "global"
+    elif tenant_used >= tenant_ceiling:
+        reason = "tenant"
+
+    return {
+        "tenant_used": tenant_used,
+        "tenant_ceiling": tenant_ceiling,
+        "global_used": global_used,
+        "global_ceiling": int(_DAILY_REQUEST_CEILING),
+        "throttled": reason is not None,
+        "throttled_reason": reason,
+    }
