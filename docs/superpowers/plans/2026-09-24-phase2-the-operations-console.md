@@ -494,3 +494,84 @@ will now get a `KeyError`. Task 2's BatchGetItem is bounded at 100 keys and
 the bound is visible on screen. Task 3 deletes a URL; the product is
 invite-only and the page has no external inbound links, and the tests pin that
 the answer it gave is still reachable.
+
+
+---
+
+## What the plan got wrong
+
+Written after execution, against the shipped code.
+
+**1. `admin_auth` could not hand over the claims, for the same reason
+`agent_auth` could not.**
+
+Task 4 needs the operator's identity, and `admin_auth` returns `None` and is
+used as a bare `dependencies=[...]` guard. The fix is the one Phase 1e already
+found on the agent side and the plan did not carry across: `admin_claims`
+verifies the token and the group and returns the claims, and `admin_auth`
+becomes a thin wrapper over it. FastAPI caches a dependency within a request,
+so depending on both costs one verification.
+
+Four tests in `test_cognito_auth.py` called `admin_auth` directly with header
+keyword arguments. They now call `admin_claims`, which is where the reading
+and the checking live.
+
+**2. The `Depends()` marker trap, for the third time in three phases.**
+
+`suspend_tenant_ui`, `reactivate_tenant_ui` and `add_agent_ui` all call their
+API route as a plain function, so a `claims` parameter left to its `Depends()`
+default arrives as the marker object and the audit row would have named it.
+Passed explicitly at all three sites, which is the same decision Phase 0 made
+for `add_whitelist` and for the same reason: a tolerant `actor_of` would write
+a placeholder into an audit field forever.
+
+This has now happened often enough to be a pattern rather than an accident.
+Anything called both as a route and as a function needs every dependency
+passed at the function call site.
+
+**3. Two more constant-zero gauges than the spec knew about.**
+
+The spec names `estimated_gb_seconds`. `dynamodb_consumed_rcu` and
+`dynamodb_consumed_wcu` are worse: declared on `UsageReport`, served by
+`GET /admin/v1/usage`, and written by nothing anywhere in the codebase. A
+permanent zero in an API response is a lie to a machine as well as to a
+person. Both removed.
+
+**4. Removing the Agents page left two dead helpers behind.**
+
+`_agent_rows` and `_FILTERS` had one caller each and ruff does not flag an
+unused module-level function. Found by reading rather than by a tool, which is
+worth noting: the deletion was only complete after the second pass.
+
+`test_agents_partial_filters_by_liveness` was rewritten rather than deleted.
+The distinction it makes - liveness is derived from `last_seen_at`, not from a
+stored `status="stale"` that nothing writes - is real and still has to hold.
+It now makes it on the tenant pane, where an operator deciding whether to
+suspend is already looking.
+
+**5. Agent key revocation has no standalone action to record.**
+
+Spec 2.5 lists "agent key mint or revoke" as one of the four. Minting is
+`register_agent` and now writes a row. Revocation only ever happens as part of
+suspending a tenant - there is no per-agent revoke route - so it is recorded
+on the suspension row as `because="N agent keys revoked"` rather than invented
+as a second event that does not occur. That count is also the part a customer
+disputes: their agents stop, and stay stopped after reactivation.
+
+**6. The admin test fixture needs `cognito:groups: ["admin"]`.** The plan's
+sketch used a `platform-admin` group that does not exist, which renders the
+login page and makes every assertion fail on a page that is not the one under
+test.
+
+## Still outstanding after this phase
+
+- **Nothing from Phase 0 onward has been deployed.** Six phases now. Production
+  is also still missing `bulk-select.js` and `keys.js`.
+- ADR-007's htmx configuration still needs confirming in a real browser.
+- A gate move reaches enforcement at the next nightly retrain; the zero-RCU
+  path to making it immediate is written up at the end of the Phase 1b plan.
+- Phase 3, the landing page, is the last of the rebuild.
+- The full suite has not run in one process since Phase 1d. The machine ran
+  low on memory and the run was stopped by the harness, so it is run in two
+  parts: 919 then 91. The 80% coverage gate has not been applied to the whole
+  in one process since.
