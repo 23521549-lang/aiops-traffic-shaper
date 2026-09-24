@@ -240,6 +240,32 @@ class TenantsTable(_SimpleTable):
     _table_name = "Tenants"
     _key_names = ("tenant_id",)
 
+    def set_threshold(self, tenant_id: str, which: str, z: float) -> float | None:
+        """Move one of this tenant's gates, returning the previous value.
+
+        The previous value comes back rather than being looked up again by
+        the caller, because the audit row needs both and a second GetItem to
+        learn what you just overwrote is a read already paid for.
+
+        On Tenants rather than Models: the nightly retrain rewrites the model
+        item, so a threshold living only there would be silently reverted
+        every night by the very function that trains on it.
+
+        Conditional on the tenant existing, so a deleted or mistyped tenant
+        id fails loudly instead of creating a row that is nothing but a
+        threshold.
+        """
+        resp = self._table.update_item(
+            Key={"tenant_id": tenant_id},
+            UpdateExpression="SET #k = :z",
+            ExpressionAttributeNames={"#k": which},
+            ExpressionAttributeValues={":z": _to_dynamo_safe(float(z))},
+            ConditionExpression="attribute_exists(tenant_id)",
+            ReturnValues="UPDATED_OLD",
+        )
+        old = resp.get("Attributes", {}).get(which)
+        return float(old) if old is not None else None
+
     def suspend(self, tenant_id: str) -> bool:
         return self._set_status_if_exists(tenant_id, "suspended")
 

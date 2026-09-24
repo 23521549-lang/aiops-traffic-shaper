@@ -10,25 +10,33 @@ DynamoDB read paths on every load, so a customer opening the portal purely
 to check their allowed list paid for a mitigation query and a model-metadata
 GetItem too. Each route now reads only what it renders.
 """
+import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import ValidationError
 
-from services.backend.api.cognito_auth import dashboard_auth, dashboard_claims
+from services.backend.api.cognito_auth import (
+    actor_of, dashboard_auth, dashboard_claims,
+)
 from services.backend.api.routes.agent import register_agent
 from services.backend.api.routes.dashboard import (
     add_whitelist, list_history, list_mitigations, list_own_agents, list_series,
     list_whitelist, mark_history_read, model_status, remove_whitelist,
 )
 from services.backend.core.dynamo import get_dynamo_resource
-from services.backend.core.tables import AgentsTable, TenantHistoryTable
+from services.backend.api.routes.agent import _try_history
+from services.backend.core.tables import (
+    AgentsTable, TenantHistoryTable, TenantsTable,
+)
 from services.backend.core.usage import (
     protection_status as usage_protection_status,
 )
 from services.backend.ml.model import TIER1_Z, TIER2_Z, ModelManager
-from services.backend.ui.charts import build_axis, deviation_chart, downsample
+from services.backend.ui.charts import (
+    build_axis, deviation_chart, downsample,
+)
 from services.backend.schemas.agent_register import AgentRegisterRequest
 from services.backend.schemas.whitelist import WhitelistRequest
 from services.backend.ui.csrf import CSRF_COOKIE_NAME, verify_csrf
@@ -322,6 +330,54 @@ def add_agent_ui(request: Request, label: str = "",
 
     return _agents_page(request, tenant_id, resource, created=created,
                         error=error, label=label)
+
+
+@router.post("/dashboard/ui/gate", response_class=HTMLResponse,
+             dependencies=[Depends(verify_csrf)])
+def move_gate(tier: int = 1, sigma: float = 0.0,
+              tenant_id: str = Depends(dashboard_auth),
+              claims: dict = Depends(dashboard_claims),
+              resource=Depends(get_dynamo_resource)):
+    """Move one gate to one of its thirteen legal positions.
+
+    Body-less: the values ride in the query string, the same shape the theme
+    toggle uses, because a form-encoded body would need CloudFront's payload
+    hash (ADR-005) and the whole point of this control is that it needs no
+    script at all.
+
+    The position is checked against the thirteen the curve offers. Accepting
+    4.1 would set a gate whose consequence the screen cannot show, because no
+    bin measures it, and a control that can be put somewhere it cannot report
+    on is a control that lies.
+    """
+    if tier not in (1, 2) or sigma not in TenantHistoryTable.NEAR_BINS:
+        raise HTTPException(status_code=400,
+                            detail="That is not one of the available positions.")
+
+    tenants = TenantsTable(resource)
+    tenant = tenants.get(tenant_id=tenant_id) or {}
+    other = float(tenant.get("tier2_z" if tier == 1 else "tier1_z",
+                             TIER2_Z if tier == 1 else TIER1_Z))
+    # The slow gate sits closer to normal than the block gate. The other way
+    # round, every source past the block line is blocked without ever being
+    # slowed, and the middle band is empty and meaningless.
+    if (tier == 1 and -sigma <= other) or (tier == 2 and -sigma >= other):
+        raise HTTPException(
+            status_code=400,
+            detail=("The slow gate has to sit closer to your normal than the "
+                    "block gate."))
+
+    which = "tier1_z" if tier == 1 else "tier2_z"
+    old = tenants.set_threshold(tenant_id, which, -sigma)
+    # Reporting, so it is wrapped: a throttled audit write must not lose the
+    # threshold change the customer just made.
+    _try_history(TenantHistoryTable(resource).record_setting,
+                 tenant_id, actor=actor_of(claims), what=which,
+                 old=old, new=-sigma, now=int(time.time()))
+
+    # Back to the screen they moved it from. The consequence of the move is
+    # the thing they were reading.
+    return Response(status_code=200, headers={"HX-Redirect": "/dashboard/ui"})
 
 
 @router.get("/dashboard/ui/whitelist", response_class=HTMLResponse)
