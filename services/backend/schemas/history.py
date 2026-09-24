@@ -50,3 +50,14 @@ class HourlyPoint(BaseModel):
     batches: int = 0
     tier1_decisions: int = 0
     tier2_decisions: int = 0
+    # The thirteen near-threshold bins, written onto this same hourly row by
+    # record_traffic since Phase 0 and never carried off it. Keys are "n300"
+    # through "n600": the bin edge in sigma, times a hundred.
+    #
+    # One declared field rather than thirteen, because the bin edges are
+    # defined once on TenantHistoryTable.NEAR_BINS and thirteen names here
+    # would be a second copy of that list to keep in step. Declared rather
+    # than left to extra="allow", because this model is also a JSON API
+    # response shape and an undeclared attribute there is an unversioned
+    # contract.
+    near: dict[str, int] = Field(default_factory=dict)

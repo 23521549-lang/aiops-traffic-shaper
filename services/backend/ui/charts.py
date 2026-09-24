@@ -29,6 +29,7 @@ This module returns plain data. The markup lives in `_charts.html`, which
 keeps the templates readable and lets these functions be tested on numbers
 rather than on strings of angle brackets.
 """
+import math
 from dataclasses import dataclass, field
 
 # Thresholds, in standard deviations below the tenant's own mean. Mirrors
@@ -533,3 +534,134 @@ def feature_runs(points: list[FeaturePoint]) -> list[list[FeaturePoint]]:
     if current:
         runs.append(current)
     return runs
+
+
+# --- history: the same axis, rotated and stacked ---------------------------
+
+# Twenty-four rows read comfortably at 10 units each; a hundred and sixty
+# eight at that height is a very long scroll of the same picture. The grid
+# keeps its total height roughly constant and shrinks the row instead.
+GRID_MAX_HEIGHT = 260.0
+GRID_MAX_ROW_HEIGHT = 10.0
+GRID_LEVELS = 4
+
+
+@dataclass
+class GridCell:
+    x: float
+    width: float
+    count: int
+    level: int
+    sigma: float
+    identified: bool
+
+
+@dataclass
+class GridRow:
+    hour_start: int
+    y: float
+    live: bool
+    cells: list[GridCell] = field(default_factory=list)
+
+
+@dataclass
+class Grid:
+    width: float
+    height: float
+    row_height: float
+    busiest: int
+    rows: list[GridRow] = field(default_factory=list)
+    bands: list[Band] = field(default_factory=list)
+    gate1_x: float = 0.0
+    gate2_x: float = 0.0
+    gate1_sigma: float = 0.0
+    gate2_sigma: float = 0.0
+    ticks: list[tuple[int, str]] = field(default_factory=list)
+
+
+def history_grid(series, episodes, tier1_sigma: float,
+                 tier2_sigma: float) -> Grid:
+    """One row per hour, sigma along the row, the gates straight through.
+
+    The deviation chart this replaces plotted one number per hour - the worst
+    sigma seen - which answers "was there a spike" and cannot answer "where
+    did my traffic sit", the question the gate control is for. Both come out
+    of the thirteen bins the hourly row already carries, so this is a second
+    reading of a Query the page already makes rather than a second Query.
+
+    Only cells with a count are emitted. That is a requirement and not an
+    optimisation: a dense 168-row grid emitting all thirteen bins per row is
+    about 22KB of markup describing absence.
+    """
+    from services.backend.core.tables import TenantHistoryTable
+
+    ordered = sorted(series, key=lambda p: p.hour_start)
+    width = SIGMA_CEILING * AXIS_UNITS_PER_SIGMA
+    if not ordered:
+        return Grid(width=width, height=0, row_height=0, busiest=0)
+
+    row_height = min(GRID_MAX_ROW_HEIGHT, GRID_MAX_HEIGHT / len(ordered))
+    edges = TenantHistoryTable.NEAR_BINS
+    step = (edges[1] - edges[0]) if len(edges) > 1 else 0.25
+    cell_width = step * AXIS_UNITS_PER_SIGMA
+
+    # Identified sources are not in the bins: a source past the gate is stored
+    # by address and never folded into the anonymous shape, so without this
+    # the grid would simply stop at the gate.
+    by_hour: dict[int, list] = {}
+    for e in episodes:
+        if e.last_z is None:
+            continue
+        by_hour.setdefault(int(e.hour_start), []).append(e)
+
+    rows: list[GridRow] = []
+    busiest = 0
+    for i, point in enumerate(ordered):
+        hour = int(point.hour_start)
+        cells: list[GridCell] = []
+        for edge in edges:
+            count = int((point.near or {}).get("n%d" % round(edge * 100), 0))
+            if not count:
+                continue
+            busiest = max(busiest, count)
+            cells.append(GridCell(x=axis_x(edge), width=cell_width,
+                                  count=count, level=0, sigma=edge,
+                                  identified=False))
+        for e in by_hour.get(hour, []):
+            magnitude = abs(e.last_z)
+            # Clamped for DRAWING only, exactly as the main axis clamps: the
+            # reading itself is reported unclipped beside it.
+            cells.append(GridCell(x=axis_x(magnitude), width=2.0, count=1,
+                                  level=GRID_LEVELS, sigma=magnitude,
+                                  identified=True))
+        rows.append(GridRow(
+            hour_start=hour, y=round(i * row_height, 2),
+            # An hour whose only record is a block it issued has plainly not
+            # lost its feed, whatever the batch counter says.
+            live=bool(point.batches) or bool(cells),
+            cells=cells))
+
+    # Bucketed after the fact, because the busiest cell is not known until
+    # every row has been read.
+    for row in rows:
+        for cell in row.cells:
+            if cell.identified:
+                continue
+            share = cell.count / busiest if busiest else 0
+            # Never zero. One near-miss in an otherwise empty hour is exactly
+            # the reading this grid exists to show, and level 0 draws nothing.
+            cell.level = max(1, math.ceil(share * GRID_LEVELS))
+
+    return Grid(
+        width=width,
+        height=round(len(rows) * row_height, 2),
+        row_height=round(row_height, 2),
+        busiest=busiest,
+        rows=rows,
+        bands=axis_bands(tier1_sigma, tier2_sigma),
+        gate1_x=axis_x(tier1_sigma),
+        gate2_x=axis_x(tier2_sigma),
+        gate1_sigma=tier1_sigma,
+        gate2_sigma=tier2_sigma,
+        ticks=[(i, f"{i}σ") for i in range(int(SIGMA_CEILING) + 1)],
+    )

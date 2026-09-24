@@ -239,6 +239,8 @@ def list_series(since: int | None = None, until: int | None = None,
         batches=int(r.get("batches", 0)),
         tier1_decisions=int(r.get("tier1_decisions", 0)),
         tier2_decisions=int(r.get("tier2_decisions", 0)),
+        near={k: int(v) for k, v in r.items()
+              if k.startswith("n") and k[1:].isdigit()},
     ) for r in rows]
 
 
