@@ -44,7 +44,7 @@ from services.backend.ui.csrf import CSRF_COOKIE_NAME, verify_csrf
 from services.backend.ui.hx import hx_return
 from services.backend.ui.presenters import (
     absolute_expiry, agent_health, agent_state, axis_state, decompose,
-    reason_label, relative_expiry, severity_detail,
+    reach, reason_label, relative_expiry, severity_detail,
     tier_css, tier_label,
     timestamp_pair,
 )
@@ -53,9 +53,18 @@ from services.backend.ui.templates_env import templates
 router = APIRouter()
 
 
-def _rows(mitigations, now):
+def _rows(mitigations, now, agents=None):
+    """One row per active mitigation.
+
+    `agents` carries principle 1.5 onto every row: the backend decided, and
+    the customer's servers have it only once the agent has collected. Passed
+    in rather than queried, because the caller already read them for the
+    health line.
+    """
+    agents = agents or []
     return [{
         "ip": m.ip,
+        "reach": reach(m.decided_at, agents, now),
         "tier": m.tier,
         "tier_label": tier_label(m.tier),
         "tier_css": tier_css(m.tier),
@@ -122,8 +131,9 @@ def protection_status(request: Request, ip: str | None = None,
     # One Query on the base table's own partition key — no GSI, no scan.
     # Without it an empty mitigation list is indistinguishable from a dead
     # agent, and the page reassures the customer either way.
-    health = agent_health(AgentsTable(resource).query_by_tenant(tenant_id), now)
-    rows = _rows(mitigations, now)
+    agents = AgentsTable(resource).query_by_tenant(tenant_id)
+    health = agent_health(agents, now)
+    rows = _rows(mitigations, now, agents)
     selected = next((r for r in rows if r["ip"] == ip), None)
     stats = None
     if selected:

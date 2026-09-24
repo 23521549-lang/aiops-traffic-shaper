@@ -154,6 +154,11 @@ def ingest_telemetry(
                 features=v.to_list(),
                 reason="behavioral_anomaly",
                 expires_at=int(time.time()) + _TTL_SECONDS[tier],
+                # One integer on a write that already happens. It is what
+                # lets the console separate "we decided this" from "your
+                # servers have it", which are two facts and are permanently
+                # different - the agent is asynchronous by architecture.
+                decided_at=int(time.time()),
             )
             MitigationStateTable(resource).put(tenant_id=tenant_id, **state.model_dump())
             # Keep this bucket out of the nightly retrain. Training on traffic

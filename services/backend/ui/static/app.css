@@ -955,3 +955,15 @@ input[type=text], input[type=password], input[type=email], select {
 .c-grid-cell--id { fill: var(--tier-blocked); fill-opacity: 1; }
 .c-grid-gate { stroke: var(--accent); stroke-width: 2; }
 .c-grid-gate--2 { stroke-dasharray: 5 3; }
+
+/* Decided and in effect are two states, permanently: the agent is
+ * asynchronous by architecture. Never colour alone. This chip in particular
+ * has to survive a screenshot pasted into a ticket, because the question it
+ * answers is the one a dispute starts from. */
+.c-reach {
+  display: inline-block; font-size: var(--text-xs);
+  padding: 1px var(--space-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text-muted);
+  white-space: nowrap;
+}
+.c-reach--on { border-color: var(--tier-normal); color: var(--text); }

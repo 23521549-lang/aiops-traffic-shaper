@@ -402,3 +402,60 @@ def axis_state(health: dict, throttle: dict, model_ready: bool) -> dict:
         "sentence": (f"{reporting} agent{'' if reporting == 1 else 's'} "
                      f"reporting, last seen {seen}."),
     }
+
+
+def reach(decided_at: int, agents: list[dict], now: datetime) -> dict:
+    """Has every agent collected decisions since this one was made.
+
+    Principle 1.5: decided and in effect are two states, permanently. The
+    agent is asynchronous by architecture, so a decision written here has not
+    changed the customer's nginx until the agent next polls - and there is no
+    acknowledgement channel, so this must not claim one.
+
+    `last_seen_at` is touched by `agent_auth` on every authenticated agent
+    request, including the decisions poll, so "has collected since" is a real
+    measurement of the strongest claim the stored data supports. It says the
+    agent collected. It does not say nginx applied it, and the wording keeps
+    that distinction, because the product cannot see past the collection.
+
+    A fleet is protected at the pace of its slowest member, so this is an
+    ALL and not a majority. An unreadable or missing timestamp counts as not
+    reached: a parse failure that reports a customer protected is the worst
+    available way to be wrong.
+    """
+    if not decided_at:
+        # Written before the field existed. "We cannot tell" and "not in
+        # effect" are different statements, and the second one would put a
+        # warning on every decision this product took before today.
+        return {"in_effect": False, "label": "Unknown",
+                "detail": "This decision predates the record of when it was "
+                          "taken, so whether your agents have it cannot be "
+                          "established."}
+
+    if not agents:
+        return {"in_effect": False, "label": "Not in effect",
+                "detail": "No agent has collected this yet."}
+
+    reached = 0
+    for agent in agents:
+        try:
+            seen = datetime.fromisoformat(str(agent.get("last_seen_at") or ""))
+        except ValueError:
+            continue
+        # Every timestamp this product writes is UTC. Reading a naive one as
+        # local time would shift it by hours and report a decision collected
+        # that was not, depending only on where the reader happens to be.
+        if seen.tzinfo is None:
+            seen = seen.replace(tzinfo=timezone.utc)
+        if int(seen.timestamp()) >= int(decided_at):
+            reached += 1
+
+    total = len(agents)
+    if reached == total:
+        return {"in_effect": True, "label": "In effect",
+                "detail": f"Collected by {total} agent"
+                          f"{'' if total == 1 else 's'}."}
+    behind = total - reached
+    return {"in_effect": False, "label": "Not everywhere yet",
+            "detail": f"{behind} of {total} agent"
+                      f"{'' if total == 1 else 's'} has not collected this yet."}

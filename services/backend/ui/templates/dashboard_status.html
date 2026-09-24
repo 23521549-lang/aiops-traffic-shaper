@@ -115,6 +115,7 @@ no agent has ever reported
           </th>
           <th scope="col">Source</th>
           <th scope="col">State</th>
+          <th scope="col">At your servers</th>
           <th scope="col">Deviation</th>
           <th scope="col">Ends</th>
           <th scope="col"><span class="sr-only">Actions</span></th>
@@ -131,6 +132,11 @@ no agent has ever reported
             <a href="/dashboard/ui?ip={{ m.ip }}">{{ m.ip }}</a>
           </th>
           <td><span class="c-state c-state--{{ 'blocked' if m.tier >= 2 else 'slowed' }}">{{ m.tier_label }}</span></td>
+          {# Principle 1.5. The agent is asynchronous by architecture, so
+             "decided" and "in effect" are two facts and a column showing one
+             of them is wrong about the other half the time it matters. #}
+          <td><span class="c-reach{{ ' c-reach--on' if m.reach.in_effect }}"
+                    title="{{ m.reach.detail }}">{{ m.reach.label }}</span></td>
           <td class="d">{{ m.sigma_short }}</td>
           <td class="d" title="{{ m.expires_exact }}">{{ m.expires_label }}</td>
           <td class="c-row-actions">
@@ -182,6 +188,7 @@ no agent has ever reported
     <div class="c-detail-id">{{ selected.ip }}</div>
     <div>
       <span class="c-state c-state--{{ 'blocked' if selected.tier >= 2 else 'slowed' }}">{{ selected.tier_label }}</span>
+      <span class="c-reach{{ ' c-reach--on' if selected.reach.in_effect }}">{{ selected.reach.label }}</span>
       <span class="c-summary">{{ selected.severity }} · {{ selected.expires_label }}</span>
     </div>
   </div>
@@ -261,6 +268,7 @@ no agent has ever reported
         <dt>Deviation</dt><dd>{{ selected.sigma_short }}</dd>
         <dt>Ends</dt><dd>{{ selected.expires_exact or "no expiry" }}</dd>
         <dt>Reason</dt><dd>{{ selected.reason }}</dd>
+        <dt>At your servers</dt><dd>{{ selected.reach.detail }}</dd>
       </dl>
     </div>
   </div>

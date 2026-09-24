@@ -23,6 +23,12 @@ class MitigationState(BaseModel):
     features: list[float] | None = None
     reason: str
     expires_at: int
+    # When this was decided. Principle 1.5: decided and in effect are two
+    # states, permanently, and without this the console cannot tell whether
+    # the agent has collected a given decision yet - it can only say that the
+    # backend wrote one. Zero on rows written before the field existed, which
+    # the presenter reads as "cannot tell" rather than as the epoch.
+    decided_at: int = 0
 
     @field_validator("ip")
     @classmethod
