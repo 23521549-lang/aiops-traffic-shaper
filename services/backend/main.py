@@ -2,6 +2,8 @@ import logging
 import os
 
 from botocore.exceptions import BotoCoreError, ClientError
+import time
+
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from mangum import Mangum
@@ -12,7 +14,7 @@ from services.backend.api.routes.agent import router as agent_router
 from services.backend.api.routes.dashboard import router as dashboard_router
 from services.backend.core.config import settings
 from services.backend.core.dynamo import get_dynamo_resource
-from services.backend.core.usage import record_invocation
+from services.backend.core.usage import lambda_memory_gb, record_invocation
 from services.backend.ui.auth_pages import router as ui_auth_router
 from services.backend.ui.control_platform import router as ui_control_platform_router
 from services.backend.ui.csrf import CsrfError
@@ -167,9 +169,17 @@ async def track_usage(request, call_next):
     covers authenticated work only. This is a mitigation, not a cure — a
     caller holding valid credentials can still spend quota; edge rate limiting
     remains the real answer, and remains out of scope for the 0-cost model."""
+    started = time.perf_counter()
     response = await call_next(request)
     if _should_meter(request, response):
-        record_invocation(_resolve_resource(request))
+        # The figure the operations console shows. It used to take
+        # record_invocation's 0.0 default, so GB-seconds read 0.00 for the
+        # life of the product - a gauge showing a constant. Both halves are
+        # free here: this middleware is already wrapping the call, and Lambda
+        # publishes its own memory size.
+        elapsed = time.perf_counter() - started
+        record_invocation(_resolve_resource(request),
+                          lambda_memory_gb() * elapsed)
     return response
 
 

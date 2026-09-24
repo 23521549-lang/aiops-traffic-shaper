@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -16,8 +17,6 @@ class UsageReport:
     date: str
     total_requests: int
     estimated_gb_seconds: float
-    dynamodb_consumed_rcu: float
-    dynamodb_consumed_wcu: float
     ceiling_warning: bool
 
 
@@ -25,7 +24,36 @@ def _today() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
+# What this function is configured at. Lambda publishes it in the environment;
+# locally there is no Lambda, and the fallback is the size this product is
+# actually deployed at, so a figure read on a laptop is in the same units as
+# one read in production.
+_DEFAULT_MEMORY_MB = 512
+
+
+def lambda_memory_gb() -> float:
+    """Half of the GB-seconds figure. The other half is wall time, which the
+    middleware already has because it is already wrapping the call.
+
+    Tolerant of a malformed value on purpose: this runs on every metered
+    request, and an environment variable somebody mistyped must not turn
+    metering into a 500 on the product itself.
+    """
+    try:
+        mb = int(os.environ.get("AWS_LAMBDA_FUNCTION_MEMORY_SIZE",
+                                _DEFAULT_MEMORY_MB))
+    except (TypeError, ValueError):
+        mb = _DEFAULT_MEMORY_MB
+    return (mb if mb > 0 else _DEFAULT_MEMORY_MB) / 1024
+
+
 def record_invocation(resource, estimated_gb_seconds: float = 0.0) -> None:
+    """One ADD on the day's counter row.
+
+    The default is 0.0 and for most of this product's life every caller took
+    it, so the operations console displayed GB-seconds: 0.00 permanently. A
+    gauge showing a constant is a lie with a number on it.
+    """
     UsageCountersTable(resource).add_invocation(_today(), estimated_gb_seconds)
 
 
@@ -37,8 +65,6 @@ def get_usage_report(resource, date: str | None) -> UsageReport:
         date=d,
         total_requests=total,
         estimated_gb_seconds=float(item.get("estimated_gb_seconds", 0)),
-        dynamodb_consumed_rcu=float(item.get("dynamodb_consumed_rcu", 0)),
-        dynamodb_consumed_wcu=float(item.get("dynamodb_consumed_wcu", 0)),
         ceiling_warning=total >= _DAILY_REQUEST_CEILING * _WARNING_RATIO,
     )
 
