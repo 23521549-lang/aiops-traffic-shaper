@@ -2,6 +2,11 @@ from pydantic import BaseModel, Field, field_validator
 
 from services.backend.schemas.mitigation import MitigationState
 
+# The enforcement backends services/agent/enforcer/ ships an adapter for.
+# Declared here rather than imported from the agent package: the backend does
+# not depend on the agent, and this is the wire contract between them.
+KNOWN_ENFORCERS = frozenset({"nginx", "iptables"})
+
 
 class LogRecord(BaseModel):
     time_iso8601: str
@@ -27,6 +32,26 @@ class TelemetryBatch(BaseModel):
     # amortising a read; nothing enforced it. A 422 is strictly better than
     # a fan-out that throttles ingest for every tenant.
     logs: list[LogRecord] = Field(max_length=1000)
+    # What this agent found it can actually write a rule with. An EMPTY list
+    # is a real answer and the one that matters: detect_adapters() returning
+    # nothing is a legitimate outcome on a machine with no nginx and no
+    # iptables, and that agent then reports telemetry forever while enforcing
+    # none of the decisions it is sent. Absent means an agent older than this
+    # field, which is a third state and not the same as empty.
+    enforcers: list[str] | None = None
+
+    @field_validator("enforcers")
+    @classmethod
+    def validate_enforcers(cls, v: list[str] | None) -> list[str] | None:
+        """A closed set, because this is written onto an item and rendered on
+        a page. The names come from the adapter classes, never from an
+        agent's configuration."""
+        if v is None:
+            return None
+        unknown = [n for n in v if n not in KNOWN_ENFORCERS]
+        if unknown:
+            raise ValueError(f"unknown enforcement backend: {unknown[0]!r}")
+        return v
 
 
 class TelemetryResponse(BaseModel):

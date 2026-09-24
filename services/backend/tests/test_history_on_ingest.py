@@ -12,6 +12,7 @@ decisions back.
 """
 import time
 
+import numpy as np
 import pytest
 
 from services.backend.core.tables import (
@@ -22,6 +23,7 @@ from services.backend.core.tables import (
 @pytest.fixture
 def wired(dynamo_resource, monkeypatch):
     from services.backend.api.dependencies import hash_api_key
+    from services.backend.ml.model import ModelManager
 
     create_all_tables(dynamo_resource)
     now = "2026-09-23T00:00:00Z"
@@ -31,7 +33,31 @@ def wired(dynamo_resource, monkeypatch):
         tenant_id="t-1", agent_id="a-1", agent_label="web-01", registered_at=now,
         last_seen_at=now, agent_version="1.0.0",
         api_key_hash=hash_api_key("rawkey"), status="active")
-    return dynamo_resource
+
+    # A scorer of this file's own. ModelManager._cache is class-level and
+    # survives across test files by design, so the decision tests below used
+    # to pass on whatever model an earlier file happened to leave loaded for
+    # "t-1" - and failed the moment another file started clearing it. The
+    # cache is cleared on the way in as well as out, because inheriting a
+    # real model here would be the same accident with the sign flipped.
+    class _AlwaysAnomalous:
+        def decision_function(self, X):
+            return np.full(len(X), -0.5)
+
+    ModelManager._cache.clear()
+    # (model, stats): stats None means no usable spread, so classify() falls
+    # back to the absolute thresholds, which is what this stub wants.
+    ModelManager._cache["t-1"] = (_AlwaysAnomalous(), None)
+    yield dynamo_resource
+    ModelManager._cache.clear()
+
+
+# The authenticated agent, passed explicitly at every call below. These tests
+# invoke the route as a plain function, so a `Depends()` default arrives as
+# the marker object rather than a resolved value - the same trap the whitelist
+# routes hit in Phase 0. An item with no `enforcers` is the ordinary case: an
+# agent that has not reported what it can enforce with.
+AGENT = {"tenant_id": "t-1", "agent_id": "a-1"}
 
 
 def _batch(n=3, ip="203.0.113.7"):
@@ -47,7 +73,7 @@ def _batch(n=3, ip="203.0.113.7"):
 def test_a_batch_records_its_traffic(wired):
     from services.backend.api.routes.agent import ingest_telemetry
 
-    ingest_telemetry(_batch(4), tenant_id="t-1", resource=wired)
+    ingest_telemetry(_batch(4), tenant_id="t-1", agent=AGENT, resource=wired)
 
     now = int(time.time())
     series = TenantHistoryTable(wired).query_series("t-1", now - 3600, now)
@@ -60,7 +86,7 @@ def test_traffic_accumulates_across_batches(wired):
     from services.backend.api.routes.agent import ingest_telemetry
 
     for _ in range(3):
-        ingest_telemetry(_batch(2), tenant_id="t-1", resource=wired)
+        ingest_telemetry(_batch(2), tenant_id="t-1", agent=AGENT, resource=wired)
 
     now = int(time.time())
     point = TenantHistoryTable(wired).query_series("t-1", now - 3600, now)[0]
@@ -77,7 +103,7 @@ def test_a_decision_is_recorded_as_an_episode(wired, monkeypatch):
     monkeypatch.setattr(agent_routes, "classify", lambda score, stats: AnomalyTier.HARD_BLOCK)
     ingest = agent_routes.ingest_telemetry
 
-    resp = ingest(_batch(3), tenant_id="t-1", resource=wired)
+    resp = ingest(_batch(3), tenant_id="t-1", agent=AGENT, resource=wired)
     assert resp.decisions
 
     now = int(time.time())
@@ -100,7 +126,7 @@ def test_repeated_decisions_stay_one_episode(wired, monkeypatch):
     # min_requests_threshold, so a 2-log batch produces no decision at all
     # and the test would pass or fail on bucket timing.
     for _ in range(5):
-        agent_routes.ingest_telemetry(_batch(3), tenant_id="t-1", resource=wired)
+        agent_routes.ingest_telemetry(_batch(3), tenant_id="t-1", agent=AGENT, resource=wired)
 
     now = int(time.time())
     episodes = TenantHistoryTable(wired).query_episodes("t-1", now - 3600, now)
@@ -113,7 +139,7 @@ def test_the_rollup_counts_decisions_too(wired, monkeypatch):
     from services.backend.ml.model import AnomalyTier
 
     monkeypatch.setattr(agent_routes, "classify", lambda score, stats: AnomalyTier.HARD_BLOCK)
-    agent_routes.ingest_telemetry(_batch(3), tenant_id="t-1", resource=wired)
+    agent_routes.ingest_telemetry(_batch(3), tenant_id="t-1", agent=AGENT, resource=wired)
 
     now = int(time.time())
     point = TenantHistoryTable(wired).query_series("t-1", now - 3600, now)[0]
@@ -139,7 +165,7 @@ def test_a_failed_episode_write_does_not_fail_ingest(wired, monkeypatch):
 
     monkeypatch.setattr(TenantHistoryTable, "record_decision", boom)
 
-    resp = agent_routes.ingest_telemetry(_batch(3), tenant_id="t-1", resource=wired)
+    resp = agent_routes.ingest_telemetry(_batch(3), tenant_id="t-1", agent=AGENT, resource=wired)
 
     assert resp.decisions, "the decision must still reach the agent"
     assert MitigationStateTable(wired).get(tenant_id="t-1", ip="203.0.113.7") is not None
@@ -156,7 +182,7 @@ def test_a_failed_rollup_write_does_not_fail_ingest(wired, monkeypatch):
 
     monkeypatch.setattr(TenantHistoryTable, "record_traffic", boom)
 
-    resp = agent_routes.ingest_telemetry(_batch(3), tenant_id="t-1", resource=wired)
+    resp = agent_routes.ingest_telemetry(_batch(3), tenant_id="t-1", agent=AGENT, resource=wired)
     assert resp.received == 3
 
 
@@ -174,4 +200,4 @@ def test_a_missing_history_table_does_not_fail_ingest(wired, monkeypatch):
     monkeypatch.setattr(TenantHistoryTable, "record_traffic", boom)
     monkeypatch.setattr(TenantHistoryTable, "record_decision", boom)
 
-    assert agent_routes.ingest_telemetry(_batch(2), tenant_id="t-1", resource=wired).received == 2
+    assert agent_routes.ingest_telemetry(_batch(2), tenant_id="t-1", agent=AGENT, resource=wired).received == 2

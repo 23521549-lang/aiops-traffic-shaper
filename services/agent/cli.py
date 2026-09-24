@@ -140,7 +140,13 @@ def run(config_path: str | None, access_log: str | None, once: bool,
                    "use them.")
 
     collector = Collector(config["backend_url"], config["tenant_id"],
-                          config["api_key"])
+                          config["api_key"],
+                          # Reported on every batch, written by the backend
+                          # only when it changes. An empty list is the answer
+                          # that matters and is sent as one: the console
+                          # cannot otherwise tell "protecting nothing" from
+                          # "we have not been told".
+                          enforcers=[a.name for a in adapters])
     stream = follow(log_path, poll_seconds=0 if once else 0.5,
                     skip_history=not from_start)
     if once:

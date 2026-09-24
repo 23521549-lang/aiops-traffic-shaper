@@ -12,6 +12,7 @@ from services.backend.api.cognito_auth import dashboard_auth
 from services.backend.api.dependencies import (
     agent_auth,
     assert_tenant_active,
+    authenticated_agent,
     enforce_tenant_quota,
     enforce_usage_ceiling,
     hash_api_key,
@@ -57,6 +58,10 @@ def _try_history(fn, *args, **kwargs) -> None:
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Distinguishes "this agent has never told us" from "this agent told us it can
+# enforce with nothing". Both read as falsy and they are opposite facts.
+_NEVER_REPORTED = object()
+
 
 @router.post("/agent/v1/register", response_model=AgentRegisterResponse)
 def register_agent(
@@ -97,10 +102,27 @@ _TTL_SECONDS = {
 def ingest_telemetry(
     batch: TelemetryBatch,
     tenant_id: str = Depends(enforce_tenant_quota),
+    agent: dict = Depends(authenticated_agent),
     resource=Depends(get_dynamo_resource),
 ) -> TelemetryResponse:
     if not batch.logs:
         return TelemetryResponse(received=0, processed_ips=0, decisions=[])
+
+    # What this agent can actually write a rule with. An empty list is the
+    # answer that matters: a machine with no nginx and no iptables reports
+    # telemetry forever and enforces none of the decisions it is sent, and
+    # every screen in the product called that agent healthy. Written only
+    # when it has changed, which is about never - the dependency above is
+    # FastAPI-cached, so knowing the current value costs no read.
+    reported = batch.enforcers
+    # Compared against a sentinel, not against []. An agent that has never
+    # said and an agent that says "nothing" are different states, and
+    # defaulting to [] makes the first report of an empty list look like no
+    # change at all - which is precisely the case this whole field exists for.
+    stored = agent.get("enforcers", _NEVER_REPORTED)
+    if reported is not None and (stored is _NEVER_REPORTED
+                                 or list(stored) != list(reported)):
+        AgentsTable(resource).set_enforcers(tenant_id, agent["agent_id"], reported)
 
     # Counted only once the request has been accepted: a refused batch must
     # not spend the quota that refused it.

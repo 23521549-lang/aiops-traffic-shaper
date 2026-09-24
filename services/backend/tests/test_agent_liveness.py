@@ -115,12 +115,17 @@ def test_touching_an_agent_that_is_gone_does_not_recreate_it(agents):
 
 
 def test_authenticating_an_agent_touches_it(dynamo_resource):
-    """The end the defect is actually fixed at. agent_auth already reads the
-    full agent item to check the key hash, so it holds agent_id in hand and
-    the refresh costs no extra read."""
-    from services.backend.api.dependencies import agent_auth, hash_api_key
+    """The end the defect is actually fixed at. `authenticated_agent` already
+    reads the full agent item to check the key hash, so it holds agent_id in
+    hand and the refresh costs no extra read.
 
-    # agent_auth has no `now` seam — it is called by FastAPI — so this one
+    Called here rather than `agent_auth`, which is now a thin wrapper that
+    takes the item from this and returns only the tenant id."""
+    from services.backend.api.dependencies import (
+        authenticated_agent, hash_api_key,
+    )
+
+    # It has no `now` seam — it is called by FastAPI — so this one
     # test works against the real clock rather than the fixed NOW the table
     # tests use. A record stamped in the future would make touch() correctly
     # refuse, which is a trap worth not walking into twice.
@@ -136,7 +141,9 @@ def test_authenticating_an_agent_touches_it(dynamo_resource):
     )
 
     before = AgentsTable(dynamo_resource).get(tenant_id="t-1", agent_id="a-1")["last_seen_at"]
-    assert agent_auth(x_agent_key="t-1.rawkey", resource=dynamo_resource) == "t-1"
+    agent = authenticated_agent(x_agent_key="t-1.rawkey", resource=dynamo_resource)
+    assert agent["tenant_id"] == "t-1"
+    assert agent["agent_id"] == "a-1"
     after = AgentsTable(dynamo_resource).get(tenant_id="t-1", agent_id="a-1")["last_seen_at"]
     assert after > before
 

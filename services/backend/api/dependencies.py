@@ -28,8 +28,8 @@ def assert_tenant_active(resource, tenant_id: str) -> None:
         raise HTTPException(status_code=403, detail="Tenant is not active")
 
 
-def agent_auth(x_agent_key: str | None = Header(default=None),
-               resource=Depends(get_dynamo_resource)) -> str:
+def authenticated_agent(x_agent_key: str | None = Header(default=None),
+                        resource=Depends(get_dynamo_resource)) -> dict:
     """A plain FastAPI dependency, not a closure factory over a fixed
     `resource` — found during Stage 4 design review: the plan's original
     `agent_auth(resource)` factory pattern closes over whatever `resource`
@@ -69,8 +69,19 @@ def agent_auth(x_agent_key: str | None = Header(default=None),
             # because last_seen_at is a GSI sort key; the agent item was
             # already read above, so this costs no extra read.
             AgentsTable(resource).touch(tenant_id, agent["agent_id"])
-            return tenant_id
+            return agent
     raise HTTPException(status_code=401, detail="Invalid agent key")
+
+
+def agent_auth(agent: dict = Depends(authenticated_agent)) -> str:
+    """The tenant id, for the many callers that need only that.
+
+    A thin wrapper so `authenticated_agent` can hand the whole item to the
+    one route that needs more. FastAPI caches a dependency's result within a
+    request, so depending on both costs one lookup, not two - which is the
+    same property the comment on enforce_tenant_quota already relies on.
+    """
+    return agent["tenant_id"]
 
 
 def enforce_usage_ceiling(resource=Depends(get_dynamo_resource)) -> None:

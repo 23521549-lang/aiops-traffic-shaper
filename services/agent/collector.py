@@ -47,9 +47,15 @@ class Collector:
 
     def __init__(self, backend_url: str, tenant_id: str, api_key: str,
                  batch_size: int = 100, flush_interval_seconds: float = 5.0,
-                 post_json_fn=None):
+                 post_json_fn=None, enforcers: list[str] | None = None):
         self._url = f"{backend_url.rstrip('/')}/agent/v1/telemetry"
         self._agent_key = f"{tenant_id}.{api_key}"
+        # What this machine can actually write a rule with. The CLI already
+        # prints a warning when it is empty, which is seen once, on the
+        # machine, by whoever ran the command - and the console, where the
+        # customer looks, said nothing at all. None means this agent does not
+        # report it, which the console shows as unknown rather than broken.
+        self._enforcers = enforcers
         self._batch_size = batch_size
         self._flush_interval = flush_interval_seconds
         self._post_json = post_json_fn
@@ -80,7 +86,9 @@ class Collector:
     def flush(self) -> dict | None:
         if not self._buffer:
             return None
-        payload = {"logs": [r.to_dict() for r in self._buffer]}
+        payload: dict = {"logs": [r.to_dict() for r in self._buffer]}
+        if self._enforcers is not None:
+            payload["enforcers"] = self._enforcers
         # Resolved here rather than bound as a default argument. A default
         # captures the function at import time, so substituting
         # collector.post_json had no effect whatsoever and the CLI's own run

@@ -322,9 +322,27 @@ def agent_state(agent: dict, now: datetime | None = None,
     else:
         state, label = "quiet", "Quiet"
 
+    # Reporting is not protecting. detect_adapters() returning an empty list
+    # is a legitimate outcome on a machine with no nginx and no iptables, and
+    # that agent goes on sending telemetry forever while enforcing none of
+    # the decisions it is sent. Three states, not two: an agent that has
+    # never said is not the same as one that said "nothing", and marking
+    # every pre-upgrade agent as broken would be the louder wrong answer.
+    backends = agent.get("enforcers")
+    if backends is None:
+        can_enforce, enforce_label = "unknown", "Not reported"
+    elif list(backends):
+        can_enforce = "yes"
+        enforce_label = ", ".join(sorted(str(b) for b in backends))
+    else:
+        can_enforce, enforce_label = "no", "Enforcing nothing"
+
     stamps = timestamp_pair(raw) if raw else {"label": "never", "exact": ""}
     return {
         "agent_id": agent.get("agent_id", ""),
+        "can_enforce": can_enforce,
+        "enforce_label": enforce_label,
+        "live": state == "live",
         "tenant_id": agent.get("tenant_id", ""),
         # The name its owner gave the machine. A uuid does not tell anyone
         # which box to walk over to.
@@ -459,3 +477,31 @@ def reach(decided_at: int, agents: list[dict], now: datetime) -> dict:
     return {"in_effect": False, "label": "Not everywhere yet",
             "detail": f"{behind} of {total} agent"
                       f"{'' if total == 1 else 's'} has not collected this yet."}
+
+
+def baseline_rows(names, means, stds) -> list[dict]:
+    """The shape of this tenant's normal, one row per feature.
+
+    The same three numbers `decompose` compares a single source against,
+    without the source: this is the baseline on its own, which is the one
+    sentence this product exists to be able to say and which nothing has ever
+    printed.
+
+    Returns [] rather than guesses when the statistics are missing. Models
+    trained before per-feature statistics existed have none, and a row of
+    invented figures under the heading "your normal" would be worse than an
+    empty screen.
+    """
+    if not (names and means and stds):
+        return []
+    if not (len(names) == len(means) == len(stds)):
+        # A short list against a full one lines the wrong figure up with the
+        # wrong feature, and the result reads as entirely plausible.
+        return []
+    return [{
+        "name": name,
+        "label": FEATURE_LABELS.get(name, name.replace("_", " ").capitalize()),
+        "normal": f"{_figure(mean)} ± {_figure(std)}",
+        "mean": _figure(mean),
+        "spread": _figure(std),
+    } for name, mean, std in zip(names, means, stds)]

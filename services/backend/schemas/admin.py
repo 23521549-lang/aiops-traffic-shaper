@@ -24,6 +24,15 @@ class AgentSummary(BaseModel):
     agent_version: str | None = None
     status: str
     last_seen_at: str
+    # What this agent found it can actually write a rule with. None means it
+    # has never said, which is a different state from an empty list: an agent
+    # reporting "nothing" is enforcing nothing, and that was the one thing no
+    # screen in the product could tell you.
+    #
+    # Declared rather than inherited: the closed field list here is what
+    # keeps api_key_hash server-side, so a field that is wanted has to be
+    # named.
+    enforcers: list[str] | None = None
 
 
 class TenantCreateRequest(BaseModel):

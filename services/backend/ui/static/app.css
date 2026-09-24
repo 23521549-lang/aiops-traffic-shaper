@@ -967,3 +967,14 @@ input[type=text], input[type=password], input[type=email], select {
   white-space: nowrap;
 }
 .c-reach--on { border-color: var(--tier-normal); color: var(--text); }
+
+/* Reporting is not protecting. An agent with no enforcement backend is green
+ * everywhere else in the product and is applying nothing. Border and text,
+ * never fill alone: this one gets screenshotted into support threads. */
+.c-enforce {
+  display: inline-block; font-size: var(--text-xs);
+  padding: 1px var(--space-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text-muted); white-space: nowrap;
+}
+.c-enforce--yes { border-color: var(--tier-normal); color: var(--text); }
+.c-enforce--no { border-color: var(--tier-blocked); color: var(--tier-blocked); }
