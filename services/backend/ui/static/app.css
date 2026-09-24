@@ -901,3 +901,9 @@ input[type=text], input[type=password], input[type=email], select {
  * different colour: the mark already carries its tier in colour, and a second
  * meaning on the same channel is unreadable in a greyscale screenshot. */
 .c-mark--on { stroke-width: 4; }
+
+/* The verb on the evidence line. Right-aligned and quiet: it is offered on
+ * every driver row, so loud buttons would read as the point of the table
+ * rather than as a response to it. */
+.c-why-act { text-align: right; white-space: nowrap; }
+.c-why-act .c-btn { font-size: var(--text-xs); padding: 2px var(--space-2); }

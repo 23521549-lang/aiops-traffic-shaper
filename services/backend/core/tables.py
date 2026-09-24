@@ -1,4 +1,5 @@
 import logging
+import secrets
 import time
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -749,15 +750,36 @@ class TenantHistoryTable(_SimpleTable):
         return f"agg#{int(hour_start):010d}"
 
     @staticmethod
-    def setting_sk(now: int) -> str:
+    def setting_sk(now: int, nonce: str = "") -> str:
         """A fourth prefix on the same single-table design.
 
         No new table, no provisioning floor, no GSI, and it reads through the
         existing between() path. `agg#` < `mit#` < `set#` lexically, so the
         three range reads cannot see each other's rows - a property the tests
         assert rather than assume.
+
+        `nonce` is what makes the ledger genuinely append-only. The key was
+        the timestamp alone, at one-second resolution, so two audited actions
+        in the same second were one PutItem overwriting the other and the log
+        silently lost a record - allowing a source and removing it again in
+        the same second left only the removal.
+
+        It has to SORT, not merely differ. A random suffix separates the two
+        rows and then returns them in random order within the second, which
+        for a log is its own kind of wrong: "allowed, then removed" and
+        "removed, then allowed" are different events. So the nonce leads with
+        a fixed-width numeric sub-second field taken from the SAME instant as
+        the second above it - read separately from the clock it would drift
+        against it and invert the pair it exists to order - and ordinary
+        lexical ordering on the sort key is then chronological ordering. The
+        short random tail only breaks a genuine tie, where two events share a
+        timestamp to the nanosecond and there is no fact of the matter about
+        which came first.
+
+        Written without a nonce when the key is being used as a RANGE BOUND
+        rather than as a row key.
         """
-        return f"set#{int(now):010d}"
+        return f"set#{int(now):010d}" + (f"#{nonce}" if nonce else "")
 
     @classmethod
     def hour_of(cls, ts: int) -> int:
@@ -912,7 +934,7 @@ class TenantHistoryTable(_SimpleTable):
     # --- reads ------------------------------------------------------------
 
     def record_setting(self, tenant_id: str, actor: str, what: str,
-                       old, new, now: int) -> None:
+                       old, new, now: float, because: str | None = None) -> None:
         """One PutItem per change: ~200 B, 1 WCU, 30-day TTL.
 
         Append-only and never updated — the point of the row is that it
@@ -929,16 +951,30 @@ class TenantHistoryTable(_SimpleTable):
         `actor` comes from a verified JWT claim, never from a request field.
         That is what keeps this row fixed-size, which is the same rule the
         episode row follows for the same reason.
+
+        `because` is the evidence line an appeal was made from - one of the
+        seven feature names, checked against that list by the caller before
+        it reaches here. Bounded and short by construction, so the row stays
+        the fixed size the rule above demands. Absent rather than empty when
+        no single line explains it: a stored "" would later read as a claim
+        that the operator was asked and declined to say.
         """
+        extra = {"because": because} if because else {}
+        # `now` is a float here on purpose. Callers pass time.time(); the row
+        # keeps whole seconds and the sort key keeps the rest, so two changes
+        # inside one second order correctly instead of colliding.
+        second = int(now)
+        sub = int(round((float(now) - second) * 1_000_000_000))
         self.put(
             tenant_id=tenant_id,
-            sk=self.setting_sk(now),
+            sk=self.setting_sk(second, f"{sub:09d}{secrets.token_hex(2)}"),
             actor=actor,
             what=what,
             old=old,
             new=new,
-            at=int(now),
-            ttl=int(now) + self.RETENTION_SECONDS,
+            at=second,
+            ttl=second + self.RETENTION_SECONDS,
+            **extra,
         )
 
     def query_settings(self, tenant_id: str, since: int, until: int) -> list[dict]:
@@ -946,7 +982,12 @@ class TenantHistoryTable(_SimpleTable):
         return self._query_all_pages(
             KeyConditionExpression=(
                 Key("tenant_id").eq(tenant_id)
-                & Key("sk").between(self.setting_sk(since), self.setting_sk(until))
+                # "~" (0x7E) sorts above the "#" (0x23) that opens the
+                # nonce, so the bound reaches every row written in the final
+                # second. A bare setting_sk(until) bound drops them, which is
+                # the same trap query_episodes documents on its own key.
+                & Key("sk").between(self.setting_sk(since),
+                                    self.setting_sk(until) + "~")
             ),
         )
 

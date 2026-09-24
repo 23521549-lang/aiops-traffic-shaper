@@ -22,6 +22,24 @@ from services.backend.schemas.model_status import ModelStatus
 router = APIRouter()
 
 
+def _audit(resource, tenant_id: str, claims: dict, what: str, ip: str,
+           because: str | None = None) -> None:
+    """Spec 2.5. A whitelist change is one of the four actions that earn an
+    append-only row.
+
+    Wrapped like every other reporting write: the ledger is worth having and
+    it is not worth losing the customer's appeal to a throttled history
+    table. The Whitelist item itself already records who and why, but a
+    removal deletes it, so without this the log can say a source was allowed
+    and never say it stopped being allowed - the more dangerous half.
+    """
+    from services.backend.api.routes.agent import _try_history
+
+    _try_history(TenantHistoryTable(resource).record_setting,
+                 tenant_id, actor=actor_of(claims), what=what,
+                 old=None, new=ip, now=time.time(), because=because)
+
+
 @router.get("/dashboard/v1/mitigations", response_model=list[MitigationState])
 def list_mitigations(tenant_id: str = Depends(dashboard_auth),
                       resource=Depends(get_dynamo_resource)) -> list[MitigationState]:
@@ -105,16 +123,20 @@ def add_whitelist(body: WhitelistRequest, tenant_id: str = Depends(dashboard_aut
     # there is a no-op in DynamoDB — the common case is pre-approving an IP
     # that was never blocked.
     MitigationStateTable(resource).delete(tenant_id=tenant_id, ip=body.ip)
+    _audit(resource, tenant_id, claims, "whitelist_add", body.ip,
+           because=body.because or None)
     return {"message": f"{body.ip} added to whitelist"}
 
 
 @router.delete("/dashboard/v1/whitelist/{ip}", dependencies=[Depends(verify_csrf_if_cookie_auth)])
 def remove_whitelist(ip: str, tenant_id: str = Depends(dashboard_auth),
+                      claims: dict = Depends(dashboard_claims),
                       resource=Depends(get_dynamo_resource)) -> dict:
     table = WhitelistTable(resource)
     if table.get(tenant_id=tenant_id, ip=ip) is None:
         raise HTTPException(status_code=404, detail="IP not in whitelist")
     table.delete(tenant_id=tenant_id, ip=ip)
+    _audit(resource, tenant_id, claims, "whitelist_remove", ip)
     return {"message": f"{ip} removed from whitelist"}
 
 

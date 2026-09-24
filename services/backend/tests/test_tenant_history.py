@@ -241,3 +241,49 @@ def test_a_first_visit_does_not_present_a_month_as_new(history):
     unread = [e for e in history.query_episodes("t-1", H1, H3 + HOUR)
               if int(e["hour_start"]) >= since]
     assert len(unread) == 1
+
+
+def test_two_audited_actions_in_the_same_second_are_two_rows_in_order(dynamo_resource):
+    """The settings ledger claims to be append-only. Its sort key was the
+    timestamp at one-second resolution, so two changes inside one second were
+    one PutItem overwriting the other - and the pair this most affects is a
+    whitelist add followed immediately by its removal, which is exactly the
+    sequence a dispute turns on.
+
+    Separating them is only half of it. They have to come back the way they
+    happened: "allowed, then removed" and "removed, then allowed" are
+    different events.
+    """
+    create_all_tables(dynamo_resource)
+    table = TenantHistoryTable(dynamo_resource)
+    now = 1_700_000_000
+
+    # Twenty changes inside the SAME second, milliseconds apart, which is
+    # what a person clicking through a list of sources actually produces.
+    for i in range(20):
+        table.record_setting("t-1", actor="ops@example.com", what=f"step-{i:02d}",
+                             old=None, new=str(i), now=now + i * 0.001)
+
+    rows = table.query_settings("t-1", now - 5, now)
+
+    assert [r["what"] for r in rows] == [f"step-{i:02d}" for i in range(20)]
+    assert all(int(r["at"]) == now for r in rows)
+
+
+def test_the_settings_ledger_still_cannot_see_the_other_two_prefixes(dynamo_resource):
+    """`agg#` < `mit#` < `set#`, and the widened upper bound must not have
+    reached past the prefix into anything else."""
+    create_all_tables(dynamo_resource)
+    table = TenantHistoryTable(dynamo_resource)
+    now = 1_700_000_000
+    hour = TenantHistoryTable.hour_of(now)
+
+    table.record_traffic("t-1", hour, requests=5)
+    table.record_decision("t-1", ip="10.0.0.1", tier=1, score=-0.2, z=-4.4,
+                          hour_start=hour, now=now)
+    table.record_setting("t-1", actor="ops@example.com", what="tier1_z",
+                         old=-4.0, new=-4.5, now=now)
+
+    rows = table.query_settings("t-1", now - 86_400, now + 86_400)
+
+    assert [r["what"] for r in rows] == ["tier1_z"]

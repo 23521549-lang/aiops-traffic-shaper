@@ -201,6 +201,7 @@ no agent has ever reported
             <th scope="col">This source</th>
             <th scope="col">Your normal</th>
             <th scope="col">Distance</th>
+            <th scope="col"><span class="sr-only">Appeal</span></th>
           </tr>
         </thead>
         <tbody>
@@ -210,6 +211,24 @@ no agent has ever reported
             <td>{{ f.value }}</td>
             <td class="c-dim">{{ f.normal }}</td>
             <td class="{{ 'drives' if f.drives }}">{{ f.display }}</td>
+            {# The verb ON the evidence line. Every redesign of this product
+               so far explained a decision in seven lines and put the only
+               response to it in a corner, which is why they read as
+               dashboards. Offered only where the line actually drives the
+               decision: a button beside a feature sitting at +0.2 sigma
+               would invite an operator to attribute their reasoning to a
+               line that had nothing to do with it. #}
+            <td class="c-why-act">
+              {% if f.drives %}
+              <button type="button" class="c-btn c-btn--sm"
+                      hx-post="/dashboard/ui/whitelist/{{ selected.ip }}?back=status&because={{ f.name }}"
+                      hx-target="body" hx-swap="none"
+                      hx-confirm="Allow {{ selected.ip }} because its {{ f.label|lower }} is explainable? It stops being slowed or blocked immediately, and is left out of future model training."
+                      aria-label="Allow {{ selected.ip }} because its {{ f.label|lower }} is explainable">
+                Explainable
+              </button>
+              {% endif %}
+            </td>
           </tr>
           {% endfor %}
         </tbody>

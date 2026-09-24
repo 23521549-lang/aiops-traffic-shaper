@@ -396,7 +396,7 @@ def move_gate(tier: int = 1, sigma: float = 0.0,
     # threshold change the customer just made.
     _try_history(TenantHistoryTable(resource).record_setting,
                  tenant_id, actor=actor_of(claims), what=which,
-                 old=old, new=-sigma, now=int(time.time()))
+                 old=old, new=-sigma, now=time.time())
 
     # Back to the screen they moved it from. The consequence of the move is
     # the thing they were reading.
@@ -457,6 +457,7 @@ _WHITELIST_RETURNS = {"status": "/dashboard/ui"}
 @router.post("/dashboard/ui/whitelist/{ip}", response_class=HTMLResponse,
              dependencies=[Depends(verify_csrf)])
 def add_whitelist_ui(request: Request, ip: str, reason: str = "", back: str = "",
+                     because: str = "",
                      tenant_id: str = Depends(dashboard_auth),
                      claims: dict = Depends(dashboard_claims),
                      resource=Depends(get_dynamo_resource)):
@@ -467,12 +468,23 @@ def add_whitelist_ui(request: Request, ip: str, reason: str = "", back: str = ""
     body-less POST goes through plain htmx with no hashing at all. It also
     lets the mitigation table offer a one-click "Allow this IP" instead of
     making the customer retype an address out of the table above.
+
+    `because` is the line of evidence the appeal was made from, sent by the
+    button that sits on that line. Checked BEFORE the whitelist write, not
+    after: a 400 that has already let the source through is worse than no
+    check at all.
     """
+    from services.backend.ml.feature_engineering import FEATURE_NAMES
+
+    if because and because not in FEATURE_NAMES:
+        raise HTTPException(status_code=400,
+                            detail="That is not one of the measured features.")
+
     error = None
     message = None
     try:
-        add_whitelist(WhitelistRequest(ip=ip, reason=reason), tenant_id=tenant_id,
-                      claims=claims, resource=resource)
+        add_whitelist(WhitelistRequest(ip=ip, reason=reason, because=because),
+                      tenant_id=tenant_id, claims=claims, resource=resource)
         message = f"{ip} added to your allowed list. Any block on it has been lifted."
     except ValidationError:
         error = f"“{ip}” is not a valid IP address."
@@ -492,8 +504,12 @@ def add_whitelist_ui(request: Request, ip: str, reason: str = "", back: str = ""
 @router.delete("/dashboard/ui/whitelist/{ip}", response_class=HTMLResponse,
                dependencies=[Depends(verify_csrf)])
 def remove_whitelist_ui(request: Request, ip: str, tenant_id: str = Depends(dashboard_auth),
+                        claims: dict = Depends(dashboard_claims),
                         resource=Depends(get_dynamo_resource)):
-    remove_whitelist(ip, tenant_id=tenant_id, resource=resource)
+    # `claims` passed explicitly, never left to the Depends() default: this
+    # calls the API route as a plain function, so the default arrives as the
+    # marker object rather than the resolved claims.
+    remove_whitelist(ip, tenant_id=tenant_id, claims=claims, resource=resource)
     whitelist = list_whitelist(tenant_id=tenant_id, resource=resource)
     return templates.TemplateResponse(request, "_whitelist_table.html", {
         "whitelist": _whitelist_rows(whitelist),
