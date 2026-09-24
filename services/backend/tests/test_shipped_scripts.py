@@ -49,3 +49,19 @@ def test_the_script_is_strict_and_wrapped(path):
     assert text.lstrip().startswith("/*") or text.lstrip().startswith("("), (
         f"{path.name} does not open with a comment or an IIFE")
     assert "(function" in text, f"{path.name} leaks its scope to the page"
+
+
+def test_the_palette_is_looked_up_lazily():
+    """`keys.js` captured `#palette` once at load. Enabling htmx history
+    means a restore swap replaces the children of <body>, so that reference
+    goes stale and Ctrl+K silently stops opening the palette after a back
+    press - the exact defect class test_keyboard.py exists to prevent.
+
+    `ui-status.js` and `bulk-select.js` survive the same swap because both
+    delegate from document.body, and the body node itself is not replaced.
+    """
+    text = (_STATIC / "keys.js").read_text(encoding="utf-8")
+
+    assert "var palette = document.getElementById" not in text, (
+        "a reference captured at load time does not survive a history swap")
+    assert 'getElementById("palette")' in text

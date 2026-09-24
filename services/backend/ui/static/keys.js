@@ -10,11 +10,16 @@
  * this file knows no page-specific keys at all. A page cannot advertise a
  * shortcut without declaring it, because the two are the same edit, and a
  * test holds that line.
+ *
+ * Nothing here holds a reference to an element across time. With htmx
+ * history enabled, a restore swap replaces the children of <body>, so a
+ * node captured at load is detached and every feature hanging off it dies
+ * silently. Look it up when you need it.
  */
 (function () {
   "use strict";
 
-  var palette = document.getElementById("palette");
+  function palette() { return document.getElementById("palette"); }
 
   /* A key press must never be stolen from something the user is typing in,
    * and that includes the palette's own filter box. */
@@ -26,34 +31,38 @@
   }
 
   function items() {
-    if (!palette) return [];
+    var dialog = palette();
+    if (!dialog) return [];
     return Array.prototype.slice.call(
-      palette.querySelectorAll("[data-palette-item]"))
+      dialog.querySelectorAll("[data-palette-item]"))
       .filter(function (a) { return !a.parentNode.hidden; });
   }
 
   function filter(text) {
+    var dialog = palette();
+    if (!dialog) return;
     var needle = text.trim().toLowerCase();
-    var list = palette.querySelectorAll("[data-palette-item]");
+    var list = dialog.querySelectorAll("[data-palette-item]");
     var shown = 0;
     Array.prototype.forEach.call(list, function (a) {
       var hit = !needle || a.textContent.toLowerCase().indexOf(needle) !== -1;
       a.parentNode.hidden = !hit;
       if (hit) shown++;
     });
-    var empty = palette.querySelector("[data-palette-empty]");
+    var empty = dialog.querySelector("[data-palette-empty]");
     if (empty) empty.hidden = shown !== 0;
   }
 
   function openPalette() {
-    if (!palette || palette.open) return;
-    var input = palette.querySelector("[data-palette-input]");
+    var dialog = palette();
+    if (!dialog || dialog.open) return;
+    var input = dialog.querySelector("[data-palette-input]");
     if (input) { input.value = ""; }
     filter("");
     // showModal, not show: it traps focus and takes Escape for free, which
     // is the behaviour a hand-rolled overlay spends fifty lines getting
     // wrong.
-    palette.showModal();
+    dialog.showModal();
     if (input) input.focus();
   }
 
@@ -67,13 +76,16 @@
     open[next].focus();
   }
 
-  // The visible way in. A shortcut with no control behind it is unusable
-  // by anyone who has not been told it exists, including on touch.
-  Array.prototype.forEach.call(document.querySelectorAll("[data-palette-open]"),
-    function (btn) { btn.addEventListener("click", openPalette); });
+  /* Listeners are attached to the dialog that exists right now. After a
+   * history restore that dialog is gone along with them, so this runs again
+   * on every swap — the same shape bulk-select.js already uses. The flag
+   * stops a second swap doubling them up. */
+  function wirePalette() {
+    var dialog = palette();
+    if (!dialog || dialog.dataset.wired) return;
+    dialog.dataset.wired = "1";
 
-  if (palette) {
-    var input = palette.querySelector("[data-palette-input]");
+    var input = dialog.querySelector("[data-palette-input]");
     if (input) {
       input.addEventListener("input", function () { filter(input.value); });
       input.addEventListener("keydown", function (evt) {
@@ -86,16 +98,27 @@
         }
       });
     }
-    palette.addEventListener("keydown", function (evt) {
+    dialog.addEventListener("keydown", function (evt) {
       if (evt.key === "ArrowDown") { evt.preventDefault(); move(1); }
       else if (evt.key === "ArrowUp") { evt.preventDefault(); move(-1); }
     });
     // Clicking the backdrop is the same gesture as Escape. <dialog> reports
     // it as a click on the dialog itself, outside .c-palette-box.
-    palette.addEventListener("click", function (evt) {
-      if (evt.target === palette) palette.close();
+    dialog.addEventListener("click", function (evt) {
+      if (evt.target === dialog) dialog.close();
     });
   }
+
+  /* The visible way in. A shortcut with no control behind it is unusable
+   * by anyone who has not been told it exists, including on touch. Delegated
+   * from document.body so it survives a swap without rewiring. */
+  document.body.addEventListener("click", function (evt) {
+    var opener = evt.target.closest && evt.target.closest("[data-palette-open]");
+    if (opener) openPalette();
+  });
+
+  wirePalette();
+  document.body.addEventListener("htmx:afterSwap", wirePalette);
 
   document.addEventListener("keydown", function (evt) {
     if ((evt.metaKey || evt.ctrlKey) && evt.key.toLowerCase() === "k") {
@@ -105,7 +128,8 @@
     }
     if (evt.metaKey || evt.ctrlKey || evt.altKey) return;
     if (isTyping(document.activeElement)) return;
-    if (palette && palette.open) return;
+    var open = palette();
+    if (open && open.open) return;
 
     /* The dispatcher. Case-insensitive for letters, exact for named keys,
      * and it only ever clicks something already on the page - so the key
