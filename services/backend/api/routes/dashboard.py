@@ -113,7 +113,11 @@ def remove_whitelist(ip: str, tenant_id: str = Depends(dashboard_auth),
 @router.get("/dashboard/v1/model/status", response_model=ModelStatus)
 def model_status(tenant_id: str = Depends(dashboard_auth),
                   resource=Depends(get_dynamo_resource)) -> ModelStatus:
-    item = ModelsTable(resource).get(tenant_id=tenant_id, stage_version="production")
+    # Projected: the blob is ~238 KB and everything below is a scalar. A bare
+    # get() here was ~30 RCU against a table provisioned at 2, to print a
+    # version string.
+    item = ModelsTable(resource).get_metadata(tenant_id=tenant_id,
+                                              stage_version="production")
     if item is None:
         return ModelStatus(model_ready=False, shadow_mode=True)
     return ModelStatus(

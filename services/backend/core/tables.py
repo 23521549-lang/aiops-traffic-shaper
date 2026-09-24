@@ -623,6 +623,36 @@ class ModelsTable(_SimpleTable):
 
     MAX_BLOB_BYTES = 400_000
 
+    # Everything the console shows, and nothing that weighs 238 KB.
+    _METADATA_FIELDS = (
+        "tenant_id", "stage_version", "version", "trained_at",
+        "training_samples", "contamination", "score_mean", "score_std",
+        "feature_means", "feature_stds", "features", "stage",
+        "tier1_z", "tier2_z",
+    )
+
+    def get_metadata(self, tenant_id: str,
+                     stage_version: str = "production") -> dict | None:
+        """The model item without its blob: ~30 RCU down to ~0.5.
+
+        A bare get() pulls the serialised IsolationForest - about 238 KB - to
+        print a version string, on a table provisioned at 2 RCU. It is the
+        worst read-to-value ratio in the product and it sits on a page a
+        customer is invited to open. Same projection pattern as
+        registry.model_exists.
+
+        Every field is aliased rather than guessing which are reserved words
+        (`stage` is one). A wrong guess is a 400 at request time on a page
+        someone opened, not a failure at deploy.
+        """
+        names = {"#f%d" % i: f for i, f in enumerate(self._METADATA_FIELDS)}
+        resp = self._table.get_item(
+            Key={"tenant_id": tenant_id, "stage_version": stage_version},
+            ProjectionExpression=", ".join(names),
+            ExpressionAttributeNames=names,
+        )
+        return resp.get("Item")
+
     def put_model_blob(self, tenant_id: str, stage_version: str, blob: bytes, **metadata) -> None:
         if len(blob) > self.MAX_BLOB_BYTES:
             raise ValueError(
