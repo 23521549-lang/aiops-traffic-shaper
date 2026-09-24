@@ -927,3 +927,77 @@ rows that the `?days=7` tab already fetches. Task 3 depends on `last_seen_at`
 being touched by the decisions poll; if that ever stops being true, the
 "in effect" claim becomes false silently, so the test suite must pin the touch
 itself and not only the presenter.
+
+
+---
+
+## What the plan got wrong
+
+Written after execution, against the shipped code.
+
+**1. `list_series` dropped the bins, exactly as `list_history` dropped the
+feature vectors.**
+
+The same defect twice, one phase apart. `record_traffic` has written the
+thirteen near-threshold bins onto the hourly row since Phase 0, and
+`HourlyPoint` declared `hour_start`, `requests` and `batches`, so every bin
+was read out of DynamoDB and thrown away in the same function. A geometry test
+passes either way, because it is handed a model somebody constructed by hand -
+which is why the shipped test suite now pins the read path itself.
+
+The plan proposed `model_config = ConfigDict(extra="allow")`. Shipped instead
+as a declared `near: dict[str, int]` field, because `HourlyPoint` is also a
+JSON API response shape and an undeclared attribute there is an unversioned
+contract. One field rather than thirteen, because the bin edges are defined
+once on `TenantHistoryTable.NEAR_BINS` and thirteen names in the schema would
+be a second copy of that list to keep in step.
+
+**2. Principle 1.5 was not merely unimplemented. It was unimplementable.**
+
+`MitigationState` carried `expires_at` and no record of when the decision was
+taken, so "has the agent collected this yet" had no left-hand side. Task 3
+adds `decided_at`, one integer on a write that already happens.
+
+**3. Two states were not enough.**
+
+The plan's `reach` returned in-effect or not. A row written before `decided_at`
+existed supports neither answer, and reporting "not in effect" would have put
+a warning on every decision this product has ever taken. The shipped version
+has a third: "we cannot tell", said plainly.
+
+**4. The empty-window test predated principle 1.2 and had to be split.**
+
+`test_an_empty_window_still_renders_the_chart_chrome` asserted that a window
+with nothing in it still draws bands, on the argument that the healthy state
+of this product is empty and a blank panel is not evidence. That argument is
+right for a QUIET window - telemetry arriving, nothing crossing a gate - and
+wrong for a window with no telemetry at all, which is an instrument with no
+feed rendering a reading. The test seeded nothing and demanded the chrome, so
+it was testing the second case while arguing the first. Split in two.
+
+**5. The Protection panel was still called "Where you act" while a second
+control of exactly the same shape was added to History.**
+
+Two panels labelled for the screen they sit on rather than the gate they move
+is how an operator blocks at the line they meant to slow at. Renamed to "Where
+you slow" and "Where you block", and each now names the window its counts come
+from, because the two curves genuinely report different numbers.
+
+**6. Minor.** The plan's macro emitted `c-grid-row--dead` and the shipped one
+emits `c-grid-dead`. The plan's screen-reader summary used a Jinja expression
+nobody could read; it is a `hours_with_sources` property on `Grid` instead. And
+a test counting `c-grid-cell` as a bare substring double-counts every
+identified cell, because `c-grid-cell--id` contains it.
+
+## Still outstanding after this phase
+
+- `deviation_chart` and `downsample` keep one caller each, on the landing page.
+  Phase 3 decides whether the landing page gets the grid or keeps its own
+  shape; until then `charts.py` carries both.
+- Two of spec 2.5's four audited actions are still unwired: tenant
+  suspend/reactivate and agent key mint/revoke, both in the operations console.
+- ADR-007's htmx configuration still needs confirming in a real browser.
+- Nothing in Phases 1b, 1c or 1d has been deployed. Production is also still
+  missing `bulk-select.js` and `keys.js`.
+- A gate move reaches enforcement at the next nightly retrain. The zero-RCU
+  path to making it immediate is written up at the end of the Phase 1b plan.
