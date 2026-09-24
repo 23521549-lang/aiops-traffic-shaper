@@ -524,3 +524,96 @@ the next retrain, so every existing tenant sees "not measured yet" until
 then - which the tests pin as a distinct state rather than as zero. Task 3
 adds a field to the telemetry batch, so an agent older than the backend sends
 nothing and must render as "not reported" rather than as broken.
+
+
+---
+
+## What the plan got wrong
+
+Written after execution, against the shipped code.
+
+**1. The same defect a fifth, sixth and seventh time: a field written,
+declared, and never carried off the row.**
+
+The plan anticipated none of these and every task hit one.
+
+- `list_whitelist` dropped `added_by`, so "who let this address in" had no
+  answer on any screen, although it has been written from the verified token
+  since Phase 0.
+- `AgentSummary` did not declare `enforcers`, and its closed field list is
+  deliberate (it is what keeps `api_key_hash` server-side), so the field had
+  to be named explicitly.
+- `model_status` dropped `feature_means` and `feature_stds`, which
+  `get_metadata` already projects - so the one sentence this product exists to
+  be able to say, "here is the shape of your normal", had nowhere to be said.
+
+Counting the two found in Phase 1c and 1d, that is five. Every one passed
+every test at the time, because unit tests construct the model by hand and
+never touch the reader, and integration tests assert on what the screen shows,
+and the screen showed nothing because the field never arrived. The defect is
+invisible from both ends.
+
+`services/backend/tests/test_fields_survive_the_read_path.py` now tests the
+seam directly: write through the real writer, read through the real reader,
+assert the value survived. Deliberately a list, so adding a field to a stored
+item is a decision to add a line there too.
+
+**2. `collect_training_vectors`'s return type.**
+
+The plan warned to find the callers first, which was right: one production
+caller, four test call sites. It shipped as a `TrainingSet` dataclass rather
+than a tuple, so `len()` still works and the counts have names.
+
+**3. `touch` could not carry the enforcer list.**
+
+The plan said to fold `enforcers` into `AgentsTable.touch`, on the argument
+that touch already fires on every authenticated request. It does - inside
+`agent_auth`, which authenticates before anything has parsed the request body
+and therefore cannot know this value.
+
+Shipped instead as `authenticated_agent`, a dependency returning the whole
+item, with `agent_auth` as a thin wrapper over it. FastAPI caches a
+dependency's result within a request, so the route learns the currently stored
+value for free, and `set_enforcers` writes only when it has changed - which is
+about never. Steady state costs nothing.
+
+**4. Absent and empty are different, and `dict.get(k, [])` merges them.**
+
+The first version compared the reported list against `agent.get("enforcers",
+[])`, so an agent reporting "I can enforce with nothing" for the first time
+looked like no change at all and was never written. That is precisely the case
+the whole field exists for. It now compares against a sentinel.
+
+**5. Two test stubs broke on signatures rather than on behaviour.**
+
+`train_that_breaks_for_one` had a fixed signature and started failing when the
+real function gained an argument, in a file about isolation between tenants.
+`test_authenticating_an_agent_touches_it` called `agent_auth` directly. Both
+fixed at the test, not by bending the code around them.
+
+**6. The Model screen was showing every tenant somebody else's gate.**
+
+Not in the plan at all, found while writing the tests: `4.0σ` and `5.0σ` were
+written into the template and the route read the module constants. A customer
+who had moved their gate in Phase 1b saw the shipped default on the one page
+that claims to explain their own model.
+
+**7. Spec 4.8 needed a change on the History screen, not only the Model
+screen.** The headline read "412 blocked · 39 slowed", which beside a traffic
+chart is a claim about requests. It now names the quantity: "451 decisions
+(412 to block, 39 to slow)". The first version of that test passed on a table
+column header, which is exactly the kind of accident it was written to catch.
+
+## Still outstanding after this phase
+
+- Two of spec 2.5's four audited actions remain unwired: tenant
+  suspend/reactivate and agent key mint/revoke, both in the operations console
+  (Phase 2).
+- ADR-007's htmx configuration still needs confirming in a real browser.
+- **Nothing from Phase 0 onward has been deployed.** Production is also still
+  missing `bulk-select.js` and `keys.js`.
+- A gate move reaches enforcement at the next nightly retrain; the zero-RCU
+  path to making it immediate is written up at the end of the Phase 1b plan.
+- The full suite has not run in one process since Phase 1d: the machine ran
+  low on memory and the run was stopped. It was run here in two halves,
+  880 + 91, with the same total coverage gate applied to neither half.
