@@ -10,6 +10,52 @@
 
 **Spec:** `docs/ui-rebuild/05-spec-thiet-ke.md` — sections 2.1 through 2.9. Read it before Task 1; the plan argues from it.
 
+## Status — complete 2026-09-24
+
+All nine tasks shipped, merged to `main` as a fast-forward at `4f20729`.
+Full suite **735 passed, 1 skipped, coverage 98.22%**; ruff clean;
+`terraform plan` 1 to add, 4 to change, 0 to destroy, nothing replaced.
+
+**Outstanding, and it belongs to the maintainer:** Task 3 Step 7, the
+browser confirmation of the htmx config. ADR-007 requires config overrides
+to be confirmed in a running browser rather than inferred from the minified
+source. The bytes were read and `test_htmx_config.py` asserts them, but the
+three runtime checks have not been done, because they need the local server
+and that is only started on request. Until then the amendment in ADR-007
+records the obligation as undischarged.
+
+### What the plan got wrong, found during execution
+
+Recorded here rather than silently corrected, because all four were my own
+assumptions and the next plan should not repeat the shape of them.
+
+1. **Task 1's test posted an empty batch.** `agent.py:103` returns before
+   any of the new code. Fixed the test, not the code: the real agent never
+   sends an empty batch, because `Collector.flush()` returns None on an
+   empty buffer.
+2. **Task 8 broke every direct caller of `add_whitelist`.** UI routes call
+   the API route as a plain function, so a `Depends()` default arrives as
+   the marker object. Passed `claims` explicitly at all four call sites
+   rather than making `actor_of` tolerant — a tolerant version would write
+   "unknown" into an audit field forever the first time a route forgot the
+   dependency.
+3. **Task 9's test seeded one request short.** The ceiling is
+   `1_000_000/30 = 33333.33`, so `int()` of it is still under. The code was
+   right; it uses the same `>=` against the same float as `is_over_ceiling`,
+   deliberately, so the console says "throttled" at the same instant the
+   agent is refused.
+4. **`bin_name` as planned was clever and wrong.** `min(..., key=lambda b:
+   (magnitude < b, -b))` replaced with `max(b for b in NEAR_BINS if b <=
+   magnitude)`.
+
+One change was made beyond the plan: the capacity table at the top of
+`terraform/dynamodb.tf` said `TOTAL 14 RCU` and "headroom is ELEVEN RCU".
+Raising `UsageCounters` made that wrong. It now reads 15 and ten — that
+comment was wrong for the life of the project once already, and ADR-006
+records it as a large part of why nobody costed a chart.
+
+---
+
 ## Global Constraints
 
 - **Test runner.** `scripts/run_tests.sh` does not work on the maintainer's Windows machine. Run pytest and ruff as **separate** commands and read the `N failed, M passed` line, never the exit code — chaining them with `;` lets ruff's exit code mask a pytest failure.
