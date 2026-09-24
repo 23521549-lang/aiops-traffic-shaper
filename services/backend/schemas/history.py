@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class MitigationEpisode(BaseModel):
@@ -23,6 +23,12 @@ class MitigationEpisode(BaseModel):
     last_z: float | None = None
     reason: str = "behavioral_anomaly"
     is_new: bool = False
+    # The vector that justified the decision, and the id of the statistics it
+    # was measured against. Optional because episodes written before these
+    # existed have neither, and a page must render those rather than 500 -
+    # the same lesson Tenant.name taught on real production data.
+    last_features: list[float] = Field(default_factory=list)
+    stats_version: str | None = None
 
     @property
     def max_tier(self) -> int:

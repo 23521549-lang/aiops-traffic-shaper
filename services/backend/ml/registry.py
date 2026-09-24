@@ -53,6 +53,11 @@ class ScoreStats:
     std: float
     feature_means: list[float] = field(default_factory=list)
     feature_stds: list[float] = field(default_factory=list)
+    # Which saved model these figures came from. Written onto every episode
+    # beside the feature vector, because `z` is frozen at decision time while
+    # the baseline is read live - without this the two halves of the
+    # explanation can describe different models and nothing would say so.
+    version: str | None = None
 
 
 def load_model_and_stats(resource, tenant_id: str, stage: str = "production",
@@ -73,6 +78,9 @@ def load_model_and_stats(resource, tenant_id: str, stage: str = "production",
             # inventing a reason for a real enforcement decision.
             feature_means=[float(v) for v in item.get("feature_means", [])],
             feature_stds=[float(v) for v in item.get("feature_stds", [])],
+            # Carried so every decision can name the baseline it was measured
+            # against. The item has always had it; it simply never travelled.
+            version=item.get("version"),
         )
     return _deserialize(item, tenant_id, stage), stats
 

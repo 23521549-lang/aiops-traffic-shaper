@@ -156,7 +156,14 @@ def ingest_telemetry(
             # to enforce. See test_history_on_ingest.py.
             _try_history(history.record_decision, tenant_id, v.remote_addr,
                          hour_start=hour_start, tier=int(tier), now=int(now),
-                         score=score, z=state.z)
+                         score=score, z=state.z,
+                         # The evidence, on the row that keeps thirty days.
+                         # On MitigationState it dies with a 300s or 1h TTL,
+                         # so "why was this blocked" was answerable only
+                         # while the block was still in force - never at the
+                         # moment a customer actually asks, which is after.
+                         features=state.features,
+                         stats_version=getattr(mgr.stats, "version", None))
             decisions.append(state)
 
     # One atomic ADD per batch, not per IP. This is the only unconditional

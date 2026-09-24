@@ -689,7 +689,9 @@ class TenantHistoryTable(_SimpleTable):
     # --- writes -----------------------------------------------------------
 
     def record_decision(self, tenant_id: str, ip: str, hour_start: int, tier: int,
-                        now: int, score: float, z: float | None) -> None:
+                        now: int, score: float, z: float | None,
+                        features: list[float] | None = None,
+                        stats_version: str | None = None) -> None:
         """One idempotent UpdateItem, no read and no condition.
 
         Hourly rather than per-decision: MitigationState.put fires on every
@@ -704,12 +706,33 @@ class TenantHistoryTable(_SimpleTable):
         codebase has already hit twice.
         """
         tier = int(tier)
+
+        # Bytes on a write that already happens: ~184 B to ~284 B, still one
+        # 1 KB unit, still 1 WCU, zero extra operations. The version id
+        # travels with the vector because `z` is frozen at decision time
+        # while the baseline is read live — without it, one nightly retrain
+        # makes the two halves of the explanation describe different models
+        # and nothing on the screen would say so.
+        #
+        # This row is a fixed-size numeric record and must stay one. It fires
+        # once per IP per hour, so a single variable-length text field big
+        # enough to cross 1 KB would double the write cost of a 3,000-IP hour
+        # against a 2-WCU table.
+        evidence = ""
+        extra: dict = {}
+        if features:
+            evidence += ", last_features = :f"
+            extra[":f"] = [float(x) for x in features]
+        if stats_version:
+            evidence += ", stats_version = :sv"
+            extra[":sv"] = stats_version
+
         self.update(
             key={"tenant_id": tenant_id, "sk": self.episode_sk(hour_start, ip)},
             update_expression=(
                 "ADD tier1_count :t1, tier2_count :t2 "
                 "SET last_ts = :now, ip = :ip, hour_start = :h, "
-                "last_score = :s, last_z = :z, "
+                "last_score = :s, last_z = :z" + evidence + ", "
                 "first_ts = if_not_exists(first_ts, :now), #ttl = :ttl"
             ),
             expr_names={"#ttl": "ttl"},
@@ -719,6 +742,7 @@ class TenantHistoryTable(_SimpleTable):
                 ":now": int(now), ":ip": ip, ":h": int(hour_start),
                 ":s": score, ":z": z,
                 ":ttl": int(hour_start) + self.RETENTION_SECONDS,
+                **extra,
             },
         )
 
