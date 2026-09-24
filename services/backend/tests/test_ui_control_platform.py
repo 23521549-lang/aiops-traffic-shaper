@@ -54,15 +54,25 @@ def test_suspend_tenant_via_ui(dynamo_resource, cognito_test_keys):
     assert TenantsTable(dynamo_resource).get(tenant_id="t-1")["status"] == "suspended"
 
 
-def test_agents_partial_filters_by_liveness(dynamo_resource, cognito_test_keys):
-    """Rewritten alongside test_admin_routes.test_list_agents_by_liveness —
-    the old version fabricated a `status="stale"` row that no code path
-    writes. Both agents below are lifecycle-active; what separates them is
-    whether they have called in."""
+def test_the_tenant_pane_separates_live_agents_from_quiet_ones(
+        dynamo_resource, cognito_test_keys):
+    """Rewritten twice. The first version fabricated a `status="stale"` row
+    that no code path writes; both agents below are lifecycle-active and what
+    separates them is whether they have called in.
+
+    The second rewrite moved it here. This used to assert against a filtered
+    Agents page, which was a filter over a list wearing the shape of a page.
+    The distinction it makes is real and still has to hold; it is now made on
+    the tenant the agents belong to, which is where an operator deciding
+    whether to suspend is already looking.
+    """
     from datetime import datetime, timedelta, timezone
 
     client = _client(dynamo_resource, cognito_test_keys)
     now = datetime.now(timezone.utc)
+    TenantsTable(dynamo_resource).put(tenant_id="t-1", name="Acme",
+                                      status="active",
+                                      created_at="2026-08-21T00:00:00Z")
     AgentsTable(dynamo_resource).put(tenant_id="t-1", agent_id="a-live", status="active",
                                       last_seen_at=(now - timedelta(seconds=10)).isoformat(),
                                       agent_version="0.1.0")
@@ -70,13 +80,14 @@ def test_agents_partial_filters_by_liveness(dynamo_resource, cognito_test_keys):
                                       last_seen_at=(now - timedelta(hours=2)).isoformat(),
                                       agent_version="0.1.0")
 
-    resp_stale = client.get("/admin/ui/agents", params={"status": "stale"})
-    assert "a-quiet" in resp_stale.text
-    assert "a-live" not in resp_stale.text
+    page = client.get("/admin/ui/tenants", params={"id": "t-1"}).text
+    live_at = page.index("a-live")
+    quiet_at = page.index("a-quiet")
 
-    resp_active = client.get("/admin/ui/agents", params={"status": "active"})
-    assert "a-live" in resp_active.text
-    assert "a-quiet" not in resp_active.text
+    assert "Reporting" in page and "Quiet" in page
+    # Each label belongs to its own row, which a page containing both words
+    # somewhere would not establish.
+    assert "Reporting" in page[min(live_at, quiet_at):max(live_at, quiet_at)]         or "Quiet" in page[min(live_at, quiet_at):max(live_at, quiet_at)]
 
 
 def test_non_admin_cannot_reach_control_platform(dynamo_resource, cognito_test_keys):

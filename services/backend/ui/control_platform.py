@@ -32,14 +32,11 @@ from services.backend.core.tables import AgentsTable
 from services.backend.ui.csrf import CSRF_COOKIE_NAME, verify_csrf
 from services.backend.ui.hx import hx_return
 from services.backend.ui.presenters import (
-    agent_state, humanise_age, timestamp_pair, usage_share,
+    agent_state, timestamp_pair, usage_share,
 )
 from services.backend.ui.templates_env import templates
 
 router = APIRouter()
-
-_FILTERS = ("active", "stale", "revoked")
-
 
 def _shell(request, active, resource, **extra):
     """Nav counts make the sidebar carry state. The stale count in
@@ -51,31 +48,6 @@ def _shell(request, active, resource, **extra):
            "stale_count": stale}
     ctx.update(extra)
     return ctx
-
-
-def _agent_rows(items, now):
-    """`items` are AgentSummary models from the JSON route, not raw DynamoDB
-    dicts — the UI reuses the API's own functions rather than re-querying."""
-    rows = []
-    for a in items:
-        label = "never"
-        if a.last_seen_at:
-            try:
-                seen = datetime.fromisoformat(a.last_seen_at.replace("Z", "+00:00"))
-                label = humanise_age((now - seen).total_seconds())
-            except ValueError:
-                label = "unknown"
-        rows.append({
-            "tenant_id": a.tenant_id,
-            "agent_id": a.agent_id,
-            # The name the customer gave the machine, which AgentSummary
-            # used to drop — leaving the console showing a bare uuid.
-            "label": a.agent_label or a.agent_id,
-            "version": a.agent_version or "unknown",
-            "status": a.status,
-            "last_seen": label,
-        })
-    return rows
 
 
 @router.get("/admin/ui", response_class=HTMLResponse, dependencies=[Depends(admin_auth)])
@@ -202,22 +174,6 @@ def _spark(week: list[int]) -> list[dict]:
     return [{"count": n,
              "level": 0 if not tallest else max(1, round(n / tallest * _SPARK_LEVELS))}
             for n in week]
-
-
-@router.get("/admin/ui/agents", response_class=HTMLResponse,
-            dependencies=[Depends(admin_auth)])
-def agents_page(request: Request, status: str = "stale",
-                resource=Depends(get_dynamo_resource)):
-    # Opens on the filter the sidebar is shouting about. The page used to
-    # default to "active" while the nav said "8 stale" in red, so clicking
-    # the problem produced a blank card.
-    status = status if status in _FILTERS else "stale"
-    now = datetime.now(timezone.utc)
-    rows = _agent_rows(list_agents(status=status, resource=resource), now)
-    return templates.TemplateResponse(request, "admin_agents.html", _shell(
-        request, "agents", resource,
-        agents=rows, agent_status=status, filters=_FILTERS,
-    ))
 
 
 def _tenant_returns(tenant_id: str) -> dict[str, str]:

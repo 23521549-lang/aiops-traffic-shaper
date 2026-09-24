@@ -49,16 +49,16 @@
          {% if active == 'overview' %}aria-current="page"{% endif %}>
         <span>Overview</span>
       </a>
-      <a class="c-nav-link" href="/admin/ui/agents"
-         {% if active == 'agents' %}aria-current="page"{% endif %}>
-        <span>Agents</span>
-        {% if stale_count %}<span class="c-nav-count" data-tone="alarm">{{ stale_count }}</span>{% endif %}
-      </a>
 
+      {# Two jobs and only two: am I about to be billed, and which tenant
+         caused it. The Agents page was a filter over a list wearing the shape
+         of a page, and the question it answered is a column on the tenant it
+         belongs to - so the count that used to sit on it sits here. #}
       <div class="c-nav-label">Control</div>
       <a class="c-nav-link" href="/admin/ui/tenants"
          {% if active == 'tenants' %}aria-current="page"{% endif %}>
         <span>Tenants</span>
+        {% if stale_count %}<span class="c-nav-count" data-tone="alarm">{{ stale_count }}</span>{% endif %}
         {% if tenant_count %}<span class="c-nav-count">{{ tenant_count }}</span>{% endif %}
       </a>
       {% endif %}
