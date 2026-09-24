@@ -175,11 +175,28 @@ def actor_of(claims: dict) -> str:
     return claims.get("email") or claims.get("sub") or "unknown"
 
 
-def admin_auth(authorization: str | None = Header(default=None),
-               x_id_token: str | None = Header(default=None),
-               id_token: str | None = Cookie(default=None),
-               jwks: dict = Depends(get_jwks)) -> None:
+def admin_claims(authorization: str | None = Header(default=None),
+                 x_id_token: str | None = Header(default=None),
+                 id_token: str | None = Cookie(default=None),
+                 jwks: dict = Depends(get_jwks)) -> dict:
+    """The verified claims of a platform operator.
+
+    The mirror of `dashboard_claims`, and for the same reason: suspending a
+    tenant is one of spec 2.5's four audited actions, and the row has to name
+    who did it from a verified token rather than from anything a caller can
+    set.
+    """
     claims = _decode_and_verify(_extract_token(authorization, id_token, x_id_token), jwks)
     groups = claims.get("cognito:groups", [])
     if "admin" not in groups:
         raise HTTPException(status_code=403, detail="Admin group membership required")
+    return claims
+
+
+def admin_auth(claims: dict = Depends(admin_claims)) -> None:
+    """The guard, for the many routes that need it and nothing else.
+
+    A thin wrapper so the two that must name an actor can take the claims
+    without every other route changing. FastAPI caches a dependency within a
+    request, so depending on both costs one verification.
+    """

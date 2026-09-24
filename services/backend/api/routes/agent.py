@@ -8,7 +8,9 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from fastapi import APIRouter, Depends
 
-from services.backend.api.cognito_auth import dashboard_auth
+from services.backend.api.cognito_auth import (
+    actor_of, dashboard_auth, dashboard_claims,
+)
 from services.backend.api.dependencies import (
     agent_auth,
     assert_tenant_active,
@@ -68,6 +70,7 @@ def register_agent(
     body: AgentRegisterRequest,
     tenant_id: str = Depends(dashboard_auth),  # the tenant owner, not the agent itself — the
     # agent has no credentials yet at this point, that's the whole point of this endpoint
+    claims: dict = Depends(dashboard_claims),
     resource=Depends(get_dynamo_resource),
 ) -> AgentRegisterResponse:
     # H3 bypass path: the tenant's dashboard JWT stays valid until it expires,
@@ -83,6 +86,16 @@ def register_agent(
         registered_at=now, last_seen_at=now, agent_version="unknown",
         api_key_hash=hash_api_key(raw_api_key), status="active",
     )
+
+    # Spec 2.5, the fourth of the four. This mints a credential that can send
+    # telemetry as this tenant, and "who created it and when" is the first
+    # question asked after one leaks. The key itself is never recorded - only
+    # its hash is stored anywhere, and a log line is not the place to make an
+    # exception to that.
+    _try_history(TenantHistoryTable(resource).record_setting,
+                 tenant_id, actor=actor_of(claims), what="agent_key",
+                 old=None, new=body.agent_label or agent_id, now=time.time(),
+                 because=f"minted {agent_id}")
 
     return AgentRegisterResponse(tenant_id=tenant_id, agent_id=agent_id, api_key=raw_api_key)
 

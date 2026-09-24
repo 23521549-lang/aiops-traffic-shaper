@@ -6,10 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from botocore.exceptions import ClientError
 from pydantic import ValidationError
 
-from services.backend.api.cognito_auth import admin_auth
+from services.backend.api.cognito_auth import actor_of, admin_auth, admin_claims
 from services.backend.core.dynamo import get_dynamo_resource
 from services.backend.ui.csrf import verify_csrf_if_cookie_auth
-from services.backend.core.tables import AgentsTable, TelemetryEventsTable, TenantsTable
+from services.backend.core.tables import (
+    AgentsTable, TelemetryEventsTable, TenantHistoryTable, TenantsTable,
+)
 from services.backend.api.cognito_login import get_cognito_client
 from services.backend.core.config import settings
 from services.backend.schemas.admin import (
@@ -18,6 +20,29 @@ from services.backend.schemas.admin import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _audit(resource, tenant_id: str, claims: dict, what: str, old, new,
+           because: str | None = None) -> None:
+    """Spec 2.5. A tenant suspension or reactivation is one of the four
+    actions that earn an append-only row.
+
+    On the AFFECTED TENANT's partition, not an operator partition: the
+    question it answers is "what happened to this tenant", and it has to come
+    back from the same `query_settings` the rest of the product uses.
+
+    Wrapped like every other reporting write. Suspension is most often
+    reached for during an incident, which is exactly when the history table
+    is likeliest to be throttled, and losing the suspension to a lost log
+    line would be the wrong way round.
+    """
+    import time
+
+    from services.backend.api.routes.agent import _try_history
+
+    _try_history(TenantHistoryTable(resource).record_setting,
+                 tenant_id, actor=actor_of(claims), what=what,
+                 old=old, new=new, now=time.time(), because=because)
 
 
 @router.get("/admin/v1/tenants", response_model=list[Tenant], dependencies=[Depends(admin_auth)])
@@ -57,19 +82,28 @@ def list_agents(status: str = "active", resource=Depends(get_dynamo_resource),
 
 @router.post("/admin/v1/tenants/{tenant_id}/suspend",
              dependencies=[Depends(admin_auth), Depends(verify_csrf_if_cookie_auth)])
-def suspend_tenant(tenant_id: str, resource=Depends(get_dynamo_resource)) -> dict:
+def suspend_tenant(tenant_id: str,
+                   claims: dict = Depends(admin_claims),
+                   resource=Depends(get_dynamo_resource)) -> dict:
     if not TenantsTable(resource).suspend(tenant_id):
         raise HTTPException(status_code=404, detail="Tenant not found")
     # Phase 4 / H3: suspension used to flip one attribute nobody read. It now
     # also revokes every API key already issued to this tenant's agents —
     # otherwise those keys keep working, since agent keys have no expiry.
     revoked = AgentsTable(resource).revoke_all_for_tenant(tenant_id)
+    # The revocation count rides on the row because it is the part the
+    # customer disputes: their agents stop, and stay stopped after
+    # reactivation, which surprises everyone the first time.
+    _audit(resource, tenant_id, claims, "tenant_status", "active", "suspended",
+           because=f"{revoked} agent key{'' if revoked == 1 else 's'} revoked")
     return {"message": f"tenant {tenant_id} suspended", "agents_revoked": revoked}
 
 
 @router.post("/admin/v1/tenants/{tenant_id}/reactivate",
              dependencies=[Depends(admin_auth), Depends(verify_csrf_if_cookie_auth)])
-def reactivate_tenant(tenant_id: str, resource=Depends(get_dynamo_resource)) -> dict:
+def reactivate_tenant(tenant_id: str,
+                      claims: dict = Depends(admin_claims),
+                      resource=Depends(get_dynamo_resource)) -> dict:
     """Undo a suspension. Until this existed suspension was one-way, short of
     editing DynamoDB by hand.
 
@@ -80,6 +114,7 @@ def reactivate_tenant(tenant_id: str, resource=Depends(get_dynamo_resource)) -> 
     to start reporting again on their own - and they will not."""
     if not TenantsTable(resource).reactivate(tenant_id):
         raise HTTPException(status_code=404, detail="Tenant not found")
+    _audit(resource, tenant_id, claims, "tenant_status", "suspended", "active")
     return {
         "message": f"tenant {tenant_id} reactivated",
         "note": "agent keys revoked at suspension stay revoked; register agents again",

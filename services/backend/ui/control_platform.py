@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse
 
 from pydantic import ValidationError
 
-from services.backend.api.cognito_auth import admin_auth
+from services.backend.api.cognito_auth import admin_auth, admin_claims
 from services.backend.api.cognito_login import get_cognito_client
 from services.backend.api.routes.admin import (
     create_tenant, list_agents, list_tenants, reactivate_tenant, suspend_tenant,
@@ -188,8 +188,12 @@ def _tenant_returns(tenant_id: str) -> dict[str, str]:
 @router.post("/admin/ui/tenants/{tenant_id}/suspend", response_class=HTMLResponse,
              dependencies=[Depends(admin_auth), Depends(verify_csrf)])
 def suspend_tenant_ui(request: Request, tenant_id: str, back: str = "",
+                      claims: dict = Depends(admin_claims),
                       resource=Depends(get_dynamo_resource)):
-    result = suspend_tenant(tenant_id, resource=resource)
+    # `claims` passed explicitly, never left to the Depends() default: this
+    # calls the API route as a plain function, so the default would arrive as
+    # the marker object and the audit row would name it.
+    result = suspend_tenant(tenant_id, claims=claims, resource=resource)
     sent_back = hx_return(back, _tenant_returns(tenant_id))
     if sent_back is not None:
         return sent_back
@@ -203,8 +207,9 @@ def suspend_tenant_ui(request: Request, tenant_id: str, back: str = "",
 @router.post("/admin/ui/tenants/{tenant_id}/reactivate", response_class=HTMLResponse,
              dependencies=[Depends(admin_auth), Depends(verify_csrf)])
 def reactivate_tenant_ui(request: Request, tenant_id: str, back: str = "",
+                         claims: dict = Depends(admin_claims),
                          resource=Depends(get_dynamo_resource)):
-    reactivate_tenant(tenant_id, resource=resource)
+    reactivate_tenant(tenant_id, claims=claims, resource=resource)
     sent_back = hx_return(back, _tenant_returns(tenant_id))
     if sent_back is not None:
         return sent_back

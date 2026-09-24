@@ -423,6 +423,7 @@ def bulk_allow_ui(ip: list[str] = Query(default=[]),
              dependencies=[Depends(verify_csrf)])
 def add_agent_ui(request: Request, label: str = "",
                  tenant_id: str = Depends(dashboard_auth),
+                 claims: dict = Depends(dashboard_claims),
                  resource=Depends(get_dynamo_resource)):
     """Mint an agent from the console.
 
@@ -450,8 +451,12 @@ def add_agent_ui(request: Request, label: str = "",
         error = "Give the machine a name you will recognise later."
     else:
         try:
+            # `claims` explicitly, never the Depends() default: this calls
+            # the API route as a plain function, and the audit row names the
+            # actor from it.
             created = register_agent(AgentRegisterRequest(agent_label=label),
-                                     tenant_id=tenant_id, resource=resource)
+                                     tenant_id=tenant_id, claims=claims,
+                                     resource=resource)
         except ValidationError:
             error = "That name cannot be used."
         except HTTPException as e:
