@@ -746,23 +746,68 @@ class TenantHistoryTable(_SimpleTable):
             },
         )
 
+    # Twelve bins of 0.25 sigma from 3.0, plus one overflow at 6.0 matching
+    # SIGMA_CEILING in ui/charts.py so the data and the chart agree. The
+    # floor is 3.0 on product grounds, not byte grounds: ADR-006 measured
+    # 0.82% false positives at 3.5 sigma and the rate climbs steeply below
+    # it, so the gate control must not offer a setting it cannot honestly
+    # recommend.
+    #
+    # Names are `n` plus sigma x 100: 4 B of name, 4 B of value, 8 B a bin.
+    # The agg# item is ~119 B with 905 B spare, so thirteen bins cost 104 B
+    # and the row stays inside one 1 KB write unit.
+    NEAR_BINS: tuple[float, ...] = tuple(3.0 + 0.25 * i for i in range(13))
+
+    @classmethod
+    def bin_name(cls, magnitude: float) -> str | None:
+        """Which bin a |z| falls in, or None below the floor.
+
+        Takes a MAGNITUDE. z is negative by convention, and a sign slip would
+        file every source in the lowest bin without complaining, so a
+        negative argument raises rather than being helpfully absolved.
+        """
+        if magnitude < 0:
+            raise ValueError("bin_name takes |z|, not z")
+        if magnitude < cls.NEAR_BINS[0]:
+            return None
+        edge = max(b for b in cls.NEAR_BINS if b <= magnitude)
+        return "n%d" % round(edge * 100)
+
     def record_traffic(self, tenant_id: str, hour_start: int, requests: int,
-                       tier1: int = 0, tier2: int = 0) -> None:
+                       tier1: int = 0, tier2: int = 0,
+                       bins: dict[str, int] | None = None) -> None:
         """One atomic ADD per telemetry batch - a constant, independent of
         how many IPs the batch touched. Fixed-size scalars only: anything
         that grows with request volume is the trap add_aggregate was written
-        to avoid."""
+        to avoid.
+
+        `bins` rides in the same ADD, so the near-threshold histogram that
+        makes the gate previewable in BOTH directions costs zero extra
+        operations and zero extra WCU. Without it only raising a gate can be
+        backtested: a source below 4 sigma leaves no trace anywhere, so the
+        sources a lower gate would newly catch were never written down.
+
+        Only bins the batch actually hit are emitted - ADD creates a missing
+        numeric attribute, so a bin never hit costs nothing. The read side
+        must zero-fill, because an absent bin comes back absent rather than
+        0, exactly as query_series(fill=True) already handles empty hours.
+        """
+        adds = ["requests :r", "batches :b",
+                "tier1_decisions :t1", "tier2_decisions :t2"]
+        values = {":r": int(requests), ":b": 1,
+                  ":t1": int(tier1), ":t2": int(tier2),
+                  ":h": int(hour_start),
+                  ":ttl": int(hour_start) + self.RETENTION_SECONDS}
+        for i, (name, count) in enumerate(sorted((bins or {}).items())):
+            adds.append("%s :nb%d" % (name, i))
+            values[":nb%d" % i] = int(count)
+
         self.update(
             key={"tenant_id": tenant_id, "sk": self.series_sk(hour_start)},
-            update_expression=(
-                "ADD requests :r, batches :b, tier1_decisions :t1, tier2_decisions :t2 "
-                "SET hour_start = :h, #ttl = :ttl"
-            ),
+            update_expression=("ADD " + ", ".join(adds) +
+                               " SET hour_start = :h, #ttl = :ttl"),
             expr_names={"#ttl": "ttl"},
-            expr_values={":r": int(requests), ":b": 1,
-                         ":t1": int(tier1), ":t2": int(tier2),
-                         ":h": int(hour_start),
-                         ":ttl": int(hour_start) + self.RETENTION_SECONDS},
+            expr_values=values,
         )
 
     def mark_read(self, tenant_id: str, through_ts: int) -> None:

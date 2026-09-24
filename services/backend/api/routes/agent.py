@@ -120,6 +120,8 @@ def ingest_telemetry(
     # do NOT "simplify" this back to an unconditional registry.load_model() call
 
     decisions: list[MitigationState] = []
+    # The shape below the gate, so the gate can be previewed downward.
+    near_bins: dict[str, int] = {}
     for ip in touched_ips:
         if ip in whitelist:
             continue
@@ -129,6 +131,17 @@ def ingest_telemetry(
         for v, score in mgr.score_vectors([vector]):
             tier = classify(score, mgr.stats)
             if tier == AnomalyTier.NORMAL:
+                # Counted, not stored. A source below the gate is never acted
+                # on individually, so no address is retained - only the
+                # shape. That is what lets the gate control preview LOWERING
+                # as well as raising, and it is exactly why the preview may
+                # state a count and must never offer a "show me them" link:
+                # there is nothing behind it.
+                near_z = z_score(score, mgr.stats)
+                if near_z is not None:
+                    bin_name = TenantHistoryTable.bin_name(abs(near_z))
+                    if bin_name:
+                        near_bins[bin_name] = near_bins.get(bin_name, 0) + 1
                 continue
             state = MitigationState(
                 ip=v.remote_addr, tier=int(tier), score=score,
@@ -173,7 +186,8 @@ def ingest_telemetry(
     _try_history(history.record_traffic, tenant_id, hour_start=hour_start,
                  requests=len(batch.logs),
                  tier1=sum(1 for d in decisions if d.tier == 1),
-                 tier2=sum(1 for d in decisions if d.tier >= 2))
+                 tier2=sum(1 for d in decisions if d.tier >= 2),
+                 bins=near_bins)
 
     # One Query, ~1 RCU for a typical twenty rows. At the account-wide ingest
     # ceiling of ~0.39 batches/second that is ~0.39 RCU sustained, inside the
