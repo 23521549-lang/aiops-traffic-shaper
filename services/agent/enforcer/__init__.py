@@ -62,5 +62,31 @@ class DecisionStore:
             del self._active[ip]
         return expired
 
+    def reconcile(self, served_ips: list[str], adapters: list[EnforcementAdapter]) -> list[str]:
+        """Drop anything the backend has stopped serving.
+
+        `sweep_expired` only handles the timer running out. Nothing handled
+        the other way a block ends: a human allowing the IP, which deletes
+        the MitigationState row so the backend stops issuing it. The rule
+        then sat in the customer's nginx until its local TTL — up to an hour
+        — while the console said it had been lifted.
+
+        `served_ips` must be the FULL active set for the tenant, never the
+        decisions from one telemetry response. Those cover only IPs with
+        traffic in that batch, and a blocked IP stops sending traffic: that
+        is what being blocked means. Reconciling against them would release
+        every attacker seconds after blocking them.
+        """
+        served = set(served_ips)
+        gone = [ip for ip in self._active if ip not in served]
+        for ip in gone:
+            for adapter in adapters:
+                try:
+                    adapter.unblock(ip)
+                except Exception as e:
+                    logger.error("%s failed to unblock ip=%s: %s", adapter.name, ip, e)
+            del self._active[ip]
+        return gone
+
     def active_ips(self) -> list[str]:
         return list(self._active)

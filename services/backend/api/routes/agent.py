@@ -168,8 +168,17 @@ def ingest_telemetry(
                  tier1=sum(1 for d in decisions if d.tier == 1),
                  tier2=sum(1 for d in decisions if d.tier >= 2))
 
+    # One Query, ~1 RCU for a typical twenty rows. At the account-wide ingest
+    # ceiling of ~0.39 batches/second that is ~0.39 RCU sustained, inside the
+    # 11 RCU of headroom. It is what lets the agent stop enforcing a block a
+    # human has lifted, instead of holding it for up to an hour — `decisions`
+    # cannot do that job, because it only covers IPs with traffic in this
+    # batch and a blocked IP stops sending traffic.
+    active = MitigationStateTable(resource).query_active(tenant_id)
+
     return TelemetryResponse(
         received=len(batch.logs), processed_ips=len(touched_ips), decisions=decisions,
+        active_ips=[item["ip"] for item in active],
     )
 
 

@@ -33,3 +33,12 @@ class TelemetryResponse(BaseModel):
     received: int
     processed_ips: int
     decisions: list[MitigationState] = []
+    # Every address currently in force for this tenant, not only the ones
+    # this batch touched. The agent reconciles its local enforcement against
+    # this: a blocked IP stops sending traffic, so `decisions` alone would
+    # tell the agent to release every attacker.
+    #
+    # A list of strings rather than full MitigationState objects. Fifty of
+    # those, each carrying a seven-float vector, is ~10KB every five seconds
+    # — about 172MB/day of egress for what is a set membership test.
+    active_ips: list[str] = []

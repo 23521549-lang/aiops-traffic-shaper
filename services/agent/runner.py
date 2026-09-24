@@ -59,16 +59,27 @@ def _call(fn, *args):
 
 
 def _apply(store, adapters, result) -> None:
-    """Enforce whatever came back.
+    """Enforce whatever came back, and stop enforcing whatever did not.
 
     A response with no decisions key at all is the normal answer for a
     tenant whose model has not been trained yet, which is every tenant on
     their first day.
+
+    `result` is None when the POST failed, and that guard is load-bearing: a
+    backend outage must never reconcile, because an empty served set would
+    strip every block at exactly the moment an attack is causing the load.
+
+    The `"active_ips" in result` check carries the same weight one step
+    further in. A backend too old to send the key is saying "I cannot tell
+    you", which is not the same as "nothing is served" — reading the first
+    as the second would release every block during a partial rollout.
     """
     if not result:
         return
     try:
         store.apply(result.get("decisions") or [], adapters)
+        if "active_ips" in result:
+            store.reconcile(result["active_ips"] or [], adapters)
     except Exception:
         logger.exception("applying decisions failed")
 
