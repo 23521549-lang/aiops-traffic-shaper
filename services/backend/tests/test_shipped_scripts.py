@@ -1,4 +1,4 @@
-"""The JavaScript this product ships has to parse.
+r"""The JavaScript this product ships has to parse.
 
 `keys.js` shipped with `/["\\]/g` mangled down to `/["\]/`, which is not a
 valid regular expression: the backslash escapes the closing bracket so the

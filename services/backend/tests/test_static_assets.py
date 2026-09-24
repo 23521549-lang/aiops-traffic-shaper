@@ -70,3 +70,40 @@ def test_each_asset_is_actually_reachable(name):
 def test_an_unknown_name_is_refused():
     r = TestClient(app, base_url="https://testserver").get("/ui/static/../main.py")
     assert r.status_code == 404
+
+
+# --- the two ceilings spec 9 sets ------------------------------------------
+
+CSS_CEILING = 80_000
+JS_CEILING = 20_480
+
+
+def test_the_stylesheets_stay_under_their_ceiling():
+    """One number for all three sheets, because a reader loads two of them on
+    every page and three in the console. Splitting tokens out of app.css did
+    not buy any room; it bought the shared-macro rule."""
+    total = sum((_STATIC_DIR / name).stat().st_size
+                for name in _ASSETS if name.endswith(".css"))
+
+    assert total <= CSS_CEILING, f"{total} bytes of {CSS_CEILING}"
+
+
+def test_the_hand_written_javascript_stays_under_its_ceiling():
+    """Not about transfer size: the Lambda package is at 197MB of 250MB and
+    the frontend is 0.04% of it. It is about how much JavaScript one person
+    can actually read line by line, which is this frontend's only real safety
+    measure. The vendored htmx is excluded because nobody is auditing it by
+    hand; that is what pinning a version is for."""
+    own = [n for n in _ASSETS if n.endswith(".js") and n != "htmx.min.js"]
+    total = sum((_STATIC_DIR / n).stat().st_size for n in own)
+
+    assert total <= JS_CEILING, f"{total} bytes of {JS_CEILING} across {own}"
+
+
+def test_no_second_vendored_library_has_appeared():
+    """Spec 12.9 refuses third-party resources of any kind. A minified file
+    that is not the one htmx we chose is the shape that rule exists to
+    catch."""
+    minified = [n for n in _ASSETS if ".min." in n]
+
+    assert minified == ["htmx.min.js"]
