@@ -339,3 +339,66 @@ def agent_state(agent: dict, now: datetime | None = None,
         "registered_exact": timestamp_pair(agent.get("registered_at"))["exact"]
                             if agent.get("registered_at") else "",
     }
+
+
+def axis_state(health: dict, throttle: dict, model_ready: bool) -> dict:
+    """What the axis is allowed to show, and the sentence that says why.
+
+    An instrument with no feed must not render a reading. `plot` is the
+    state of the PLOT AREA, not something added beside it: at "outline" the
+    bands are hairlines and no mark is drawn at all, so there is no reading
+    on screen to misread. A status tile would have left the reading up and
+    put a warning next to it, which is the failure this replaces.
+
+    The order is not arbitrary. A dead agent outranks a quota, because
+    nothing is arriving to be refused and naming the quota would send the
+    customer to the wrong problem. A quota outranks a healthy feed, because
+    the agent is reporting and being refused, and the screen has to show the
+    refusal rather than the reporting.
+    """
+    if health.get("state") == NEVER_CONNECTED:
+        return {
+            "state": "no_signal", "plot": "outline", "gates_armed": False,
+            "sentence": ("No agent has ever reported. Nothing is being "
+                         "measured, so an empty scale is not evidence that "
+                         "your traffic is clean."),
+        }
+
+    if health.get("state") == DEGRADED:
+        seen = health.get("last_seen_label") or "some time ago"
+        return {
+            "state": "no_signal", "plot": "outline", "gates_armed": False,
+            "sentence": (f"No measurement since {seen}. Nothing is being "
+                         f"checked right now, and this scale is showing the "
+                         f"last data we had, not current traffic."),
+        }
+
+    if throttle.get("throttled"):
+        # Two different sentences, because one of them the customer can act
+        # on and the other they cannot: their own share is theirs to manage,
+        # and the platform ceiling was filled by somebody else.
+        why = ("you reached your daily share"
+               if throttle.get("throttled_reason") == "tenant"
+               else "the platform reached its daily limit")
+        return {
+            "state": "throttled", "plot": "frozen", "gates_armed": model_ready,
+            "sentence": (f"We stopped accepting your telemetry because {why}. "
+                         f"Measurement resumes at midnight UTC. Your agent is "
+                         f"running, and restarting it will not help."),
+        }
+
+    if not model_ready:
+        return {
+            "state": "day_one", "plot": "live", "gates_armed": False,
+            "sentence": ("No model yet. We are measuring and enforcing "
+                         "nothing. The gates below switch on after the first "
+                         "training run, usually overnight."),
+        }
+
+    reporting = health.get("reporting", 0)
+    seen = health.get("last_seen_label") or "just now"
+    return {
+        "state": "fed", "plot": "live", "gates_armed": True,
+        "sentence": (f"{reporting} agent{'' if reporting == 1 else 's'} "
+                     f"reporting, last seen {seen}."),
+    }
