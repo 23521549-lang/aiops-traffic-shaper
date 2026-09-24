@@ -284,3 +284,156 @@ def downsample(points: list, limit: int = 240) -> list:
         worst = max(chunk, key=lambda p: abs(p[1]) if p[1] is not None else -1)
         out.append(worst)
     return out
+
+
+# --- the axis -------------------------------------------------------------
+
+# 100 units per sigma, so the viewBox is 0..600 for 0..6 sigma. A round
+# number because a person checking the markup by eye should be able to do the
+# division.
+AXIS_UNITS_PER_SIGMA = 100
+
+
+def axis_x(sigma: float) -> float:
+    """Where a magnitude sits, clamped at the ceiling.
+
+    Takes |sigma|: z is negative by convention and the axis runs 0 to 6, so a
+    raw -6.4 would land off the left edge without complaining.
+
+    Clamped rather than rescaled. One source at 40 sigma would otherwise
+    flatten every other source into the first two pixels, which is how a
+    chart hides the thing it was drawn to show.
+    """
+    return min(abs(sigma), SIGMA_CEILING) * AXIS_UNITS_PER_SIGMA
+
+
+@dataclass
+class Band:
+    x: float
+    width: float
+    css: str
+    label: str
+    short: str
+
+
+def axis_bands(tier1_sigma: float, tier2_sigma: float) -> list[Band]:
+    """The three regions, drawn from THIS tenant's gates.
+
+    Not from the module constants. Bands drawn from those would show every
+    tenant somebody else's gate, which is the exact thing the per-tenant
+    threshold exists to stop.
+
+    Labels are written in the case they are read in. A stylesheet that
+    uppercases them turns sigma into Sigma, which is summation, and that
+    reached an incident screen once already.
+    """
+    edges = [(0.0, tier1_sigma, "c-seg c-seg--normal",
+              "YOUR NORMAL TRAFFIC", "NORMAL"),
+             (tier1_sigma, tier2_sigma, "c-seg c-seg--limited",
+              f"{tier1_sigma:.0f}σ SLOWED", f"{tier1_sigma:.0f}σ"),
+             (tier2_sigma, SIGMA_CEILING, "c-seg c-seg--blocked",
+              f"{tier2_sigma:.0f}σ BLOCKED", f"{tier2_sigma:.0f}σ")]
+    return [Band(x=axis_x(lo), width=axis_x(hi) - axis_x(lo), css=css,
+                 label=label, short=short)
+            for lo, hi, css, label, short in edges]
+
+
+@dataclass
+class DensityBar:
+    x: float
+    width: float
+    height: float     # 0..1, relative to the tallest bar
+    css: str
+    sigma: float
+    count: int
+
+
+def density_bars(bins: dict[str, int]) -> list[DensityBar]:
+    """The shape below the gate, from the thirteen recorded bins.
+
+    Every bin is emitted, including the ones with no count. ADD only writes
+    the bins a batch touched, so an untouched bin comes back ABSENT rather
+    than zero, and a chart that skips it redraws the axis with the wrong
+    shape - the same zero-fill query_series(fill=True) already does.
+
+    Heights are relative, because absolute counts cannot be drawn on one
+    scale: one tenant sees four near-misses an hour and another sees four
+    thousand. The shape is the information, not the magnitude.
+    """
+    from services.backend.core.tables import TenantHistoryTable
+
+    edges = TenantHistoryTable.NEAR_BINS
+    counts = [int(bins.get("n%d" % round(s * 100), 0)) for s in edges]
+    tallest = max(counts) if counts else 0
+    step = (edges[1] - edges[0]) if len(edges) > 1 else 0.25
+
+    return [DensityBar(x=axis_x(s), width=axis_x(s + step) - axis_x(s),
+                       height=(c / tallest) if tallest else 0.0,
+                       css="c-density", sigma=s, count=c)
+            for s, c in zip(edges, counts)]
+
+
+@dataclass
+class Mark:
+    x: float
+    sigma: float
+    css: str
+    ip: str
+
+
+def source_marks(rows: list[dict]) -> list[Mark]:
+    """One tick per identified source, above the gate.
+
+    A row whose z is None is dropped rather than placed. z is None when the
+    model had no usable spread, and drawing it at zero would put a blocked
+    source inside the band labelled "your normal traffic".
+    """
+    marks = []
+    for row in rows:
+        z = row.get("z")
+        if z is None:
+            continue
+        marks.append(Mark(x=axis_x(z), sigma=abs(z),
+                          css=_tier_css(abs(z)).replace("c-bar", "c-mark"),
+                          ip=row.get("ip", "")))
+    return marks
+
+
+@dataclass
+class Axis:
+    width: float
+    height: float
+    bands: list[Band] = field(default_factory=list)
+    density: list[DensityBar] = field(default_factory=list)
+    marks: list[Mark] = field(default_factory=list)
+    ticks: list[tuple[int, str]] = field(default_factory=list)
+    gate1_x: float = 0.0
+    gate2_x: float = 0.0
+    gate1_sigma: float = 0.0
+    gate2_sigma: float = 0.0
+
+
+def build_axis(tier1_sigma: float, tier2_sigma: float,
+               bins: dict[str, int], rows: list[dict]) -> Axis:
+    """Everything the macro needs, in one object.
+
+    Its size is constant in the number of sources below the gate: those
+    become thirteen density bars whatever their count, and only the sources
+    above the gate - the mitigation list, already bounded - become individual
+    marks.
+    """
+    return Axis(
+        width=SIGMA_CEILING * AXIS_UNITS_PER_SIGMA,
+        height=48,
+        bands=axis_bands(tier1_sigma, tier2_sigma),
+        density=density_bars(bins),
+        marks=source_marks(rows),
+        # Integer sigma only. Sitting at integers is precisely why these need
+        # no computed position, and therefore no enumerated CSS rule: in the
+        # HTML layer they are grid columns.
+        ticks=[(i, f"{i}σ") for i in range(int(SIGMA_CEILING) + 1)],
+        gate1_x=axis_x(tier1_sigma),
+        gate2_x=axis_x(tier2_sigma),
+        gate1_sigma=tier1_sigma,
+        gate2_sigma=tier2_sigma,
+    )
