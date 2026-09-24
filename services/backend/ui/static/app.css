@@ -259,14 +259,6 @@ input[type=text], input[type=password], select {
 
 /* Renders in the empty state too, so a customer with zero mitigations still
  * learns what the product will do before it does it. */
-.sigma-scale {
-  display: flex; align-items: stretch; margin-top: 8px;
-  border-radius: 6px; overflow: hidden; font-size: var(--text-xs); font-weight: 600;
-}
-.sigma-scale span { padding: 5px 10px; white-space: nowrap; }
-.sigma-normal { background: var(--tier-normal-bg); color: var(--tier-normal); flex: 3; }
-.sigma-limited { background: var(--tier-limited-bg); color: var(--tier-limited); flex: 1; }
-.sigma-blocked { background: var(--tier-blocked-bg); color: var(--tier-blocked); flex: 1; }
 
 /* --- htmx in-flight feedback ------------------------------------------ */
 
@@ -788,263 +780,56 @@ input[type=text], input[type=password], input[type=email], select {
 .theme-opt[aria-pressed="true"] { background: var(--surface); color: var(--text); }
 .theme-opt:hover { color: var(--text); }
 
-/* --- the sigma band, on every surface ---------------------------------- */
 
-/* Here rather than in console.css because `_charts.html` is shared: the
- * landing page calls the same macro and never loads the console sheet. It
- * spent the whole console rebuild rendering this band as three unstyled
- * lines of text, under a heading that reads "sigma, in one screen".
+/* --- the sigma axis ---------------------------------------------------- */
+
+/* Both layers occupy the same grid cell and both are full width with zero
+ * inline padding, so sigma s lands at s/6 x 100% in each of them. Padding on
+ * either one breaks that mapping and nothing would report it.
  *
- * app.css carried rules for the markup the macro USED to emit
- * (.sigma-scale, .sigma-normal), which matched nothing and made the sheet
- * look complete. They are gone. */
+ * This is what replaced 202 enumerated rules - 101 for a flex ratio and 101
+ * for a marker position, about 9KB, rounding real percentages to the nearest
+ * 5. Arbitrary positions moved into SVG presentation attributes, which CSP
+ * does not govern and which cost no stylesheet at all; the labels moved to
+ * integer sigma, where a grid column is the whole answer. */
+.c-axis { display: grid; grid-template-columns: 1fr; }
+.c-axis > * { grid-area: 1 / 1; inline-size: 100%; padding-inline: 0; }
+.c-axis-plot { block-size: 48px; display: block; }
 
-/* Proportions come from data, and CSP blocks inline style attributes, so
- * the width and the marker position are data attributes matched by rules.
- * Whole percents: the bar is 700px wide at most, so a 1% step is 7px, finer
- * than the eye resolves on a band chart. */
-.sigma { padding: 2px 0 18px; }
-.sigma-bands {
-  display: flex; position: relative; height: 26px;
-  border-radius: 3px; overflow: visible;
+.c-axis-labels,
+.c-axis-ticks {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  pointer-events: none;
 }
-.sigma-band {
-  display: flex; align-items: center; min-width: 0; overflow: hidden;
-  font-family: var(--font-mono); font-size: 10px; font-weight: 600;
-  letter-spacing: .06em;
-  /* Deliberately NOT text-transform: uppercase. CSS uppercases Greek, so
-   * "4σ slowed" rendered as "4Σ SLOWED" on the main screen of a product
-   * whose whole pitch is standard deviations. Σ is summation. The labels
-   * are written in the case they are meant to be read in instead, and a
-   * test stops the rule coming back. */
-}
-.sigma-band span { padding: 0 8px; white-space: nowrap; }
-.sigma-band:first-child { border-radius: 3px 0 0 3px; }
-.sigma-band:last-child { border-radius: 0 3px 3px 0; }
-.c-seg--normal { background: var(--tier-normal-bg); color: var(--tier-normal); }
-.c-seg--limited { background: var(--tier-limited-bg); color: var(--tier-limited); }
-.c-seg--blocked { background: var(--tier-blocked-bg); color: var(--tier-blocked); }
+.c-axis-ticks { align-self: end; color: var(--text-muted); }
+.c-axis-band-label { padding: 0 6px; align-self: center; color: var(--text); }
 
-/* The live marker: where the most extreme active source actually sits. */
-.sigma-marker {
-  position: absolute; top: -3px; bottom: -6px; width: 2px;
-  background: var(--text); transform: translateX(-1px);
-}
-.sigma-marker-label {
-  position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
-  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
-  color: var(--text); white-space: nowrap; padding-top: 2px;
-}
-
-.sigma-band[data-flex="0"] { flex: 0; }
-.sigma-band[data-flex="1"] { flex: 1; }
-.sigma-band[data-flex="2"] { flex: 2; }
-.sigma-band[data-flex="3"] { flex: 3; }
-.sigma-band[data-flex="4"] { flex: 4; }
-.sigma-band[data-flex="5"] { flex: 5; }
-.sigma-band[data-flex="6"] { flex: 6; }
-.sigma-band[data-flex="7"] { flex: 7; }
-.sigma-band[data-flex="8"] { flex: 8; }
-.sigma-band[data-flex="9"] { flex: 9; }
-.sigma-band[data-flex="10"] { flex: 10; }
-.sigma-band[data-flex="11"] { flex: 11; }
-.sigma-band[data-flex="12"] { flex: 12; }
-.sigma-band[data-flex="13"] { flex: 13; }
-.sigma-band[data-flex="14"] { flex: 14; }
-.sigma-band[data-flex="15"] { flex: 15; }
-.sigma-band[data-flex="16"] { flex: 16; }
-.sigma-band[data-flex="17"] { flex: 17; }
-.sigma-band[data-flex="18"] { flex: 18; }
-.sigma-band[data-flex="19"] { flex: 19; }
-.sigma-band[data-flex="20"] { flex: 20; }
-.sigma-band[data-flex="21"] { flex: 21; }
-.sigma-band[data-flex="22"] { flex: 22; }
-.sigma-band[data-flex="23"] { flex: 23; }
-.sigma-band[data-flex="24"] { flex: 24; }
-.sigma-band[data-flex="25"] { flex: 25; }
-.sigma-band[data-flex="26"] { flex: 26; }
-.sigma-band[data-flex="27"] { flex: 27; }
-.sigma-band[data-flex="28"] { flex: 28; }
-.sigma-band[data-flex="29"] { flex: 29; }
-.sigma-band[data-flex="30"] { flex: 30; }
-.sigma-band[data-flex="31"] { flex: 31; }
-.sigma-band[data-flex="32"] { flex: 32; }
-.sigma-band[data-flex="33"] { flex: 33; }
-.sigma-band[data-flex="34"] { flex: 34; }
-.sigma-band[data-flex="35"] { flex: 35; }
-.sigma-band[data-flex="36"] { flex: 36; }
-.sigma-band[data-flex="37"] { flex: 37; }
-.sigma-band[data-flex="38"] { flex: 38; }
-.sigma-band[data-flex="39"] { flex: 39; }
-.sigma-band[data-flex="40"] { flex: 40; }
-.sigma-band[data-flex="41"] { flex: 41; }
-.sigma-band[data-flex="42"] { flex: 42; }
-.sigma-band[data-flex="43"] { flex: 43; }
-.sigma-band[data-flex="44"] { flex: 44; }
-.sigma-band[data-flex="45"] { flex: 45; }
-.sigma-band[data-flex="46"] { flex: 46; }
-.sigma-band[data-flex="47"] { flex: 47; }
-.sigma-band[data-flex="48"] { flex: 48; }
-.sigma-band[data-flex="49"] { flex: 49; }
-.sigma-band[data-flex="50"] { flex: 50; }
-.sigma-band[data-flex="51"] { flex: 51; }
-.sigma-band[data-flex="52"] { flex: 52; }
-.sigma-band[data-flex="53"] { flex: 53; }
-.sigma-band[data-flex="54"] { flex: 54; }
-.sigma-band[data-flex="55"] { flex: 55; }
-.sigma-band[data-flex="56"] { flex: 56; }
-.sigma-band[data-flex="57"] { flex: 57; }
-.sigma-band[data-flex="58"] { flex: 58; }
-.sigma-band[data-flex="59"] { flex: 59; }
-.sigma-band[data-flex="60"] { flex: 60; }
-.sigma-band[data-flex="61"] { flex: 61; }
-.sigma-band[data-flex="62"] { flex: 62; }
-.sigma-band[data-flex="63"] { flex: 63; }
-.sigma-band[data-flex="64"] { flex: 64; }
-.sigma-band[data-flex="65"] { flex: 65; }
-.sigma-band[data-flex="66"] { flex: 66; }
-.sigma-band[data-flex="67"] { flex: 67; }
-.sigma-band[data-flex="68"] { flex: 68; }
-.sigma-band[data-flex="69"] { flex: 69; }
-.sigma-band[data-flex="70"] { flex: 70; }
-.sigma-band[data-flex="71"] { flex: 71; }
-.sigma-band[data-flex="72"] { flex: 72; }
-.sigma-band[data-flex="73"] { flex: 73; }
-.sigma-band[data-flex="74"] { flex: 74; }
-.sigma-band[data-flex="75"] { flex: 75; }
-.sigma-band[data-flex="76"] { flex: 76; }
-.sigma-band[data-flex="77"] { flex: 77; }
-.sigma-band[data-flex="78"] { flex: 78; }
-.sigma-band[data-flex="79"] { flex: 79; }
-.sigma-band[data-flex="80"] { flex: 80; }
-.sigma-band[data-flex="81"] { flex: 81; }
-.sigma-band[data-flex="82"] { flex: 82; }
-.sigma-band[data-flex="83"] { flex: 83; }
-.sigma-band[data-flex="84"] { flex: 84; }
-.sigma-band[data-flex="85"] { flex: 85; }
-.sigma-band[data-flex="86"] { flex: 86; }
-.sigma-band[data-flex="87"] { flex: 87; }
-.sigma-band[data-flex="88"] { flex: 88; }
-.sigma-band[data-flex="89"] { flex: 89; }
-.sigma-band[data-flex="90"] { flex: 90; }
-.sigma-band[data-flex="91"] { flex: 91; }
-.sigma-band[data-flex="92"] { flex: 92; }
-.sigma-band[data-flex="93"] { flex: 93; }
-.sigma-band[data-flex="94"] { flex: 94; }
-.sigma-band[data-flex="95"] { flex: 95; }
-.sigma-band[data-flex="96"] { flex: 96; }
-.sigma-band[data-flex="97"] { flex: 97; }
-.sigma-band[data-flex="98"] { flex: 98; }
-.sigma-band[data-flex="99"] { flex: 99; }
-.sigma-band[data-flex="100"] { flex: 100; }
-
-.sigma-marker[data-at="0"] { left: 0%; }
-.sigma-marker[data-at="1"] { left: 1%; }
-.sigma-marker[data-at="2"] { left: 2%; }
-.sigma-marker[data-at="3"] { left: 3%; }
-.sigma-marker[data-at="4"] { left: 4%; }
-.sigma-marker[data-at="5"] { left: 5%; }
-.sigma-marker[data-at="6"] { left: 6%; }
-.sigma-marker[data-at="7"] { left: 7%; }
-.sigma-marker[data-at="8"] { left: 8%; }
-.sigma-marker[data-at="9"] { left: 9%; }
-.sigma-marker[data-at="10"] { left: 10%; }
-.sigma-marker[data-at="11"] { left: 11%; }
-.sigma-marker[data-at="12"] { left: 12%; }
-.sigma-marker[data-at="13"] { left: 13%; }
-.sigma-marker[data-at="14"] { left: 14%; }
-.sigma-marker[data-at="15"] { left: 15%; }
-.sigma-marker[data-at="16"] { left: 16%; }
-.sigma-marker[data-at="17"] { left: 17%; }
-.sigma-marker[data-at="18"] { left: 18%; }
-.sigma-marker[data-at="19"] { left: 19%; }
-.sigma-marker[data-at="20"] { left: 20%; }
-.sigma-marker[data-at="21"] { left: 21%; }
-.sigma-marker[data-at="22"] { left: 22%; }
-.sigma-marker[data-at="23"] { left: 23%; }
-.sigma-marker[data-at="24"] { left: 24%; }
-.sigma-marker[data-at="25"] { left: 25%; }
-.sigma-marker[data-at="26"] { left: 26%; }
-.sigma-marker[data-at="27"] { left: 27%; }
-.sigma-marker[data-at="28"] { left: 28%; }
-.sigma-marker[data-at="29"] { left: 29%; }
-.sigma-marker[data-at="30"] { left: 30%; }
-.sigma-marker[data-at="31"] { left: 31%; }
-.sigma-marker[data-at="32"] { left: 32%; }
-.sigma-marker[data-at="33"] { left: 33%; }
-.sigma-marker[data-at="34"] { left: 34%; }
-.sigma-marker[data-at="35"] { left: 35%; }
-.sigma-marker[data-at="36"] { left: 36%; }
-.sigma-marker[data-at="37"] { left: 37%; }
-.sigma-marker[data-at="38"] { left: 38%; }
-.sigma-marker[data-at="39"] { left: 39%; }
-.sigma-marker[data-at="40"] { left: 40%; }
-.sigma-marker[data-at="41"] { left: 41%; }
-.sigma-marker[data-at="42"] { left: 42%; }
-.sigma-marker[data-at="43"] { left: 43%; }
-.sigma-marker[data-at="44"] { left: 44%; }
-.sigma-marker[data-at="45"] { left: 45%; }
-.sigma-marker[data-at="46"] { left: 46%; }
-.sigma-marker[data-at="47"] { left: 47%; }
-.sigma-marker[data-at="48"] { left: 48%; }
-.sigma-marker[data-at="49"] { left: 49%; }
-.sigma-marker[data-at="50"] { left: 50%; }
-.sigma-marker[data-at="51"] { left: 51%; }
-.sigma-marker[data-at="52"] { left: 52%; }
-.sigma-marker[data-at="53"] { left: 53%; }
-.sigma-marker[data-at="54"] { left: 54%; }
-.sigma-marker[data-at="55"] { left: 55%; }
-.sigma-marker[data-at="56"] { left: 56%; }
-.sigma-marker[data-at="57"] { left: 57%; }
-.sigma-marker[data-at="58"] { left: 58%; }
-.sigma-marker[data-at="59"] { left: 59%; }
-.sigma-marker[data-at="60"] { left: 60%; }
-.sigma-marker[data-at="61"] { left: 61%; }
-.sigma-marker[data-at="62"] { left: 62%; }
-.sigma-marker[data-at="63"] { left: 63%; }
-.sigma-marker[data-at="64"] { left: 64%; }
-.sigma-marker[data-at="65"] { left: 65%; }
-.sigma-marker[data-at="66"] { left: 66%; }
-.sigma-marker[data-at="67"] { left: 67%; }
-.sigma-marker[data-at="68"] { left: 68%; }
-.sigma-marker[data-at="69"] { left: 69%; }
-.sigma-marker[data-at="70"] { left: 70%; }
-.sigma-marker[data-at="71"] { left: 71%; }
-.sigma-marker[data-at="72"] { left: 72%; }
-.sigma-marker[data-at="73"] { left: 73%; }
-.sigma-marker[data-at="74"] { left: 74%; }
-.sigma-marker[data-at="75"] { left: 75%; }
-.sigma-marker[data-at="76"] { left: 76%; }
-.sigma-marker[data-at="77"] { left: 77%; }
-.sigma-marker[data-at="78"] { left: 78%; }
-.sigma-marker[data-at="79"] { left: 79%; }
-.sigma-marker[data-at="80"] { left: 80%; }
-.sigma-marker[data-at="81"] { left: 81%; }
-.sigma-marker[data-at="82"] { left: 82%; }
-.sigma-marker[data-at="83"] { left: 83%; }
-.sigma-marker[data-at="84"] { left: 84%; }
-.sigma-marker[data-at="85"] { left: 85%; }
-.sigma-marker[data-at="86"] { left: 86%; }
-.sigma-marker[data-at="87"] { left: 87%; }
-.sigma-marker[data-at="88"] { left: 88%; }
-.sigma-marker[data-at="89"] { left: 89%; }
-.sigma-marker[data-at="90"] { left: 90%; }
-.sigma-marker[data-at="91"] { left: 91%; }
-.sigma-marker[data-at="92"] { left: 92%; }
-.sigma-marker[data-at="93"] { left: 93%; }
-.sigma-marker[data-at="94"] { left: 94%; }
-.sigma-marker[data-at="95"] { left: 95%; }
-.sigma-marker[data-at="96"] { left: 96%; }
-.sigma-marker[data-at="97"] { left: 97%; }
-.sigma-marker[data-at="98"] { left: 98%; }
-.sigma-marker[data-at="99"] { left: 99%; }
-.sigma-marker[data-at="100"] { left: 100%; }
-
-/* One band, two labels, and CSS picks. Rendering both and hiding one beats
- * swapping them in script: the band is never blank waiting for a file to
- * load, on the element this product's whole argument rests on. */
-.sigma-short { display: none; }
+/* Written in the case they are read in. No rule here may uppercase them:
+ * CSS uppercases Greek, and "4 sigma slowed" reached an incident screen as
+ * summation. */
+.c-axis-short { display: none; }
 @media (max-width: 860px) {
-  .sigma-long { display: none; }
-  .sigma-short { display: inline; }
+  .c-axis-long { display: none; }
+  .c-axis-short { display: inline; }
+}
+
+.c-density { fill: var(--text-muted); opacity: .45; }
+.c-gate { stroke: var(--text); stroke-width: 2; }
+.c-gate--2 { stroke-dasharray: 4 3; }
+.c-mark { stroke-width: 2; }
+.c-mark--normal { stroke: var(--tier-normal); }
+.c-mark--limited { stroke: var(--tier-limited); }
+.c-mark--blocked { stroke: var(--tier-blocked); }
+
+/* No feed, no reading. The bands drop to hairlines and the macro emits no
+ * mark at all, so there is nothing on screen to misread. */
+.c-axis[data-plot="outline"] .c-seg { fill: none; stroke: var(--border); stroke-width: 1; }
+.c-axis[data-plot="frozen"] .c-seg { opacity: .55; }
+
+.c-axis-caption {
+  font-family: var(--font-mono); font-size: var(--text-xs);
+  color: var(--text-muted); margin: 6px 0 0;
 }

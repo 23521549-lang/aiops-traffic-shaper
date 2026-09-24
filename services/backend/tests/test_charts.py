@@ -8,13 +8,11 @@ testable. `_charts.html` turns these objects into markup.
 import pytest
 
 from services.backend.ui.charts import (
-    SIGMA_CEILING,
     TIER1_SIGMA,
     TIER2_SIGMA,
     deviation_chart,
     downsample,
     enforcement_stack,
-    sigma_strip,
     sparkline,
 )
 
@@ -110,34 +108,10 @@ def test_time_anchors_are_placed_at_the_edges_and_middle():
     assert xs[-1] == pytest.approx(chart.pad_left + chart.plot_width)
 
 
-# --- the sigma strip -----------------------------------------------------
-
-def test_the_strip_renders_with_nothing_active():
-    strip = sigma_strip()
-    assert len(strip.segments) == 3
-    assert strip.marker is None
-
-
-def test_the_marker_lands_where_the_sigma_says():
-    strip = sigma_strip(-5.0)
-    x, label = strip.marker
-    assert label == "5.0σ"
-    assert x == pytest.approx(strip.width * TIER2_SIGMA / SIGMA_CEILING)
-
-
-def test_the_segments_tile_the_whole_strip_without_gaps():
-    strip = sigma_strip()
-    edges = [(seg[0], seg[0] + seg[1]) for seg in strip.segments]
-    assert edges[0][0] == pytest.approx(0)
-    assert edges[-1][1] == pytest.approx(strip.width)
-    for (_, end), (start, _) in zip(edges, edges[1:]):
-        assert end == pytest.approx(start)
-
-
-def test_an_off_scale_marker_stays_on_the_strip():
-    x, _ = sigma_strip(-99.0).marker
-    assert x <= sigma_strip().width
-
+# The sigma strip's tests moved with it. It was superseded by the axis,
+# whose geometry is covered by test_axis_geometry.py and whose markup is
+# covered by test_axis_markup.py. Two widgets drawing the same scale from
+# two code paths is how they drift apart.
 
 # --- the enforcement stack -----------------------------------------------
 

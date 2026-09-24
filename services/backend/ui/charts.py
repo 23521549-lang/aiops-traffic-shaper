@@ -165,57 +165,6 @@ def _y(sigma: float, chart: DeviationChart) -> float:
     return chart.pad_top + chart.plot_height * (1 - fraction)
 
 
-# --- the sigma strip ------------------------------------------------------
-
-@dataclass
-class SigmaStrip:
-    """The static legend, upgraded into an instrument.
-
-    It renders whether or not anything is happening, because a customer with
-    nothing blocked should still learn what the product will do before it
-    does it. When something IS active, a marker shows where.
-    """
-    width: float = 320
-    height: float = 34
-    # (x, width, css, label, short label)
-    segments: list[tuple[float, float, str, str, str]] = field(default_factory=list)
-    ticks: list[tuple[float, str]] = field(default_factory=list)
-    marker: tuple[float, str] | None = None
-
-    MAX = SIGMA_CEILING
-
-
-def sigma_strip(active_sigma: float | None = None) -> SigmaStrip:
-    strip = SigmaStrip()
-
-    def x(sigma: float) -> float:
-        return strip.width * min(abs(sigma), SIGMA_CEILING) / SIGMA_CEILING
-
-    # Written in the case they are read in. The stylesheet used to uppercase
-    # this band, and CSS uppercases Greek: "4σ slowed" reached the screen as
-    # "4Σ SLOWED", which is summation rather than standard deviation, on the
-    # one screen a customer reads during an incident.
-    # Each band carries a full label and the part that survives a narrow
-    # screen. On a phone the outer two bands are around 70px wide and the
-    # word was being sliced mid-letter: "4σ SLOWE", "5σ BLOCK". A cut word
-    # reads as a broken page; the figure alone reads as a scale.
-    bounds = [(0.0, TIER1_SIGMA, "c-seg c-seg--normal",
-               "YOUR NORMAL TRAFFIC", "NORMAL"),
-              (TIER1_SIGMA, TIER2_SIGMA, "c-seg c-seg--limited",
-               f"{TIER1_SIGMA:.0f}σ SLOWED", f"{TIER1_SIGMA:.0f}σ"),
-              (TIER2_SIGMA, SIGMA_CEILING, "c-seg c-seg--blocked",
-               f"{TIER2_SIGMA:.0f}σ BLOCKED", f"{TIER2_SIGMA:.0f}σ")]
-    for lo, hi, css, text, short in bounds:
-        strip.segments.append((x(lo), x(hi) - x(lo), css, text, short))
-
-    strip.ticks = [(x(v), f"{v:.0f}σ") for v in (3.0, TIER1_SIGMA, TIER2_SIGMA)]
-
-    if active_sigma is not None:
-        magnitude = abs(active_sigma)
-        strip.marker = (x(magnitude), f"{magnitude:.1f}σ")
-    return strip
-
-
 # --- the enforcement stack ------------------------------------------------
 
 @dataclass

@@ -23,7 +23,8 @@ the product it is selling.
 from fastapi import APIRouter, Cookie, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from services.backend.ui.charts import deviation_chart, sigma_strip
+from services.backend.ml.model import TIER1_Z, TIER2_Z
+from services.backend.ui.charts import build_axis, deviation_chart
 from services.backend.ui.templates_env import templates
 
 router = APIRouter()
@@ -78,7 +79,9 @@ def landing(request: Request, id_token: str | None = Cookie(default=None)):
     )
     return templates.TemplateResponse(request, "landing.html", {
         "chart": chart,
-        "strip": sigma_strip(5.4),
+        # No tenant here, so the default gates and no data. Honest:
+        # the public page has never had a tenant to measure.
+        "axis": build_axis(abs(TIER1_Z), abs(TIER2_Z), {}, []),
         "theme": request.cookies.get(THEME_COOKIE, ""),
     })
 

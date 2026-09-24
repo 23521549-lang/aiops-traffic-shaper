@@ -1,5 +1,6 @@
 {% extends "app_shell.html" %}
 {% import "shared/_charts.html" as charts %}
+{% import "shared/_axis.html" as axis_macro %}
 {% block title %}Protection · Traffic Shaper{% endblock %}
 {% block page_title %}Protection{% endblock %}
 {% block page_summary %}
@@ -57,7 +58,14 @@ no agent has ever reported
 
   <div class="c-panel">
     <div class="c-section-label">Current enforcement</div>
-    {{ charts.sigma_strip(strip, "Where the most extreme active source sits on the sigma scale") }}
+    {{ axis_macro.render(axis,
+         "Every measured source on the sigma scale, with your gates",
+         axis_state.sentence, axis_state.plot) }}
+    {% if axis_state.state in ("fed", "day_one") and measured %}
+    <p class="c-summary">
+      {{ "{:,}".format(measured) }} requests measured in the last 24 hours.
+    </p>
+    {% endif %}
   </div>
 
   {% if mitigations %}

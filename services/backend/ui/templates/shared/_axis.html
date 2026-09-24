@@ -1,0 +1,86 @@
+{% macro render(a, label, caption="", plot="live") %}
+{# Two layers in one grid cell.
+
+   Layer A is SVG and holds everything at an arbitrary position and nothing
+   with text: bands, density, gates, source marks. preserveAspectRatio="none"
+   stretches it to any width, which is harmless because there is no type in
+   it to distort. That distortion is exactly why the strip this replaces was
+   flexbox.
+
+   Layer B is HTML and holds all the type. Its labels sit at INTEGER sigma,
+   so they are grid items in a six-column grid and need no computed position
+   at all. That is the whole trick, and it is why this replaces 202
+   enumerated CSS rules with none.
+
+   Neither layer may have inline padding. Sigma s lands at s/6 x 100% in
+   both, and padding on either one breaks that mapping silently.
+
+   `plot` is the state of this plot AREA, not a decoration on it. At
+   "outline" no mark is drawn and the bands drop to hairlines, so there is
+   no reading on screen to misread. An instrument with no feed does not show
+   a number with a warning beside it; it shows no number. #}
+<div class="c-axis" data-plot="{{ plot }}" role="img" aria-label="{{ label }}">
+  <svg class="c-axis-plot" viewBox="0 0 {{ a.width }} {{ a.height }}"
+       preserveAspectRatio="none" focusable="false" aria-hidden="true">
+    {% for b in a.bands %}
+    <rect class="{{ b.css }}" x="{{ b.x }}" y="0"
+          width="{{ b.width }}" height="{{ a.height }}"/>
+    {% endfor %}
+
+    {% if plot != "outline" %}
+    {% for d in a.density %}
+    {% if d.count %}
+    <rect class="{{ d.css }}" x="{{ d.x }}"
+          y="{{ (a.height * (1 - d.height))|round(2) }}"
+          width="{{ d.width }}"
+          height="{{ (a.height * d.height)|round(2) }}"/>
+    {% endif %}
+    {% endfor %}
+
+    {% for m in a.marks %}
+    <line class="{{ m.css }}" x1="{{ m.x }}" y1="0"
+          x2="{{ m.x }}" y2="{{ a.height }}"/>
+    {% endfor %}
+    {% endif %}
+
+    <line class="c-gate c-gate--1" x1="{{ a.gate1_x }}" y1="0"
+          x2="{{ a.gate1_x }}" y2="{{ a.height }}"/>
+    <line class="c-gate c-gate--2" x1="{{ a.gate2_x }}" y1="0"
+          x2="{{ a.gate2_x }}" y2="{{ a.height }}"/>
+  </svg>
+
+  <div class="c-axis-labels">
+    {% for b in a.bands %}
+    <span class="c-axis-band-label">
+      <span class="c-axis-long">{{ b.label }}</span>
+      <span class="c-axis-short" aria-hidden="true">{{ b.short }}</span>
+    </span>
+    {% endfor %}
+  </div>
+
+  <div class="c-axis-ticks">
+    {% for value, text in a.ticks %}<span class="c-axis-tick">{{ text }}</span>{% endfor %}
+  </div>
+</div>
+
+{% if caption %}<p class="c-axis-caption">{{ caption }}</p>{% endif %}
+
+{# Position on an axis is unreadable to a screen reader, so every axis
+   carries a table. A SUMMARY, not a matrix: thirteen bin counts read aloud
+   answer nothing, and the question this chart exists to answer is how much
+   is past the gate. #}
+<div class="sr-only">
+  <table>
+    <caption>{{ label }}</caption>
+    <thead>
+      <tr><th scope="col">Region</th><th scope="col">Sources</th></tr>
+    </thead>
+    <tbody>
+      <tr><th scope="row">Below {{ "%.1f"|format(a.gate1_sigma) }} sigma</th>
+          <td>{{ a.density|map(attribute="count")|sum }}</td></tr>
+      <tr><th scope="row">Past {{ "%.1f"|format(a.gate1_sigma) }} sigma</th>
+          <td>{{ a.marks|length }}</td></tr>
+    </tbody>
+  </table>
+</div>
+{% endmacro %}

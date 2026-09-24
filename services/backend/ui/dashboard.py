@@ -23,16 +23,19 @@ from services.backend.api.routes.dashboard import (
     list_whitelist, mark_history_read, model_status, remove_whitelist,
 )
 from services.backend.core.dynamo import get_dynamo_resource
-from services.backend.core.tables import AgentsTable
-from services.backend.ml.model import ModelManager
-from services.backend.ui.charts import deviation_chart, downsample, sigma_strip
+from services.backend.core.tables import AgentsTable, TenantHistoryTable
+from services.backend.core.usage import (
+    protection_status as usage_protection_status,
+)
+from services.backend.ml.model import TIER1_Z, TIER2_Z, ModelManager
+from services.backend.ui.charts import build_axis, deviation_chart, downsample
 from services.backend.schemas.agent_register import AgentRegisterRequest
 from services.backend.schemas.whitelist import WhitelistRequest
 from services.backend.ui.csrf import CSRF_COOKIE_NAME, verify_csrf
 from services.backend.ui.hx import hx_return
 from services.backend.ui.presenters import (
-    absolute_expiry, agent_health, agent_state, decompose, reason_label,
-    relative_expiry, severity_detail,
+    absolute_expiry, agent_health, agent_state, axis_state, decompose,
+    reason_label, relative_expiry, severity_detail,
     tier_css, tier_label,
     timestamp_pair,
 )
@@ -110,6 +113,7 @@ def protection_status(request: Request, ip: str | None = None,
     health = agent_health(AgentsTable(resource).query_by_tenant(tenant_id), now)
     rows = _rows(mitigations, now)
     selected = next((r for r in rows if r["ip"] == ip), None)
+    stats = None
     if selected:
         # The statistics travel with the model that is already cached for
         # scoring, so opening a detail pane costs no extra read.
@@ -121,13 +125,46 @@ def protection_status(request: Request, ip: str | None = None,
             getattr(stats, "feature_means", None),
             getattr(stats, "feature_stds", None),
         )
-    worst = min((r["z"] for r in rows if r["z"] is not None), default=None)
+    # The model is loaded here anyway for the detail pane, and its cached
+    # stats carry this tenant's own gate. Bands drawn from the module
+    # constants would show every tenant somebody else's threshold.
+    if not selected:
+        mgr = ModelManager()
+        mgr.load(resource, tenant_id)
+        stats = mgr.stats
+    tier1_sigma = abs(getattr(stats, "tier1_z", TIER1_Z))
+    tier2_sigma = abs(getattr(stats, "tier2_z", TIER2_Z))
+
+    # The shape below the gate. One Query for the last 24 hours, and the
+    # same rows carry the request count, so they are two renderings of one
+    # read rather than two reads.
+    now_ts = int(now.timestamp())
+    series = TenantHistoryTable(resource).query_series(
+        tenant_id, now_ts - 86_400, now_ts, fill=False)
+    bins: dict[str, int] = {}
+    measured = 0
+    for row in series:
+        measured += int(row.get("requests", 0))
+        for key, value in row.items():
+            if key.startswith("n") and key[1:].isdigit():
+                bins[key] = bins.get(key, 0) + int(value)
+
+    # Two keys on one table in one BatchGetItem. The global ceiling matters
+    # as much as this tenant's own: ingest is refused platform-wide, so a
+    # tenant inside its share can still be unmeasured.
+    throttle = usage_protection_status(resource, tenant_id)
+    state = axis_state(health, throttle, model_ready=stats is not None)
+
+    # No feed, no reading. The marks are withheld here rather than hidden in
+    # CSS, so there is genuinely nothing on the page to misread.
+    axis = build_axis(tier1_sigma, tier2_sigma, bins,
+                      rows if state["plot"] == "live" else [])
 
     return templates.TemplateResponse(request, "dashboard_status.html", _shell(
         request, tenant_id, "status",
         mitigations=rows, health=health, selected=selected,
         detail_open=selected is not None,
-        strip=sigma_strip(worst),
+        axis=axis, axis_state=state, measured=measured,
         active_count=len(mitigations),
         outcome=_bulk_outcome(allowed, skipped),
     ))

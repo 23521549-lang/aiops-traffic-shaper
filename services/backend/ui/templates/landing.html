@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% import "_brand.html" as brand %}
 {% import "shared/_charts.html" as charts %}
+{% import "shared/_axis.html" as axis_macro %}
 {% block title %}Traffic Shaper · your traffic has a normal{% endblock %}
 {% block body %}
 {{ charts.patterns() }}
@@ -146,7 +147,8 @@
     that alone. Between 4σ and 5σ we slow the source down for five minutes.
     Past 5σ we refuse it for an hour. Both timers expire on their own.
   </p>
-  {{ charts.sigma_strip(strip, "The three bands, with one source currently at 5.4 sigma") }}
+  {{ axis_macro.render(axis, "The three bands on the sigma scale",
+       "The scale every decision in this product is measured on.") }}
   <h3>Why not just use the raw anomaly score?</h3>
   <p class="muted">
     Because we tried. The same brute-force attack scored −0.204, −0.105 and

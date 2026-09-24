@@ -112,35 +112,6 @@
 </figure>
 {% endmacro %}
 
-
-{% macro sigma_strip(strip, label) %}
-{# HTML, not SVG. The SVG version used preserveAspectRatio="none" so the
-   bands would fill the width, which stretched the LABELS with them: at a
-   700px container the 320-unit viewBox scaled 2.2x horizontally and 1x
-   vertically, so the text came out distorted and overran the box. Flex
-   boxes stretch without touching the type. #}
-<div class="sigma" role="img" aria-label="{{ label }}">
-  <div class="sigma-bands">
-    {% for x, w, css, text, short in strip.segments %}
-    <div class="sigma-band {{ css }}" data-flex="{{ (w / strip.width * 100)|round|int }}">
-      {# Both labels are rendered and CSS picks one. Swapping them in
-         JavaScript would leave the band blank until the script ran, on the
-         one element of this page that has to be right immediately. #}
-      <span class="sigma-long">{{ text }}</span>
-      <span class="sigma-short" aria-hidden="true">{{ short }}</span>
-    </div>
-    {% endfor %}
-    {% if strip.marker %}
-    <div class="sigma-marker"
-         data-at="{{ ((strip.marker[0] / strip.width) * 100)|round|int }}">
-      <span class="sigma-marker-label">{{ strip.marker[1] }}</span>
-    </div>
-    {% endif %}
-  </div>
-</div>
-{% endmacro %}
-
-
 {% macro stack(bars, label) %}
 {% if bars %}
 <svg viewBox="0 0 320 10" class="c-stackbar" role="img"
