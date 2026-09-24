@@ -35,7 +35,7 @@ from services.backend.core.usage import (
 )
 from services.backend.ml.model import TIER1_Z, TIER2_Z, ModelManager
 from services.backend.ui.charts import (
-    build_axis, deviation_chart, downsample,
+    build_axis, deviation_chart, downsample, gate_curve,
 )
 from services.backend.schemas.agent_register import AgentRegisterRequest
 from services.backend.schemas.whitelist import WhitelistRequest
@@ -140,8 +140,17 @@ def protection_status(request: Request, ip: str | None = None,
         mgr = ModelManager()
         mgr.load(resource, tenant_id)
         stats = mgr.stats
-    tier1_sigma = abs(getattr(stats, "tier1_z", TIER1_Z))
-    tier2_sigma = abs(getattr(stats, "tier2_z", TIER2_Z))
+    # The gate of RECORD is on Tenants, not on the model: save_model rewrites
+    # the Models item every night and would silently revert the operator. The
+    # console reads it from there rather than taking the copy that rode in on
+    # the stats, because a control whose own screen still shows the old
+    # position has not visibly done anything. One small GetItem on a page
+    # that already costs a Query and a model load.
+    tenant = TenantsTable(resource).get(tenant_id=tenant_id) or {}
+    enforced_sigma = abs(getattr(stats, "tier1_z", TIER1_Z))
+    tier1_sigma = abs(float(tenant.get("tier1_z", -enforced_sigma)))
+    tier2_sigma = abs(float(tenant.get("tier2_z",
+                                       getattr(stats, "tier2_z", TIER2_Z))))
 
     # The shape below the gate. One Query for the last 24 hours, and the
     # same rows carry the request count, so they are two renderings of one
@@ -168,11 +177,24 @@ def protection_status(request: Request, ip: str | None = None,
     axis = build_axis(tier1_sigma, tier2_sigma, bins,
                       rows if state["plot"] == "live" else [])
 
+    # What each of the thirteen legal gates would have caught. The sources
+    # already past the current gate count at every line below it too - they
+    # are not in `bins`, because a source that is acted on is stored by
+    # address and never folded into the anonymous shape.
+    curve = gate_curve(bins, tier1_sigma,
+                       len([r for r in rows if r["z"] is not None]))
+    # Stored now, enforced when the nightly retrain copies it onto the model.
+    # Between those two moments the screen is showing a number that is not
+    # yet the number being applied, and it has to say which is which.
+    pending = (state["gates_armed"]
+               and abs(enforced_sigma - tier1_sigma) > 1e-9)
+
     return templates.TemplateResponse(request, "dashboard_status.html", _shell(
         request, tenant_id, "status",
         mitigations=rows, health=health, selected=selected,
         detail_open=selected is not None,
         axis=axis, axis_state=state, measured=measured,
+        curve=curve, enforced_sigma=enforced_sigma, pending=pending,
         active_count=len(mitigations),
         outcome=_bulk_outcome(allowed, skipped),
     ))

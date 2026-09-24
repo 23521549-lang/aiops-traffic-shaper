@@ -1,6 +1,7 @@
 {% extends "app_shell.html" %}
 {% import "shared/_charts.html" as charts %}
 {% import "shared/_axis.html" as axis_macro %}
+{% import "shared/_gate.html" as gate_macro %}
 {% block title %}Protection · Traffic Shaper{% endblock %}
 {% block page_title %}Protection{% endblock %}
 {% block page_summary %}
@@ -65,6 +66,30 @@ no agent has ever reported
     <p class="c-summary">
       {{ "{:,}".format(measured) }} requests measured in the last 24 hours.
     </p>
+    {% endif %}
+
+    {% if axis_state.gates_armed %}
+    {# In the same panel as the axis, deliberately. The spec has one
+       non-negotiable: the explanation and the control are the same object.
+       A settings page elsewhere would throw away the only thing this product
+       owns - that its explanation is already a coordinate on a scale, and a
+       coordinate can be moved. #}
+    <div class="c-gate">
+      <div class="c-section-label">Where you act</div>
+      <p class="c-summary">
+        Traffic Shaper slows a source once it sits this far outside your own
+        normal, and blocks it further out still. Each line below says how many
+        of the sources measured in the last 24 hours it would have caught.
+      </p>
+      {{ gate_macro.render(curve, 1, "Where the first gate sits") }}
+      {% if pending %}
+      <p class="c-summary" role="status">
+        Being enforced right now: {{ "%.2f"|format(enforced_sigma) }} sigma.
+        The position you set starts being applied tonight, when your model is
+        next retrained on your traffic.
+      </p>
+      {% endif %}
+    </div>
     {% endif %}
   </div>
 

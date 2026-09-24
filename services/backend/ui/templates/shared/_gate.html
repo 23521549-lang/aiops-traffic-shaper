@@ -1,0 +1,32 @@
+{% macro render(curve, tier, title) %}
+{# Thirteen rows, not a slider.
+
+   A drag shows one outcome at a time and hides the other twelve behind a
+   gesture; the gate has exactly thirteen legal positions, so every answer is
+   on screen at once and the operator reads rather than hunts. It is also
+   keyboard-operable with no extra work, and at 390px it is a list rather
+   than a hit target on a thin axis.
+
+   Each row is a body-less POST: the values ride in the query string, so
+   CloudFront's OAC needs no x-amz-content-sha256 (ADR-005) and signed-post.js
+   keeps its single caller. The transport is htmx, the same as every other
+   mutation in this console - the CSRF token is inherited from the hx-headers
+   on the console wrapper, which a plain form has no way to send. #}
+<div class="c-gate-curve" role="group" aria-label="{{ title }}">
+  {% for o in curve %}
+  <button type="button" class="c-gate-row"
+          {% if o.current %}aria-current="true"{% endif %}
+          data-bar="{{ (o.width * 20)|round|int }}"
+          hx-post="/dashboard/ui/gate?tier={{ tier }}&sigma={{ o.sigma }}"
+          hx-target="body" hx-swap="none"
+          hx-confirm="Move the gate to {{ '%.2f'|format(o.sigma) }} sigma? {{ '{:,}'.format(o.count) }} of the sources measured in the last 24 hours sat at or past that line.">
+    <span class="c-gate-sigma">{{ "%.2f"|format(o.sigma) }} sigma</span>
+    <span class="c-gate-bar" aria-hidden="true"></span>
+    <span class="c-gate-count">{{ "{:,}".format(o.count) }}</span>
+    {% if not o.recommended %}
+    <span class="c-gate-note">measurably more false positives here</span>
+    {% endif %}
+  </button>
+  {% endfor %}
+</div>
+{% endmacro %}

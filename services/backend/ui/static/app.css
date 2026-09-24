@@ -833,3 +833,66 @@ input[type=text], input[type=password], input[type=email], select {
   font-family: var(--font-mono); font-size: var(--text-xs);
   color: var(--text-muted); margin: 6px 0 0;
 }
+
+
+/* --- the gate control -------------------------------------------------- */
+/* Thirteen rows in the same panel as the axis they move. A slider would show
+ * one outcome at a time and hide the other twelve behind a gesture. */
+
+.c-gate { margin-top: var(--space-5); }
+.c-gate-curve { display: grid; gap: 1px; margin-top: var(--space-3); }
+.c-gate-row {
+  display: grid; grid-template-columns: 6rem 1fr 4rem; align-items: center;
+  gap: var(--space-3); width: 100%; padding: 4px var(--space-2);
+  background: none; border: 0; border-radius: var(--radius-sm);
+  text-align: left; cursor: pointer;
+  font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text);
+}
+.c-gate-row:hover { background: var(--surface-sunken); }
+.c-gate-row:focus-visible {
+  outline: 2px solid var(--focus); outline-offset: -2px;
+}
+/* Marked by a rule and a weight, never by colour alone - the same rule the
+ * tier ramp follows, and the reason it survives a screenshot in a ticket. */
+.c-gate-row[aria-current="true"] {
+  font-weight: 700; box-shadow: inset 3px 0 0 var(--accent);
+  background: var(--surface-sunken);
+}
+.c-gate-bar { display: block; height: 8px; background: var(--text-muted); opacity: .45; }
+.c-gate-row[aria-current="true"] .c-gate-bar { background: var(--accent); opacity: 1; }
+.c-gate-count { text-align: right; font-variant-numeric: tabular-nums; }
+.c-gate-note {
+  grid-column: 2 / -1; font-family: var(--font-sans); color: var(--tier-limited);
+}
+
+/* Bucketed, not measured: 21 steps of 5%. An enumerated rule is the right
+ * answer for a bucket and the wrong one for a measurement, which is why the
+ * axis is SVG and this is not. */
+.c-gate-bar { inline-size: 0; }
+[data-bar="1"] .c-gate-bar { inline-size: 5%; }
+[data-bar="2"] .c-gate-bar { inline-size: 10%; }
+[data-bar="3"] .c-gate-bar { inline-size: 15%; }
+[data-bar="4"] .c-gate-bar { inline-size: 20%; }
+[data-bar="5"] .c-gate-bar { inline-size: 25%; }
+[data-bar="6"] .c-gate-bar { inline-size: 30%; }
+[data-bar="7"] .c-gate-bar { inline-size: 35%; }
+[data-bar="8"] .c-gate-bar { inline-size: 40%; }
+[data-bar="9"] .c-gate-bar { inline-size: 45%; }
+[data-bar="10"] .c-gate-bar { inline-size: 50%; }
+[data-bar="11"] .c-gate-bar { inline-size: 55%; }
+[data-bar="12"] .c-gate-bar { inline-size: 60%; }
+[data-bar="13"] .c-gate-bar { inline-size: 65%; }
+[data-bar="14"] .c-gate-bar { inline-size: 70%; }
+[data-bar="15"] .c-gate-bar { inline-size: 75%; }
+[data-bar="16"] .c-gate-bar { inline-size: 80%; }
+[data-bar="17"] .c-gate-bar { inline-size: 85%; }
+[data-bar="18"] .c-gate-bar { inline-size: 90%; }
+[data-bar="19"] .c-gate-bar { inline-size: 95%; }
+[data-bar="20"] .c-gate-bar { inline-size: 100%; }
+
+@media (max-width: 30rem) {
+  /* The count sits under the sigma rather than off the right edge: at 390px
+   * three columns put the number where a thumb covers it. */
+  .c-gate-row { grid-template-columns: 6rem 1fr; }
+  .c-gate-count { grid-column: 2; text-align: left; }
+}
