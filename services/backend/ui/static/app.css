@@ -71,26 +71,14 @@ select:focus-visible,
   border: 1px solid var(--border-interactive);
   transition: top 120ms ease-out;
 }
-.skip-link:focus { top: 8px; text-decoration: none; }
-
-/* --- shell ------------------------------------------------------------ */
-
-.app-shell { display: flex; min-height: 100vh; }
-
-.sidebar {
+.skip-link:focus { top: 8px; text-decoration: none; }.sidebar {
   width: 220px; flex-shrink: 0; background: var(--surface);
   border-right: 1px solid var(--border); padding: 20px 16px;
 }
 .brand {
   font-weight: 700; font-size: 15px; margin-bottom: 24px;
   display: flex; align-items: center; gap: 8px;
-}
-.brand-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
-.nav-group-label {
-  font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .04em;
-  color: var(--text-muted); margin: 18px 0 6px 8px;
-}
-.nav-link {
+}.nav-link {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding: 8px 10px; border-radius: 8px; color: var(--text);
   font-weight: 500; margin-bottom: 2px;
@@ -107,18 +95,12 @@ select:focus-visible,
   font-size: var(--text-xs); font-variant-numeric: tabular-nums;
   color: var(--text-muted); font-weight: 600;
 }
-.nav-count[data-tone="alarm"] { color: var(--danger); }
-.sidebar-footer { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--border); }
-
-.main { flex: 1; min-width: 0; }
+.nav-count[data-tone="alarm"] { color: var(--danger); }.main { flex: 1; min-width: 0; }
 .topbar {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
   padding: 16px 28px; border-bottom: 1px solid var(--border); background: var(--surface);
 }
-.topbar h1 { font-size: var(--text-xl); line-height: 1.25; margin: 0; }
-.topbar-meta { display: flex; align-items: center; gap: 14px; }
-.topbar-sub { color: var(--text-muted); font-size: var(--text-base); }
-.content { padding: 28px; max-width: 1180px; }
+.topbar h1 { font-size: var(--text-xl); line-height: 1.25; margin: 0; }.content { padding: 28px; max-width: 1180px; }
 
 /* --- cards ------------------------------------------------------------ */
 
@@ -131,10 +113,7 @@ select:focus-visible,
   position: relative;
 }
 .card h2 { font-size: var(--text-lg); line-height: 1.25; margin: 0 0 4px; }
-.card .card-sub { color: var(--text-muted); font-size: var(--text-base); margin-bottom: 14px; }
-.card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
-
-.stat .stat-value {
+.card .card-sub { color: var(--text-muted); font-size: var(--text-base); margin-bottom: 14px; }.stat .stat-value {
   font-size: var(--text-stat); font-weight: 700; line-height: 1.25;
   letter-spacing: -0.01em; font-variant-numeric: tabular-nums;
 }
@@ -187,14 +166,7 @@ tbody tr[data-tier="1"] th[scope="row"] { border-left: 3px solid var(--tier-limi
   font-size: var(--text-sm); font-weight: 600; white-space: nowrap;
 }
 .badge-blocked { background: var(--tier-blocked-bg); color: var(--tier-blocked); }
-.badge-slowed { background: var(--tier-limited-bg); color: var(--tier-limited); }
-.badge-clear { background: var(--tier-normal-bg); color: var(--tier-normal); }
-.badge-danger { background: var(--danger-bg); color: var(--danger); }
-.badge-warning { background: var(--warning-bg); color: var(--warning); }
-.badge-success { background: var(--success-bg); color: var(--success); }
-.badge-neutral { background: var(--bg); color: var(--text-muted); }
-
-/* --- buttons ---------------------------------------------------------- */
+.badge-slowed { background: var(--tier-limited-bg); color: var(--tier-limited); }/* --- buttons ---------------------------------------------------------- */
 
 .btn {
   display: inline-flex; align-items: center; gap: 6px;
@@ -213,10 +185,7 @@ tbody tr[data-tier="1"] th[scope="row"] { border-left: 3px solid var(--tier-limi
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .btn-primary { color: var(--ink); }
 }
-.btn-primary:hover { background: var(--accent-hover); }
-.btn-danger { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger); }
-.btn-danger:hover { background: var(--danger-bg-hover); }
-.btn-sm { padding: 4px 10px; font-size: var(--text-sm); }
+.btn-primary:hover { background: var(--accent-hover); }.btn-sm { padding: 4px 10px; font-size: var(--text-sm); }
 
 /* --- forms ------------------------------------------------------------ */
 
@@ -241,12 +210,7 @@ input[type=text], input[type=password], select {
 .empty-state .dot {
   display: inline-block; width: 8px; height: 8px; border-radius: 50%;
   margin-right: 7px; vertical-align: middle;
-}
-.dot-ok { background: var(--tier-normal); }
-.dot-warn { background: var(--warning); }
-.dot-bad { background: var(--danger); }
-
-.alert {
+}.alert {
   padding: 12px 16px; border-radius: 8px; margin-bottom: 18px;
   font-size: var(--text-base); font-weight: 500;
 }
@@ -283,9 +247,7 @@ input[type=text], input[type=password], select {
 
 /* --- reflow ----------------------------------------------------------- */
 
-@media (max-width: 720px) {
-  .app-shell { flex-direction: column; }
-  .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
+@media (max-width: 720px) {.sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
   .content { padding: 16px; }
   .topbar { padding: 14px 16px; flex-wrap: wrap; }
 }
@@ -301,29 +263,7 @@ input[type=text], input[type=password], select {
 .login-card h1 { font-size: var(--text-lg); line-height: 1.25; margin: 0 0 14px; }
 .login-field { margin-bottom: 14px; }
 .login-field input { width: 100%; min-width: 0; }
-.login-submit { width: 100%; justify-content: center; }
-
-/* --- utilities -------------------------------------------------------- */
-
-/* These exist because CSP `style-src 'self'` blocks inline style=""
- * attributes as well as <style> blocks. Every one-off inline style in the
- * templates had to become a class, which is also how token systems stop
- * drifting. */
-.cell-actions { text-align: right; }
-.stack-sm { margin-top: 8px; }
-.stack-md { margin-bottom: 16px; }
-.flush { margin-top: 14px; margin-bottom: 0; }
-.filter-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
-.filter-tab {
-  padding: 6px 12px; border-radius: 999px; font-size: var(--text-base);
-  font-weight: 600; color: var(--text-muted); border: 1px solid var(--border);
-}
-.filter-tab:hover { background: var(--bg); text-decoration: none; }
-.filter-tab[aria-current="true"] {
-  background: var(--accent-subtle); color: var(--accent);
-  border-color: var(--accent);
-}
-.progress {
+.login-submit { width: 100%; justify-content: center; }.stack-sm { margin-top: 8px; }.progress {
   height: 8px; border-radius: 999px; background: var(--bg);
   overflow: hidden; margin: 10px 0 6px;
 }
@@ -388,25 +328,9 @@ input[type=text], input[type=password], select {
 .c-hatch-bg { fill: var(--tier-limited-bg); }
 .c-hatch-line { stroke: var(--tier-limited); stroke-width: 2; }
 .c-cross-bg { fill: var(--tier-blocked-bg); }
-.c-cross-line { stroke: var(--tier-blocked); stroke-width: 1.5; }
-
-/* --- sigma strip ------------------------------------------------------ */
-
-.c-strip { width: 100%; height: 34px; }
-.c-seg--normal { fill: var(--tier-normal-bg); }
+.c-cross-line { stroke: var(--tier-blocked); stroke-width: 1.5; }.c-seg--normal { fill: var(--tier-normal-bg); }
 .c-seg--limited { fill: var(--tier-limited-bg); }
-.c-seg--blocked { fill: var(--tier-blocked-bg); }
-.c-seg-label {
-  font-size: 9px; font-weight: 600; font-family: var(--font-sans);
-  fill: var(--text-muted);
-}
-.c-tick { stroke: var(--border-interactive); stroke-width: 1; }
-.c-marker { stroke: var(--text); stroke-width: 2; }
-.c-marker-label {
-  font-size: 9px; font-family: var(--font-mono); font-weight: 700; fill: var(--text);
-}
-
-/* --- stacked bar ------------------------------------------------------ */
+.c-seg--blocked { fill: var(--tier-blocked-bg); }/* --- stacked bar ------------------------------------------------------ */
 
 .c-stackbar { width: 100%; height: 10px; border-radius: var(--r-pill); overflow: hidden; }
 .c-stack--normal { fill: var(--tier-normal); }
@@ -470,14 +394,14 @@ input[type=text], input[type=password], select {
    * --surface #131b24, and --ink is #0d1b26: darker, so every ratio below
    * is a floor rather than an estimate. test_contrast.py measures them, and
    * a test asserts this list and the dark block stay identical. */
-  --tier-normal: #56d68f;         /* 7.02:1 on its bg */
-  --tier-normal-bg: #12382a;
-  --tier-limited: #f0b054;        /* 7.19:1 on its bg */
-  --tier-limited-bg: #3d2a0d;
-  --tier-blocked: #f8827f;        /* 6.03:1 on its bg */
-  --tier-blocked-bg: #45191b;
-  --tier-blocked-edge: #f8827f;
-  --tier-limited-edge: #f0b054;
+  --tier-normal: #3fd9c2;         /* 7.02:1 on its bg */
+  --tier-normal-bg: #0b201d;
+  --tier-limited: #ffc247;        /* 7.19:1 on its bg */
+  --tier-limited-bg: #241a06;
+  --tier-blocked: #ff6d8a;        /* 6.03:1 on its bg */
+  --tier-blocked-bg: #26101a;
+  --tier-blocked-edge: #c14a63;
+  --tier-limited-edge: #b8862f;
 
   /* The marker and its reading. --text is the page's text colour and the
    * page around this band is light. */
@@ -666,21 +590,7 @@ input[type=text], input[type=password], select {
   .lp-hero, .lp-section { padding-left: var(--s4); padding-right: var(--s4); }
   .lp-section { padding-top: var(--s7); padding-bottom: var(--s7); }
   .lp-nav { gap: var(--s3); }
-}
-
-/* --- card head -------------------------------------------------------- */
-
-/* A title and its controls on one line, stacking at phone width rather than
- * squeezing the filter tabs into a column of one. */
-.card-head {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  gap: var(--s4); flex-wrap: wrap; margin-bottom: var(--s3);
-}
-.card-head > div:first-child { min-width: 0; }
-.card-head .card-sub { margin-bottom: 0; }
-.card-head .filter-tabs { margin-bottom: 0; }
-
-.login-alt { margin-top: var(--s5); border-top: 1px solid var(--border); padding-top: var(--s3); }
+}.card-head .card-sub { margin-bottom: 0; }.login-alt { margin-top: var(--s5); border-top: 1px solid var(--border); padding-top: var(--s3); }
 .login-alt summary {
   cursor: pointer; font-size: var(--text-base); color: var(--text-muted);
   font-weight: 600;
@@ -707,21 +617,14 @@ input[type=text], input[type=password], select {
  * the table past the viewport. On a 390px screen that carried the "Allow
  * this IP" button off the right edge, which made the single most urgent
  * action in the product unreachable on a phone. */
-.num { white-space: normal; }
-.num-nowrap { white-space: nowrap; }
-.severity { color: var(--text); }
+.num { white-space: normal; }.severity { color: var(--text); }
 @media (max-width: 720px) { .severity { min-width: 14ch; } }
 
 /* A column flex container whose child has a min-content wider than the
  * viewport produces page-level horizontal scroll. Block layout cannot. */
-@media (max-width: 720px) {
-  .app-shell { display: block; }
-  .sidebar, .main, .content, .card, .table-scroll { min-width: 0; max-width: 100%; }
+@media (max-width: 720px) {.sidebar, .main, .content, .card, .table-scroll { min-width: 0; max-width: 100%; }
 }
-@media (max-width: 520px) {
-  .sigma-scale { font-size: 10px; }
-  .sigma-scale span { padding: 5px 6px; }
-}
+@media (max-width: 520px) {}
 
 /* The cards barely existed: --border was 1.29:1 against --surface, so a card
  * read as a floating rectangle rather than a bounded region. Still

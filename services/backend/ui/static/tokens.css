@@ -16,18 +16,49 @@
  * rule in two files.
  */
 
+/* --- type ---------------------------------------------------------------
+ *
+ * ONE family, two voices. IBM Plex Sans carries the words and IBM Plex Mono
+ * carries every measured number and every identifier. A second display face
+ * would be one more thing asking to be noticed on a screen whose whole job is
+ * to let somebody read a number under pressure.
+ *
+ * SELF-HOSTED, because spec 12.9 refuses third-party resources of any kind -
+ * a font CDN is a third party that sees every request a customer makes to
+ * this console, and it is one more origin the CSP would have to open.
+ * Two files, 59KB total, latin subset. Plex Sans is variable, so one file
+ * covers every weight this product uses.
+ *
+ * `font-display: swap` and a real fallback stack, because a console that
+ * shows nothing until a font arrives is worse than one that reflows.
+ */
+@font-face {
+  font-family: "Plex Sans";
+  src: url("/ui/static/plex-sans-latin.woff2") format("woff2");
+  font-weight: 100 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Plex Mono";
+  src: url("/ui/static/plex-mono-latin.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   /* --- surfaces ------------------------------------------------------- */
-  --bg: #f1f4f7;                  /* page field */
+  --bg: #faf9f6;                  /* page field */
   --surface: #ffffff;             /* cards, table rows, dialogs */
-  --surface-sunken: #e7ecf1;      /* hover rows, chart bands, skeletons */
+  --surface-sunken: #f1efe9;      /* hover rows, chart bands, skeletons */
   --surface-raised: #ffffff;      /* popovers and menus; light = surface + border */
-  --border: #dde3ea;              /* decorative rules only */
-  --border-interactive: #7e8598;  /* 3.69:1 on surface, 3.34:1 on bg */
+  --border: #e4e1d8;              /* decorative rules only */
+  --border-interactive: #767783;  /* 3.69:1 on surface, 3.34:1 on bg */
 
   /* --- text ----------------------------------------------------------- */
-  --text: #111823;                /* 17.82:1 on surface, 16.14:1 on bg */
-  --text-muted: #55606f;          /* 6.39:1 on surface, 5.78:1 on bg, 5.37:1 on sunken */
+  --text: #15161a;                /* 17.82:1 on surface, 16.14:1 on bg */
+  --text-muted: #5b5c66;          /* 6.39:1 on surface, 5.78:1 on bg, 5.37:1 on sunken */
 
   /* --- interaction ---------------------------------------------------- */
   /* --accent means "you can act on this" and nothing else. It must never
@@ -36,55 +67,55 @@
    *
    * The old value was #4f46e5, which is Tailwind indigo-600 — the single
    * most identifiable generic-admin-theme pixel available. */
-  --accent: #046b7a;              /* 6.20:1 on surface, 5.61:1 on bg */
-  --accent-hover: #035663;        /* white on it: 8.35:1 */
-  --accent-subtle: #e2f2f4;       /* accent on it: 5.38:1 */
-  --focus-ring: #046b7a;
+  --accent: #5b3ad6;              /* 6.20:1 on surface, 5.61:1 on bg */
+  --accent-hover: #4a2eb8;        /* white on it: 8.35:1 */
+  --accent-subtle: #eeeaff;       /* accent on it: 5.38:1 */
+  --focus-ring: #5b3ad6;
 
   /* --- brand field ---------------------------------------------------- */
   /* The ink field is where the product argues for itself: the landing hero,
    * the sigma explanation, the login card. Deliberately not a surface the
    * console uses, so the two read as different places. */
-  --ink: #0d1b26;
+  --ink: #12131a;
   --ink-fg: #ffffff;              /* 17.47:1 on ink */
-  --ink-muted: #a7b6c2;           /* 8.41:1 on ink */
+  --ink-muted: #a8a9b6;           /* 8.41:1 on ink */
   /* Unusable on white (1.79:1) ON PURPOSE. That constraint is what stops
    * the cyan ever becoming an interface colour: it can only appear on an
    * ink field or in dark mode, so it reads as brand and can never be
    * confused with the tier ramp. test_contrast.py asserts the failure. */
-  --brand-cyan: #37d4e6;          /* 9.75:1 on ink */
+  --brand-cyan: #3fd9c2;          /* 9.75:1 on ink */
 
   /* --- axis A: what we did to traffic --------------------------------- */
   /* Separate from system health on purpose. The original palette used one
    * red for "an attacker was hard-blocked" and for "you typed an invalid
    * IP", so red could not tell the operator whether it was good news. */
-  --tier-normal: #0f7a4d;         /* 5.37:1 on surface, 4.82:1 on its bg */
-  --tier-normal-bg: #e8f6ee;
-  --tier-limited: #9a4a06;        /* 6.26:1 on surface, 5.59:1 on its bg */
-  --tier-limited-bg: #fdf0e3;
-  --tier-blocked: #8f1d1d;        /* 8.89:1 on surface, 7.59:1 on its bg */
-  --tier-blocked-bg: #fbe9e9;
-  --tier-blocked-edge: #d97070;
-  --tier-limited-edge: #9a4a06;
+  --tier-normal: #0c6b5e;         /* 5.37:1 on surface, 4.82:1 on its bg */
+  --tier-normal-bg: #e6f5f2;
+  --tier-limited: #8a5200;        /* 6.26:1 on surface, 5.59:1 on its bg */
+  --tier-limited-bg: #fcf2e0;
+  --tier-blocked: #ab1240;        /* 8.89:1 on surface, 7.59:1 on its bg */
+  --tier-blocked-bg: #fdeaf0;
+  --tier-blocked-edge: #d76b8b;
+  --tier-limited-edge: #c08a33;
 
   /* --- axis B: is the product itself healthy -------------------------- */
   /* Ratios measured 2026-09-23; these shipped unmeasured for months. */
-  --success: #15803d;             /* 4.76:1 on its bg */
-  --success-bg: #ecfdf3;
-  --warning: #b45309;             /* 4.84:1 on its bg */
-  --warning-bg: #fffbeb;
-  --warning-border: #fde68a;
-  --danger: #b91c1c;              /* 5.91:1 on its bg */
-  --danger-bg: #fef2f2;
-  --danger-border: #fecaca;
-  --danger-bg-hover: #fee2e2;
+  --success: #0c6b5e;             /* 4.76:1 on its bg */
+  --success-bg: #e6f5f2;
+  --warning: #8a5200;             /* 4.84:1 on its bg */
+  --warning-bg: #fcf2e0;
+  --warning-border: #e8c98a;
+  --danger: #ab1240;              /* 5.91:1 on its bg */
+  --danger-bg: #fdeaf0;
+  --danger-border: #f2b6c6;
+  --danger-bg-hover: #fbdde6;
 
   /* --- type ----------------------------------------------------------- */
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-sans: "Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   /* IP addresses are the most-scanned data in this product and were
    * inheriting the UA default monospace, which renders ~13px against 14px
    * body text — the subject of every row, smaller than the prose. */
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono", Menlo, Consolas, monospace;
+  --font-mono: "Plex Mono", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
   --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 13px;
@@ -115,90 +146,90 @@
  * that reads localStorage before first paint, and it is unavailable here.
  * The server-rendered attribute has no flash of the wrong theme at all. */
 [data-theme="dark"] {
-  --bg: #0b1017;
-  --surface: #131b24;
-  --surface-sunken: #0f161e;
-  --surface-raised: #1c2732;
-  --border: #23303d;
-  --border-interactive: #64788c;  /* 3.81:1 on surface, 4.18:1 on bg */
+  --bg: #08080b;
+  --surface: #101017;
+  --surface-sunken: #17171f;
+  --surface-raised: #1a1a23;
+  --border: #22222c;
+  --border-interactive: #6d6d7c;  /* 3.81:1 on surface, 4.18:1 on bg */
 
   /* Not #ffffff: pure white on a near-black field halates. 14.85:1 is
    * deliberately backed off and still far above AA. */
-  --text: #e8eef4;
-  --text-muted: #94a6b8;          /* 6.95:1 on surface, 7.64:1 on bg */
+  --text: #ececed;
+  --text-muted: #9a9aa6;          /* 6.95:1 on surface, 7.64:1 on bg */
 
-  --accent: #38bfd4;              /* 7.91:1 on surface; ink-on-it 7.96:1 */
-  --accent-hover: #6ad3e3;
-  --accent-subtle: #0d2b33;       /* accent on it: 6.79:1 */
-  --focus-ring: #38bfd4;
+  --accent: #b9a3ff;              /* 7.91:1 on surface; ink-on-it 7.96:1 */
+  --accent-hover: #cdbcff;
+  --accent-subtle: #1d1733;       /* accent on it: 6.79:1 */
+  --focus-ring: #b9a3ff;
 
-  --ink: #0b1017;
-  --ink-fg: #e8eef4;
-  --ink-muted: #94a6b8;
-  --brand-cyan: #38bfd4;
+  --ink: #08080b;
+  --ink-fg: #ececed;
+  --ink-muted: #9a9aa6;
+  --brand-cyan: #3fd9c2;
 
   /* Desaturated ~20 points against their light counterparts, per the
    * standard dark-mode guidance; the tinted backgrounds sit at 1.16-1.34:1
    * against --surface, enough to read as a pill and not enough to vibrate. */
-  --tier-normal: #56d68f;         /* 9.43:1 on surface, 7.02:1 on its bg */
-  --tier-normal-bg: #12382a;
-  --tier-limited: #f0b054;        /* 9.13:1 on surface, 7.19:1 on its bg */
-  --tier-limited-bg: #3d2a0d;
-  --tier-blocked: #f8827f;        /* 7.02:1 on surface, 6.03:1 on its bg */
-  --tier-blocked-bg: #45191b;
-  --tier-blocked-edge: #f8827f;
-  --tier-limited-edge: #f0b054;
+  --tier-normal: #3fd9c2;         /* 9.43:1 on surface, 7.02:1 on its bg */
+  --tier-normal-bg: #0b201d;
+  --tier-limited: #ffc247;        /* 9.13:1 on surface, 7.19:1 on its bg */
+  --tier-limited-bg: #241a06;
+  --tier-blocked: #ff6d8a;        /* 7.02:1 on surface, 6.03:1 on its bg */
+  --tier-blocked-bg: #26101a;
+  --tier-blocked-edge: #c14a63;
+  --tier-limited-edge: #b8862f;
 
   /* Axis B collapses onto the same three hues in dark, and the separation
    * moves to FORM, which is a stronger channel than a 6% hue difference:
    * axis A is always a pill or a chart band, axis B is always a full-width
    * banner with a leading glyph. Axis A is never a banner; axis B is never
    * a pill. */
-  --success: #56d68f;
-  --success-bg: #12382a;
-  --warning: #f0b054;
-  --warning-bg: #3d2a0d;
-  --warning-border: #5c4114;
-  --danger: #f8827f;
-  --danger-bg: #45191b;
-  --danger-border: #6b2427;
-  --danger-bg-hover: #56201f;
+  --success: #3fd9c2;
+  --success-bg: #0b201d;
+  --warning: #ffc247;
+  --warning-bg: #241a06;
+  --warning-border: #5a4413;
+  --danger: #ff6d8a;
+  --danger-bg: #26101a;
+  --danger-border: #5e2333;
+  --danger-bg-hover: #33141f;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0b1017;
-    --surface: #131b24;
-    --surface-sunken: #0f161e;
-    --surface-raised: #1c2732;
-    --border: #23303d;
-    --border-interactive: #64788c;
-    --text: #e8eef4;
-    --text-muted: #94a6b8;
-    --accent: #38bfd4;
-    --accent-hover: #6ad3e3;
-    --accent-subtle: #0d2b33;
-    --focus-ring: #38bfd4;
-    --ink: #0b1017;
-    --ink-fg: #e8eef4;
-    --ink-muted: #94a6b8;
-    --brand-cyan: #38bfd4;
-    --tier-normal: #56d68f;
-    --tier-normal-bg: #12382a;
-    --tier-limited: #f0b054;
-    --tier-limited-bg: #3d2a0d;
-    --tier-blocked: #f8827f;
-    --tier-blocked-bg: #45191b;
-    --tier-blocked-edge: #f8827f;
-    --tier-limited-edge: #f0b054;
-    --success: #56d68f;
-    --success-bg: #12382a;
-    --warning: #f0b054;
-    --warning-bg: #3d2a0d;
-    --warning-border: #5c4114;
-    --danger: #f8827f;
-    --danger-bg: #45191b;
-    --danger-border: #6b2427;
-    --danger-bg-hover: #56201f;
+    --bg: #08080b;
+    --surface: #101017;
+    --surface-sunken: #17171f;
+    --surface-raised: #1a1a23;
+    --border: #22222c;
+    --border-interactive: #6d6d7c;
+    --text: #ececed;
+    --text-muted: #9a9aa6;
+    --accent: #b9a3ff;
+    --accent-hover: #cdbcff;
+    --accent-subtle: #1d1733;
+    --focus-ring: #b9a3ff;
+    --ink: #08080b;
+    --ink-fg: #ececed;
+    --ink-muted: #9a9aa6;
+    --brand-cyan: #3fd9c2;
+    --tier-normal: #3fd9c2;
+    --tier-normal-bg: #0b201d;
+    --tier-limited: #ffc247;
+    --tier-limited-bg: #241a06;
+    --tier-blocked: #ff6d8a;
+    --tier-blocked-bg: #26101a;
+    --tier-blocked-edge: #c14a63;
+    --tier-limited-edge: #b8862f;
+    --success: #3fd9c2;
+    --success-bg: #0b201d;
+    --warning: #ffc247;
+    --warning-bg: #241a06;
+    --warning-border: #5a4413;
+    --danger: #ff6d8a;
+    --danger-bg: #26101a;
+    --danger-border: #5e2333;
+    --danger-bg-hover: #33141f;
   }
 }

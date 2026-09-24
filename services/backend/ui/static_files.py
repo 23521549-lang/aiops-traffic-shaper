@@ -42,6 +42,12 @@ _ASSETS = {
     "ui-status.js": "application/javascript",
     "bulk-select.js": "application/javascript",
     "keys.js": "application/javascript",
+    # Self-hosted because spec 12.9 refuses third-party resources: a font CDN
+    # is a third party that would see every request a customer makes to this
+    # console, and one more origin the CSP would have to open. Latin subset,
+    # 59KB for both. Plex Sans is variable, so one file covers every weight.
+    "plex-sans-latin.woff2": "font/woff2",
+    "plex-mono-latin.woff2": "font/woff2",
 }
 
 CACHE_CONTROL = "public, max-age=300"

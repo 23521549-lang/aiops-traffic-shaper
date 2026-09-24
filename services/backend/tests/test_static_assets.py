@@ -31,9 +31,18 @@ _REFERENCE = re.compile(r"/ui/static/([A-Za-z0-9._-]+)")
 
 
 def _referenced() -> set[str]:
+    """Every asset anything in the UI asks for, by any route.
+
+    Templates AND stylesheets. A font is referenced from a @font-face rule
+    and never from markup, so a scan of templates alone reported the two
+    woff2 files as served-but-unused - which is the same defect as
+    referenced-but-not-served, pointing the other way, and it would have
+    argued for deleting a file the console needs to render.
+    """
     names = set()
-    for template in _TEMPLATES.rglob("*.html"):
-        names.update(_REFERENCE.findall(template.read_text(encoding="utf-8")))
+    sources = list(_TEMPLATES.rglob("*.html")) + list(_STATIC_DIR.glob("*.css"))
+    for source in sources:
+        names.update(_REFERENCE.findall(source.read_text(encoding="utf-8")))
     return names
 
 
