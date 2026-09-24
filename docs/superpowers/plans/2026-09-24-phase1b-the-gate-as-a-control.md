@@ -712,3 +712,72 @@ git commit -m "feat(console): the gate is adjusted on the scale that reports it"
 
 **Carried forward:** Phase 0's browser confirmation of the htmx config is
 still outstanding and this plan does not discharge it.
+
+
+---
+
+## What the plan got wrong
+
+Written after execution, against the shipped code.
+
+**1. The control cannot be a plain `<form method="post">`.**
+
+Task 3 specified thirteen plain forms and a test asserting `"hx-" not in
+control`, reasoning from the theme toggle at `app_shell.html:76`. The theme
+toggle is unauthenticated and carries no CSRF dependency. `POST
+/dashboard/ui/gate` carries `Depends(verify_csrf)`, and `verify_csrf` reads
+the `X-CSRF-Token` **header** against an httponly cookie. A plain form cannot
+set a header, and the only way to give it one would be a hidden field, which
+is a request body - exactly what ADR-005 forbids behind CloudFront's OAC.
+
+Task 2 had already settled the question from the other side: the route
+returns `HX-Redirect`, which only htmx acts on. A plain form would have
+landed the operator on a blank 200.
+
+Shipped as thirteen `hx-post` buttons, the same transport as every other
+mutation in this console, with the CSRF token inherited from the `hx-headers`
+on the console wrapper at `app_shell.html:11`. The position still rides
+entirely in the query string, so the POST still has no body.
+
+**2. The console was reading the gate from the wrong item.**
+
+`status_page` took `tier1_sigma` from `stats.tier1_z`, which
+`load_model_and_stats` reads off the **Models** item. Task 2 writes the move
+to the **Tenants** item, because `save_model` rewrites the Models item every
+night and would otherwise revert the operator. The two never met: a customer
+could move the gate and the axis, the bands and the curve's own current-position
+mark would all still show the old one. The control would have reported that
+nothing had happened.
+
+`status_page` now reads the gate of record from Tenants, one small GetItem on
+a page that already costs a Query and a model load.
+
+**3. The 24-hour lag between setting a gate and enforcing it was never stated.**
+
+Phase 0 chose to propagate `Tenants.tier1_z` onto the model at the nightly
+retrain (`test_per_tenant_thresholds.py`). That is the correct place to store
+it, but it means a move does not reach enforcement until the next training
+run. Nothing on the screen said so, so the screen would have shown a gate
+that was not the gate being applied and made no distinction.
+
+The panel now names both when they differ: what is being enforced right now,
+and that the new position starts applying tonight.
+
+Worth revisiting: `assert_tenant_active` already does a `TenantsTable.get` on
+**every** authenticated agent request, so threading the gate from there into
+`classify()` would make a move take effect on the next telemetry batch at
+zero extra RCU. That is a change to the enforcement path and was left out of
+this phase deliberately rather than made quietly.
+
+**4. Test pollution from the class-level model cache.**
+
+`ModelManager._cache` is deliberately class-level and survives across tests.
+A test that trains a model leaves it loaded for the next test, so
+`test_a_tenant_with_no_model_is_not_offered_a_gate_to_move` saw a model and
+the armed control. The fixture now clears the cache, which is also what a
+cold container looks like.
+
+**5. Minor.** The plan's `_gate.html` used a bare `sigma` glyph in the row
+label. Written out as the word instead, for the same reason the incident
+screen stopped using it: a stray `text-transform: uppercase` anywhere above
+it turns it into the summation sign.
