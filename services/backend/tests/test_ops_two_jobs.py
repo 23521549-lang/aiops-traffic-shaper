@@ -60,9 +60,12 @@ def test_the_operations_console_offers_exactly_two_jobs(client, dynamo_resource)
     this and not forgetting to update it."""
     _tenant_with_a_quiet_agent(dynamo_resource)
     page = client.get("/admin/ui").text
-    nav = page[page.index("c-nav"):page.index("</nav>")]
+    # `class="nav"` and plain anchors: the rebuilt shell dropped the `c-nav`
+    # and `c-nav-link` vocabulary this used to count. The guarantee is the
+    # same one, read off the markup that exists now.
+    nav = page[page.index('class="nav"'):page.index("</nav>")]
 
-    assert nav.count("c-nav-link") == 2
+    assert nav.count("<a href=") == 2
 
 
 def test_a_quiet_agent_is_still_findable(client, dynamo_resource):
@@ -73,7 +76,7 @@ def test_a_quiet_agent_is_still_findable(client, dynamo_resource):
     page = client.get("/admin/ui/tenants?id=t-1").text
 
     assert "web-01" in page
-    assert "Quiet" in page
+    assert "Im lặng" in page
 
 
 def test_the_overview_still_counts_the_quiet_ones(client, dynamo_resource):
@@ -81,7 +84,7 @@ def test_the_overview_still_counts_the_quiet_ones(client, dynamo_resource):
     being billed for and is also not being protected."""
     _tenant_with_a_quiet_agent(dynamo_resource)
 
-    assert "gone quiet" in client.get("/admin/ui").text.lower()
+    assert "đã im lặng" in client.get("/admin/ui").text.lower()
 
 
 def test_the_quiet_figure_leads_somewhere_that_still_exists(client, dynamo_resource):

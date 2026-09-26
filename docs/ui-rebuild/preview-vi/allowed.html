@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cho qua &middot; Traffic Shaper</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="mock"><span>Bản dựng xem thử</span>
+  <span class="key"><span class="key-s"></span>nét đứt = chưa có trong sản phẩm</span>
+  <span class="sp"></span><span><a href="index.html">Cổng</a> &middot; <a href="agents.html">Agent</a> &middot; <a href="history.html">Lịch sử</a> &middot; <a href="allowed.html">Cho qua</a> &middot; <a href="model.html">Mô hình</a> &middot; <a href="audit.html">Nhật ký</a> &middot; <a href="system.html">Cách hoạt động</a></span></div>
+<div class="app">
+  <header class="bar">
+    <span class="brand"><span class="beacon"></span>Traffic Shaper</span>
+    <span class="sp"></span>
+    <span class="who">acme-prod</span>
+    <span class="cost">Hôm nay <b>0 đồng</b></span>
+    <button class="btn" data-toggle="pl-top" data-alt="Bật lại bảo vệ">Chỉ theo dõi</button>
+    <button class="btn" data-new title="Chưa có trong sản phẩm" >Tạm dừng 30 phút</button>
+    <button class="btn" >Lệnh<kbd>K</kbd></button>
+    <button class="btn" >Đăng xuất</button>
+  </header>
+  <div class="body">
+    <nav class="nav">
+      <div class="gp">Điều khiển</div>
+      <a href="index.html"><span>Cổng</span><span class="ct">2</span></a>
+      <a href="history.html"><span>Lịch sử</span></a>
+      <a href="allowed.html" aria-current="page"><span>Cho qua</span><span class="ct">6</span></a>
+      <div class="gp">Hệ thống</div>
+      <a href="agents.html"><span>Agent</span><span class="ct">5</span></a>
+      <a href="model.html"><span>Mô hình</span></a>
+      <a href="system.html"><span>Cách hoạt động</span></a>
+      <div class="gp">Sổ sách</div>
+      <a href="audit.html"><span>Nhật ký</span></a>
+    </nav>
+    <main class="main">
+      <div class="head">
+        <div><h1 class="h1">Cho qua</h1><p class="sub"><b>6</b> địa chỉ &middot; 7,0% lượng đo được</p></div>
+        <div class="head-act"><button class="btn btn--p" >Cho qua một địa chỉ</button></div>
+      </div>
+      <section class="sec">
+        <div class="sec-h"><h2 class="sec-t">Nó tốn gì</h2><div class="sec-m">7,0% lượng đo được</div></div>
+        <div class="wide-two">
+          <div>
+            <p class="one">Một địa chỉ được cho qua thì không bị hành động, và
+            <b>không dạy gì cho mô hình của bạn</b>. Vế thứ hai mới là cái giá.</p>
+            <svg class="plot" viewBox="0 0 520 88" role="img"
+                 aria-label="7 phần trăm lượng đo được bị loại khỏi huấn luyện">
+              <rect x="0" y="16" width="520" height="28" rx="3" fill="#eceefa"/>
+              <rect class="grow" x="0" y="16" width="36" height="28" rx="3" fill="#2f3a90"/>
+              <text x="0" y="10" font-size="11" fill="#585c66">12.940 bị loại</text>
+              <text x="520" y="10" font-size="11" fill="#838794" text-anchor="end">184.220 đo được</text>
+              <text x="0" y="66" font-size="13" font-weight="600" fill="#0c0e12">7,0%</text>
+              <text x="34" y="66" font-size="12" fill="#585c66">lượng bạn đo được không thể huấn luyện</text>
+              <text x="0" y="82" font-size="11" fill="#838794">Quá khoảng 20% thì mô hình bắt đầu lệch.</text>
+            </svg>
+          </div>
+          <div><span class="label">Điều khiển</span>
+            <div class="ctl-b" style="margin-top:8px">
+              <button class="btn btn--p" >Cho qua một địa chỉ</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Nhập từ file</button>
+              <button class="btn" data-new title="Chưa có trong sản phẩm" >Xuất sổ</button><button class="btn btn--d" data-new title="Chưa có trong sản phẩm" >Bỏ mọi mục cũ hơn 90 ngày</button>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="sec">
+        <div class="sec-h"><h2 class="sec-t">Sổ đăng ký</h2><div class="sec-m">6 mục &middot; chỉ ghi thêm, không xoá dấu vết</div></div>
+        <table class="tbl">
+          <thead><tr><th>Địa chỉ</th><th>Ai cho qua</th><th>Khi nào</th><th>Vì sao</th><th>Traffic</th><th></th></tr></thead>
+          <tbody>
+            <tr><td><span class="ip">192.0.2.144</span></td><td>owner@acme.example</td><td>2 giờ trước</td><td>Bộ kiểm tra uptime của chúng tôi</td><td>4.210</td><td><button class="btn btn--sm" data-new title="Chưa có trong sản phẩm" >Bỏ</button><button class="btn btn--sm" data-new title="Chưa có trong sản phẩm" >Vĩnh viễn</button></td></tr>
+            <tr><td><span class="ip">203.0.113.9</span></td><td>ops@acme.example</td><td>Hôm qua</td><td>Đối tác nhập liệu theo lô</td><td>3.806</td><td><button class="btn btn--sm" data-new title="Chưa có trong sản phẩm" >Bỏ</button><button class="btn btn--sm" data-new title="Chưa có trong sản phẩm" >Vĩnh viễn</button></td></tr>
+            <tr><td><span class="ip">198.51.100.212</span></td><td>owner@acme.example</td><td>6 ngày trước</td><td>Bot của công cụ tìm kiếm</td><td>2.140</td><td><button class="btn btn--sm" data-new title="Chưa có trong sản phẩm" >Bỏ</button><button class="btn btn--sm" data-new title="Chưa có trong sản phẩm" >Vĩnh viễn</button></td></tr>
+            <tr><td><span class="ip">203.0.113.77</span></td><td>ops@acme.example</td><td>12 ngày trước</td><td>Webhook thanh toán</td><td>1.902</td><td><button class="btn btn--sm" data-new title="Chưa có trong sản phẩm" >Bỏ</button><button class="btn btn--sm" data-new title="Chưa có trong sản phẩm" >Vĩnh viễn</button></td></tr>
+            <tr><td><span class="ip">192.0.2.8</span></td><td>owner@acme.example</td><td>28 ngày trước</td><td>IP ra của văn phòng</td><td>642</td><td><button class="btn btn--sm" data-new title="Chưa có trong sản phẩm" >Bỏ</button><button class="btn btn--sm" data-new title="Chưa có trong sản phẩm" >Vĩnh viễn</button></td></tr>
+            <tr><td><span class="ip">198.51.100.40</span></td><td>ops@acme.example</td><td>34 ngày trước</td><td>Giám sát cũ</td><td>240</td><td><button class="btn btn--sm" data-new title="Chưa có trong sản phẩm" >Bỏ</button><button class="btn btn--sm" data-new title="Chưa có trong sản phẩm" >Vĩnh viễn</button></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+    </main>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

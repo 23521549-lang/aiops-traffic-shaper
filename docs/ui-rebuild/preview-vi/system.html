@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cách hoạt động &middot; Traffic Shaper</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="mock"><span>Bản dựng xem thử</span>
+  <span class="key"><span class="key-s"></span>nét đứt = chưa có trong sản phẩm</span>
+  <span class="sp"></span><span><a href="index.html">Cổng</a> &middot; <a href="agents.html">Agent</a> &middot; <a href="history.html">Lịch sử</a> &middot; <a href="allowed.html">Cho qua</a> &middot; <a href="model.html">Mô hình</a> &middot; <a href="audit.html">Nhật ký</a> &middot; <a href="system.html">Cách hoạt động</a></span></div>
+<div class="app">
+  <header class="bar">
+    <span class="brand"><span class="beacon"></span>Traffic Shaper</span>
+    <span class="sp"></span>
+    <span class="who">acme-prod</span>
+    <span class="cost">Hôm nay <b>0 đồng</b></span>
+    <button class="btn" data-toggle="pl-top" data-alt="Bật lại bảo vệ">Chỉ theo dõi</button>
+    <button class="btn" data-new title="Chưa có trong sản phẩm" >Tạm dừng 30 phút</button>
+    <button class="btn" >Lệnh<kbd>K</kbd></button>
+    <button class="btn" >Đăng xuất</button>
+  </header>
+  <div class="body">
+    <nav class="nav">
+      <div class="gp">Điều khiển</div>
+      <a href="index.html"><span>Cổng</span><span class="ct">2</span></a>
+      <a href="history.html"><span>Lịch sử</span></a>
+      <a href="allowed.html"><span>Cho qua</span><span class="ct">6</span></a>
+      <div class="gp">Hệ thống</div>
+      <a href="agents.html"><span>Agent</span><span class="ct">5</span></a>
+      <a href="model.html"><span>Mô hình</span></a>
+      <a href="system.html" aria-current="page"><span>Cách hoạt động</span></a>
+      <div class="gp">Sổ sách</div>
+      <a href="audit.html"><span>Nhật ký</span></a>
+    </nav>
+    <main class="main">
+      <div class="head">
+        <div><h1 class="h1">Cách hoạt động</h1><p class="sub">Nền tảng này điều khiển được gì, và cố tình không làm gì</p></div>
+        <div class="head-act"><button class="btn" data-new title="Chưa có trong sản phẩm" >In trang này</button></div>
+      </div>
+      <section class="sec">
+        <div class="sec-h"><h2 class="sec-t">Vòng lặp, từ đầu tới cuối</h2><div class="sec-m">một chu kỳ là 5 giây &middot; 0 request từ trang này</div></div>
+        <p class="one">Một console hỏi máy chủ mỗi 5 giây sẽ ăn <b>52% trần request cả ngày của toàn tài khoản</b>, và chạm trần thì nền tảng từ chối telemetry của mọi khách hàng. Nên trang này không hỏi máy chủ điều gì.</p>
+        <svg class="plot" viewBox="0 0 1080 430" role="img" aria-labelledby="ar-t ar-d">
+          <title id="ar-t">Agent, nền tảng và bộ nhớ</title>
+          <desc id="ar-d">Agent đọc log của bạn và gửi các đặc trưng đã đếm mỗi năm giây.
+            Nền tảng chấm điểm và quyết định. Agent của bạn nhận quyết định ở lần gọi kế
+            tiếp rồi tự ghi luật trên máy.</desc>
+          <rect class="sys-zone" x="14" y="40" width="322" height="300" rx="6"/>
+          <rect class="sys-edge" x="368" y="40" width="330" height="300" rx="6"/>
+          <rect class="sys-edge" x="730" y="40" width="336" height="300" rx="6"/>
+          <text class="sys-z" x="14" y="30">MÁY CHỦ CỦA BẠN</text>
+          <text class="sys-z" x="368" y="30">NỀN TẢNG</text>
+          <text class="sys-z" x="730" y="30">NHỮNG GÌ NÓ NHỚ</text>
+
+          <rect class="sys-box" x="40" y="62" width="270" height="46" rx="5"/>
+          <text class="sys-t" x="54" y="82">nginx hoặc apache</text>
+          <text class="sys-s" x="54" y="98">ghi log truy cập, như nó vẫn đang làm</text>
+          <path class="sys-wire" d="M175,108 L175,138"/><polygon points="175,146 171,136 179,136" fill="#9aa3e0"/>
+          <rect class="sys-box sys-box--on" x="40" y="146" width="270" height="58" rx="5"/>
+          <text class="sys-t" x="54" y="166">aiops-agent</text>
+          <text class="sys-s" x="54" y="182">7 đặc trưng đếm được cho mỗi nguồn</text>
+          <text class="sys-s" x="54" y="196">một lô mỗi 5 giây</text>
+          <path class="sys-wire" d="M175,204 L175,238"/><polygon points="175,246 171,236 179,236" fill="#9aa3e0"/>
+          <rect class="sys-box" x="40" y="246" width="270" height="70" rx="5"/>
+          <text class="sys-t" x="54" y="266">nơi ghi luật</text>
+          <text class="sys-s" x="54" y="282">/etc/nginx/aiops-agent-deny.conf</text>
+          <text class="sys-s" x="54" y="296">nginx -s reload</text>
+          <text class="sys-s" x="54" y="310">hoặc một luật iptables DROP mỗi nguồn</text>
+
+          <path class="sys-wire" d="M310,172 C340,172 340,104 396,104"/>
+          <text class="sys-s" x="364" y="100" text-anchor="end">chỉ con số</text>
+          <circle class="p5" r="4"><animateMotion dur="5s" repeatCount="indefinite"
+            path="M310,172 C340,172 340,104 396,104"/></circle>
+
+          <rect class="sys-box" x="396" y="82" width="278" height="42" rx="5"/>
+          <text class="sys-t" x="410" y="101">1 &middot; Nhận lô</text>
+          <text class="sys-s" x="410" y="116">chạm trần thì từ chối, với mọi khách hàng</text>
+          <rect class="sys-box" x="396" y="136" width="278" height="42" rx="5"/>
+          <text class="sys-t" x="410" y="155">2 &middot; So với bình thường của bạn</text>
+          <text class="sys-s" x="410" y="170">trung bình và độ lệch của riêng bạn</text>
+          <rect class="sys-box" x="396" y="190" width="278" height="42" rx="5"/>
+          <text class="sys-t" x="410" y="209">3 &middot; Đặt lên thang đo</text>
+          <text class="sys-s" x="410" y="224">một khoảng cách tính bằng sigma, không gì khác</text>
+          <rect class="sys-box sys-box--on" x="396" y="244" width="278" height="56" rx="5"/>
+          <text class="sys-t" x="410" y="264">4 &middot; Áp cổng bạn đặt</text>
+          <text class="sys-s" x="410" y="279">quá 4,00 thì làm chậm 5 phút</text>
+          <text class="sys-s" x="410" y="293">quá 5,00 thì chặn 1 giờ</text>
+
+          <path class="sys-wire" d="M674,158 C706,158 706,132 764,132"/>
+          <circle class="p5" r="3.5"><animateMotion dur="5s" begin="1.2s" repeatCount="indefinite"
+            path="M674,158 C706,158 706,132 764,132"/></circle>
+          <rect class="sys-box" x="764" y="108" width="280" height="48" rx="5"/>
+          <text class="sys-t" x="778" y="128">bình thường của bạn</text>
+          <text class="sys-s" x="778" y="144">huấn luyện lại mỗi đêm, chỉ từ traffic của bạn</text>
+
+          <path class="sys-wire" d="M674,270 C708,270 708,228 764,228"/>
+          <circle class="p5" r="3.5"><animateMotion dur="5s" begin="1.7s" repeatCount="indefinite"
+            path="M674,270 C708,270 708,228 764,228"/></circle>
+          <rect class="sys-box" x="764" y="204" width="280" height="48" rx="5"/>
+          <text class="sys-t" x="778" y="224">những gì đang bị giữ</text>
+          <text class="sys-s" x="778" y="240">hàng tự hết hạn, luật trên máy bạn thì không</text>
+
+          <path class="sys-wire sys-wire--back" d="M396,286 C346,286 358,366 190,366 L190,326"/>
+          <circle class="pk" r="4"><animateMotion dur="5s" begin="2.5s" repeatCount="indefinite"
+            path="M396,286 C346,286 358,366 190,366 L190,326"/></circle>
+          <text class="sys-s" x="222" y="382">agent của bạn nhận nó ở lần gọi kế tiếp</text>
+
+          <line x1="14" y1="398" x2="1066" y2="398" stroke="#e8e9ed"/>
+          <text class="sys-z" x="14" y="422">MỘT NGUỒN, MỌI MÁY CHỦ</text>
+          <circle cx="212" cy="418" r="5" class="p5"/><circle cx="230" cy="418" r="5" class="p5"/>
+          <circle cx="248" cy="418" r="5" class="p5"/>
+          <text class="sys-s" x="268" y="422">bắt ở web-01, chặn ở cả 3 máy, vì quyết định là của bạn chứ không của một máy</text>
+          <text class="sys-n" x="1066" y="422" text-anchor="end">0 đồng</text>
+        </svg>
+      </section>
+      <section class="sec">
+        <div class="sec-h"><h2 class="sec-t">Nền tảng này cần điều khiển được những gì</h2><div class="sec-m">22 mục &middot; 5 đã có</div></div>
+        <p class="one">Cột cuối là phần đáng đọc nhất: <b>một nền tảng miễn phí được định nghĩa bằng thứ nó từ chối làm</b> nhiều hơn thứ nó làm.</p>
+        <table class="cap">
+          <thead><tr><th>Nhóm</th><th>Điều khiển</th><th>Trạng thái</th><th>Ghi chú</th></tr></thead>
+          <tbody>
+            <tr><td>Thi hành</td><td>Chỉ theo dõi / bật lại</td><td><span class="tagx"><i></i>có</span></td><td class="why">Tập phục vụ về rỗng, agent nhả luật trong ~5 giây. Chạy được với agent đã cài sẵn.</td></tr>
+            <tr><td></td><td>Tạm dừng có hẹn giờ</td><td><span class="tagx soon"><i></i>xây được</span></td><td class="why">Bạn tắt lúc 3 giờ sáng rồi quên bật. Tự bật lại là tính năng an toàn, không phải tiện nghi.</td></tr>
+            <tr><td></td><td>Thả một nguồn ngay</td><td><span class="tagx"><i></i>có</span></td><td class="why">Cho qua địa chỉ đó; cùng đường reconcile.</td></tr>
+            <tr><td>Cổng</td><td>Dời cổng chậm / chặn</td><td><span class="tagx"><i></i>có</span></td><td class="why">13 vị trí hợp lệ, mỗi vị trí kèm hệ quả đo được.</td></tr>
+            <tr><td></td><td>Hẹn giờ đổi cổng</td><td><span class="tagx soon"><i></i>xây được</span></td><td class="why">Một hàng nhỏ và một lần đọc thêm.</td></tr>
+            <tr><td></td><td>Cổng riêng theo khung giờ</td><td><span class="tagx soon"><i></i>xây được</span></td><td class="why">Cần một trường nữa trên tenant; đường chấm điểm phải đọc giờ.</td></tr>
+            <tr><td>Một nguồn</td><td>Cho qua, kèm lý do</td><td><span class="tagx"><i></i>có</span></td><td class="why">Ghi sổ, và loại khỏi huấn luyện.</td></tr>
+            <tr><td></td><td>Chặn tay 24 giờ</td><td><span class="tagx soon"><i></i>xây được</span></td><td class="why">Đối xứng với cho qua, cùng bảng.</td></tr>
+            <tr><td></td><td>Gia hạn / rút ngắn</td><td><span class="tagx soon"><i></i>xây được</span></td><td class="why">Một lần ghi expires_at.</td></tr>
+            <tr><td></td><td>Sao chép làm bằng chứng</td><td><span class="tagx soon"><i></i>xây được</span></td><td class="why">Thuần trình duyệt, không tốn gì.</td></tr>
+            <tr><td>Mô hình</td><td>Quay lui bản trước</td><td><span class="tagx soon"><i></i>xây được</span></td><td class="why">Cần đổi cách lưu: mỗi bản một khoá riêng, thêm một con trỏ vài byte. Rẻ hơn hiện tại.</td></tr>
+            <tr><td></td><td>Đóng băng, ngừng huấn luyện đêm</td><td><span class="tagx soon"><i></i>xây được</span></td><td class="why">Một cờ trên tenant.</td></tr>
+            <tr><td></td><td>Loại một khoảng thời gian</td><td><span class="tagx soon"><i></i>xây được</span></td><td class="why">Đã có cơ chế loại bucket khỏi huấn luyện.</td></tr>
+            <tr><td></td><td>Huấn luyện lại ngay</td><td><span class="tagx no"><i></i>bị từ chối</span></td><td class="why">Tốn compute theo yêu cầu. Phá luật chi phí bằng 0.</td></tr>
+            <tr><td>Agent và máy chủ</td><td>Đăng ký, thu hồi khoá</td><td><span class="tagx"><i></i>có</span></td><td class="why"></td></tr>
+            <tr><td></td><td>Nạp lại nginx, xoá luật cục bộ</td><td><span class="tagx soon"><i></i>xây được</span></td><td class="why">Một cờ một lần trong phản hồi telemetry.</td></tr>
+            <tr><td></td><td>Khởi động lại, nâng cấp</td><td><span class="tagx soon"><i></i>xây được</span></td><td class="why">Cùng cơ chế, rủi ro cao hơn: tự khởi động lại mất liên lạc.</td></tr>
+            <tr><td></td><td>Thu ngay</td><td><span class="tagx no"><i></i>bị từ chối</span></td><td class="why">Agent đã gọi mỗi 5 giây. Nút này chỉ là diễn.</td></tr>
+            <tr><td>Chi phí</td><td>Hạ trần của chính mình</td><td><span class="tagx soon"><i></i>xây được</span></td><td class="why">Một trường trên item vốn đã đọc.</td></tr>
+            <tr><td></td><td>Báo khi dùng tới 80%</td><td><span class="tagx soon"><i></i>xây được</span></td><td class="why">Cần kênh gửi thông báo.</td></tr>
+            <tr><td>Sổ sách</td><td>Nhật ký ai đổi gì</td><td><span class="tagx soon"><i></i>xây được</span></td><td class="why">Dữ liệu ĐÃ ghi từ lâu, chỉ thiếu màn hình.</td></tr>
+            <tr><td></td><td>Xuất bằng chứng CSV</td><td><span class="tagx"><i></i>có</span></td><td class="why"></td></tr>
+            <tr><td></td><td>Webhook mỗi quyết định</td><td><span class="tagx soon"><i></i>xây được</span></td><td class="why">Một lần gọi ra ngoài mỗi quyết định; phải đếm vào trần.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="sec">
+        <div class="sec-h"><h2 class="sec-t">Ngân sách hôm nay</h2><div class="sec-m">1.418 trên 8.333</div></div>
+        <div class="wide-two">
+          <div>
+            <svg class="plot" viewBox="0 0 520 74" role="img"
+                 aria-label="1.418 trên phần 8.333 request của bạn hôm nay">
+              <rect x="0" y="14" width="520" height="28" rx="3" fill="#eceefa"/>
+              <rect class="grow" x="0" y="14" width="88" height="28" rx="3" fill="#2f3a90"/>
+              <text x="0" y="8" font-size="11" fill="#585c66">1.418 đã dùng</text>
+              <text x="520" y="8" font-size="11" fill="#838794" text-anchor="end">8.333 phần của bạn</text>
+              <text x="0" y="64" font-size="12" fill="#585c66">Chạm trần thì nền tảng
+                <tspan font-weight="600" fill="#0c0e12">TỪ CHỐI việc, chứ không tính tiền.</tspan></text>
+            </svg>
+          </div>
+          <div><span class="label">Điều khiển</span>
+            <div class="ctl-b" style="margin-top:8px">
+              <button class="btn" data-new title="Chưa có trong sản phẩm" >Báo tôi ở 80%</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Hạ trần của tôi</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Xem theo từng agent</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

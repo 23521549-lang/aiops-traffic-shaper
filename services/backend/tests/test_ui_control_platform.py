@@ -41,7 +41,7 @@ def test_control_platform_shows_ceiling_warning_banner(dynamo_resource, cognito_
     client = _client(dynamo_resource, cognito_test_keys)
     UsageCountersTable(dynamo_resource).put(date=_today(), total_requests=999999, estimated_gb_seconds=0.0)
     resp = client.get("/admin/ui")
-    assert "approaching the Always-Free ceiling" in resp.text
+    assert "tiến sát trần Always-Free" in resp.text
 
 
 def test_suspend_tenant_via_ui(dynamo_resource, cognito_test_keys):
@@ -50,7 +50,7 @@ def test_suspend_tenant_via_ui(dynamo_resource, cognito_test_keys):
                                        created_at="2026-08-21T00:00:00Z")
     resp = client.post("/admin/ui/tenants/t-1/suspend", headers=_csrf(client))
     assert resp.status_code == 200
-    assert "Suspended" in resp.text
+    assert "Đã tạm ngưng" in resp.text
     assert TenantsTable(dynamo_resource).get(tenant_id="t-1")["status"] == "suspended"
 
 
@@ -84,10 +84,10 @@ def test_the_tenant_pane_separates_live_agents_from_quiet_ones(
     live_at = page.index("a-live")
     quiet_at = page.index("a-quiet")
 
-    assert "Reporting" in page and "Quiet" in page
+    assert "Đang báo cáo" in page and "Im lặng" in page
     # Each label belongs to its own row, which a page containing both words
     # somewhere would not establish.
-    assert "Reporting" in page[min(live_at, quiet_at):max(live_at, quiet_at)]         or "Quiet" in page[min(live_at, quiet_at):max(live_at, quiet_at)]
+    assert "Đang báo cáo" in page[min(live_at, quiet_at):max(live_at, quiet_at)]         or "Im lặng" in page[min(live_at, quiet_at):max(live_at, quiet_at)]
 
 
 def test_non_admin_cannot_reach_control_platform(dynamo_resource, cognito_test_keys):
@@ -116,7 +116,7 @@ def test_a_suspended_tenant_can_be_reactivated_from_the_control_platform(dynamo_
 
     resp = client.post("/admin/ui/tenants/t-1/reactivate", headers=_csrf(client))
     assert resp.status_code == 200
-    assert "Active" in resp.text
+    assert "Đang hoạt động" in resp.text
     assert TenantsTable(dynamo_resource).get(tenant_id="t-1")["status"] == "active"
 
 

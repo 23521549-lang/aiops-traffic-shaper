@@ -241,6 +241,33 @@ class TenantsTable(_SimpleTable):
     _table_name = "Tenants"
     _key_names = ("tenant_id",)
 
+    def set_enforcement(self, tenant_id: str, paused: bool) -> bool:
+        """Stop or resume enforcement for this tenant. Returns the old state.
+
+        An ABSENT attribute means enforcing, so every tenant that existed
+        before this feature is enforcing without a migration, and the
+        attribute only exists on accounts that have deliberately paused.
+
+        On Tenants and not on Agents, deliberately. A source is judged for
+        the tenant and refused at every one of their servers; an off switch
+        that worked per machine would leave the customer blocked on four
+        hosts and open on the fifth, which is the worst of both.
+        """
+        if paused:
+            resp = self._table.update_item(
+                Key={"tenant_id": tenant_id},
+                UpdateExpression="SET enforce_paused_at = :t",
+                ExpressionAttributeValues={":t": int(time.time())},
+                ConditionExpression="attribute_exists(tenant_id)",
+                ReturnValues="UPDATED_OLD")
+        else:
+            resp = self._table.update_item(
+                Key={"tenant_id": tenant_id},
+                UpdateExpression="REMOVE enforce_paused_at",
+                ConditionExpression="attribute_exists(tenant_id)",
+                ReturnValues="UPDATED_OLD")
+        return bool((resp.get("Attributes") or {}).get("enforce_paused_at"))
+
     def set_threshold(self, tenant_id: str, which: str, z: float) -> float | None:
         """Move one of this tenant's gates, returning the previous value.
 

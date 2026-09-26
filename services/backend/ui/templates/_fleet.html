@@ -1,0 +1,70 @@
+{% macro render(agents) %}
+{# The fleet, and the thing a rule engine cannot do.
+
+   A source is judged for the TENANT, so one machine spotting an attacker
+   refuses it at every machine. That is the whole argument for a per-customer
+   baseline held centrally, and it had never been drawn.
+
+   Reporting is not protecting. An agent with no enforcement backend sends
+   its counts and writes no rule, which looks healthy on every other screen
+   in the product; here it is drawn apart and marked in ink, because that is
+   a verdict and not a magnitude. #}
+{% set live = agents | selectattr("live") | list %}
+{% set left = live[:3] %}
+{% set right = live[3:5] %}
+{% set dark = agents | rejectattr("live") | list %}
+{# The box grows with the number of rows actually drawn. A fixed height of
+   230 fitted the reporting rows and not the dark ones: those start at y=166
+   and step 58, so the SECOND silent machine sat at 224 and its box ran to
+   244, fourteen units past the bottom edge. A fleet where every agent has
+   gone quiet is exactly the fleet this diagram exists for, and it was the
+   one that got cut in half. #}
+{% set side_rows = [left|length, right|length]|max %}
+{% set side_bottom = (44 + (side_rows - 1) * 58 + 30) if side_rows else 0 %}
+{% set dark_rows = dark[:2]|length %}
+{% set dark_bottom = (166 + (dark_rows - 1) * 58 + 30) if dark_rows else 0 %}
+{% set plot_h = [230, side_bottom, dark_bottom]|max %}
+<svg class="plot" viewBox="0 0 980 {{ plot_h }}" role="img" aria-labelledby="fl-t fl-d">
+  <title id="fl-t">{{ agents|length }} agent, và mỗi cái tươi mới tới đâu</title>
+  <desc id="fl-d">{{ live|length }} agent đang nhận quyết định.
+    {% if dark %}{{ dark|length }} cái không nhận.{% endif %}
+    Một nguồn bị bắt ở một máy sẽ bị từ chối ở mọi máy, vì quyết định thuộc
+    về tài khoản chứ không thuộc về máy.</desc>
+
+  <rect class="sys-box sys-box--on" x="400" y="88" width="180" height="52" rx="5"/>
+  <text class="sys-t" x="490" y="110" text-anchor="middle">một quyết định</text>
+  <text class="sys-s" x="490" y="126" text-anchor="middle">cho mọi máy, không theo từng máy</text>
+
+  {% for a in left %}
+  {% set y = 44 + loop.index0 * 58 %}
+  <path class="sys-wire" d="M400,114 L220,{{ y }}"/>
+  <circle class="p5" r="3.5"><animateMotion dur="5s" begin="{{ loop.index0 * 0.8 }}s"
+    repeatCount="indefinite" path="M220,{{ y }} L400,114"/></circle>
+  <rect class="sys-box" x="60" y="{{ y - 22 }}" width="160" height="42" rx="5"/>
+  <text class="sys-t" x="74" y="{{ y - 3 }}">{{ a.label }}</text>
+  <text class="sys-s" x="74" y="{{ y + 12 }}">{{ a.enforce_label }} · {{ a.last_seen }}</text>
+  {% endfor %}
+
+  {% for a in right %}
+  {% set y = 44 + loop.index0 * 58 %}
+  <path class="sys-wire" d="M580,114 L760,{{ y }}"/>
+  <circle class="p5" r="3.5"><animateMotion dur="5s" begin="{{ 2.4 + loop.index0 * 0.8 }}s"
+    repeatCount="indefinite" path="M760,{{ y }} L580,114"/></circle>
+  <rect class="sys-box" x="760" y="{{ y - 22 }}" width="160" height="42" rx="5"/>
+  <text class="sys-t" x="774" y="{{ y - 3 }}">{{ a.label }}</text>
+  <text class="sys-s" x="774" y="{{ y + 12 }}">{{ a.enforce_label }} · {{ a.last_seen }}</text>
+  {% endfor %}
+
+  {% for a in dark[:2] %}
+  {% set y = 166 + loop.index0 * 58 %}
+  {# Dashed, and the ink dot beside it. A machine that reports and enforces
+     nothing is the one failure this product can see and no other screen
+     shows. #}
+  <path class="sys-wire sys-wire--dashed" d="M580,114 L760,{{ y }}"/>
+  <rect class="sys-box" x="760" y="{{ y - 22 }}" width="160" height="42" rx="5"/>
+  <text class="sys-t" x="774" y="{{ y - 3 }}">{{ a.label }}</text>
+  <text class="sys-s" x="774" y="{{ y + 12 }}">{{ a.enforce_label }} · {{ a.last_seen }}</text>
+  <circle cx="926" cy="{{ y - 1 }}" r="6" fill="currentColor"/>
+  {% endfor %}
+</svg>
+{% endmacro %}

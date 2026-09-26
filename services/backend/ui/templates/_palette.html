@@ -9,7 +9,7 @@
    session can reach. The publisher entries are not merely hidden from a
    tenant, they are not rendered: a hidden entry is a 403 with extra steps
    and a disclosure of what the other console contains. #}
-<dialog id="palette" class="c-palette" aria-label="Commands">
+<dialog id="palette" class="c-palette" aria-label="Lệnh">
   <div class="c-palette-box">
     {# type="text", not type="search". Chromium gives a non-empty search
        field its own Escape behaviour - clear the box - and consumes the key
@@ -17,21 +17,26 @@
        the first press. The clear affordance is worth nothing here; closing
        reliably is worth everything. #}
     <input type="text" class="c-palette-input" data-palette-input
-           placeholder="Go to..." aria-label="Filter commands"
+           placeholder="Đi tới..." aria-label="Lọc lệnh"
            autocomplete="off" spellcheck="false">
     <ul class="c-palette-list" data-palette-list>
+      {# Cách hoạt động và Nhật ký cũng có ở đây. Danh sách này tự nhận là
+         mọi nơi vai trò hiện tại đi được, nên thiếu một trang là nói sai. #}
       {% if role == "tenant" %}
-      <li><a href="/dashboard/ui" data-palette-item>Protection<span class="c-dim">active sources</span></a></li>
-      <li><a href="/dashboard/ui/history" data-palette-item>History<span class="c-dim">past episodes</span></a></li>
-      <li><a href="/dashboard/ui/agents" data-palette-item>Agents<span class="c-dim">what is reporting</span></a></li>
-      <li><a href="/dashboard/ui/allowed" data-palette-item>Allowed IPs<span class="c-dim">never slowed or blocked</span></a></li>
-      <li><a href="/dashboard/ui/model" data-palette-item>Detection model<span class="c-dim">training and thresholds</span></a></li>
+      <li><a href="/dashboard/ui" data-palette-item>Cổng<span class="c-dim">nguồn đang bị giữ</span></a></li>
+      <li><a href="/dashboard/ui/history" data-palette-item>Lịch sử<span class="c-dim">các đợt đã qua</span></a></li>
+      <li><a href="/dashboard/ui/allowed" data-palette-item>Cho qua<span class="c-dim">không bao giờ bị làm chậm hay chặn</span></a></li>
+      <li><a href="/dashboard/ui/agents" data-palette-item>Agent<span class="c-dim">cái gì đang báo về</span></a></li>
+      <li><a href="/dashboard/ui/model" data-palette-item>Mô hình<span class="c-dim">huấn luyện và ngưỡng</span></a></li>
+      <li><a href="/dashboard/ui/system" data-palette-item>Cách hoạt động<span class="c-dim">kiến trúc và giới hạn</span></a></li>
+      <li><a href="/dashboard/ui/audit" data-palette-item>Nhật ký<span class="c-dim">ai đã đổi gì</span></a></li>
       {% elif role == "admin" %}
-      <li><a href="/admin/ui" data-palette-item>Overview<span class="c-dim">usage and fleet</span></a></li>      <li><a href="/admin/ui/tenants" data-palette-item>Tenants<span class="c-dim">suspend and reactivate</span></a></li>
-      <li><a href="/admin/ui/tenants/new" data-palette-item>New tenant<span class="c-dim">creates its first user</span></a></li>
+      <li><a href="/admin/ui" data-palette-item>Tổng quan<span class="c-dim">mức dùng và đội agent</span></a></li>
+      <li><a href="/admin/ui/tenants" data-palette-item>Khách hàng<span class="c-dim">tạm ngưng và mở lại</span></a></li>
+      <li><a href="/admin/ui/tenants/new" data-palette-item>Thêm khách hàng<span class="c-dim">tạo luôn người dùng đầu tiên</span></a></li>
       {% endif %}
-      <li><a href="/ui/logout" data-palette-item>Sign out</a></li>
+      <li><a href="/ui/logout" data-palette-item>Đăng xuất</a></li>
     </ul>
-    <p class="c-palette-empty" data-palette-empty hidden>Nothing matches.</p>
+    <p class="c-palette-empty" data-palette-empty hidden>Không có lệnh nào khớp.</p>
   </div>
 </dialog>

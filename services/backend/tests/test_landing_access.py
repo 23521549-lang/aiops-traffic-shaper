@@ -55,7 +55,7 @@ def test_no_address_configured_publishes_no_dead_link(page):
     domain that does not exist opens a mail client, sends, and bounces
     somewhere the reader never sees - which looks like it worked."""
     assert "mailto:" not in page
-    assert "no address is published" in page.lower()
+    assert "không có địa chỉ nào đăng ở đây" in page.lower()
 
 
 def test_readiness_reports_the_missing_address_without_refusing_traffic(page):
@@ -69,7 +69,7 @@ def test_readiness_reports_the_missing_address_without_refusing_traffic(page):
 def test_the_page_says_it_is_invite_only(page):
     """Spec 7. The page spends its credibility admitting constraints, and
     this is the constraint a reader hits first."""
-    assert "invite" in page.lower()
+    assert "lời mời" in page.lower()
 
 
 def test_the_page_says_a_person_reads_the_requests(monkeypatch):
@@ -81,7 +81,7 @@ def test_the_page_says_a_person_reads_the_requests(monkeypatch):
     monkeypatch.setattr(settings, "access_request_email", "ops@example.com")
     lowered = TestClient(app, base_url="https://testserver").get("/").text.lower()
 
-    assert "one person" in lowered or "by hand" in lowered
+    assert "một người đọc" in lowered or "bằng tay" in lowered
 
 
 def test_the_request_action_is_not_a_write(page):

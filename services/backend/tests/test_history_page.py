@@ -48,7 +48,7 @@ def test_the_page_lists_what_the_product_did(dynamo_resource, cognito_test_keys)
 
     page = client.get("/dashboard/ui/history").text
     assert "198.51.100.66" in page
-    assert "Blocked" in page
+    assert "Đang chặn" in page
 
 
 def test_repeated_decisions_read_as_one_episode_with_a_count(
@@ -64,8 +64,8 @@ def test_repeated_decisions_read_as_one_episode_with_a_count(
     # row headers either, because the chart ships a text-equivalent table
     # whose rows carry them too. `data-tier` appears on episode rows and
     # nowhere else.
-    assert page.count("data-tier=") == 1
-    assert "7 blocked" in page
+    assert page.count('class="src-h"') == 1
+    assert "7 quyết định" in page
     # The count was printed twice, so the cell read "7 7 blocked". The
     # assertion above passed throughout, because the substring it looks for
     # was genuinely present. Only a screenshot showed it. Pin the whole
@@ -87,7 +87,7 @@ def test_an_unmeasurable_episode_says_so(dynamo_resource, cognito_test_keys):
     _seed(dynamo_resource, z=None, tier=1)
 
     page = client.get("/dashboard/ui/history").text
-    # The table column is a figure now; "not measurable" is the phrase
+    # The table column is a figure now; "không đo được" is the phrase
     # the detail pane uses. A source with no usable spread reads "n/a".
     assert "n/a" in page
 
@@ -108,7 +108,7 @@ def test_a_quiet_window_with_telemetry_still_renders_the_full_chrome(
     most-viewed screen. The bands and the gates ARE the evidence that the
     system was watching; a blank panel is not.
 
-    "Quiet" here means telemetry arrived and nothing crossed a gate. That is
+    "Im lặng" here means telemetry arrived and nothing crossed a gate. That is
     the distinction the test this replaces did not draw: it seeded nothing at
     all and then demanded the chrome, which under principle 1.2 is an
     instrument with no feed rendering a reading.
@@ -120,9 +120,8 @@ def test_a_quiet_window_with_telemetry_still_renders_the_full_chrome(
 
     page = client.get("/dashboard/ui/history").text
 
-    assert "c-grid" in page
-    assert "c-seg" in page
-    assert "Nothing in this window" in page
+    assert "Bảy ngày qua" in page or "1 ngày qua" in page
+    assert "Không có gì vượt cổng của bạn trong khoảng này." in page
 
 
 def test_a_window_with_no_telemetry_at_all_renders_no_reading(
@@ -135,7 +134,7 @@ def test_a_window_with_no_telemetry_at_all_renders_no_reading(
     page = client.get("/dashboard/ui/history").text
 
     assert "c-seg" not in page
-    assert "no telemetry" in page.lower()
+    assert "không có telemetry" in page.lower()
 
 
 def test_the_page_says_where_history_begins(dynamo_resource, cognito_test_keys):
@@ -144,7 +143,7 @@ def test_the_page_says_where_history_begins(dynamo_resource, cognito_test_keys):
     customer conclude the feature is broken."""
     client = _client(dynamo_resource, cognito_test_keys)
     page = client.get("/dashboard/ui/history").text
-    assert "History starts from the day this was switched on" in page
+    assert "Lịch sử bắt đầu từ ngày tính năng này được bật" in page
 
 
 def test_new_episodes_are_marked_until_they_are_read(
@@ -152,11 +151,11 @@ def test_new_episodes_are_marked_until_they_are_read(
     client = _client(dynamo_resource, cognito_test_keys)
     _seed(dynamo_resource)
 
-    assert "Mark 1 read" in client.get("/dashboard/ui/history").text
+    assert "Đánh dấu 1 đã đọc" in client.get("/dashboard/ui/history").text
 
     client.post("/dashboard/ui/history/mark-read",
                 headers={"X-CSRF-Token": client.cookies["csrf_token"]})
-    assert "Mark 1 read" not in client.get("/dashboard/ui/history").text
+    assert "Đánh dấu 1 đã đọc" not in client.get("/dashboard/ui/history").text
 
 
 def test_marking_read_needs_the_csrf_token(dynamo_resource, cognito_test_keys):

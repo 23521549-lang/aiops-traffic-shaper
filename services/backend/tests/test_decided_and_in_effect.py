@@ -48,7 +48,7 @@ def test_one_stale_agent_out_of_three_means_not_everywhere():
     state = reach(decided, agents, now)
 
     assert state["in_effect"] is False
-    assert "1 of 3" in state["detail"]
+    assert "1 trong 3" in state["detail"]
 
 
 def test_no_agents_at_all_is_not_in_effect_and_says_why():
@@ -57,7 +57,7 @@ def test_no_agents_at_all_is_not_in_effect_and_says_why():
     state = reach(int(now.timestamp()), [], now)
 
     assert state["in_effect"] is False
-    assert "no agent" in state["detail"].lower()
+    assert "chưa agent nào" in state["detail"].lower()
 
 
 def test_an_agent_with_an_unreadable_timestamp_counts_as_not_reached():
@@ -99,7 +99,7 @@ def test_a_decision_with_no_recorded_time_claims_nothing_either_way():
     state = reach(0, [_agent(30, now)], now)
 
     assert state["in_effect"] is False
-    assert state["label"] == "Unknown"
+    assert state["label"] == "Không rõ"
 
 
 def test_the_label_never_claims_more_than_the_data_supports():
@@ -195,21 +195,23 @@ def test_the_list_says_whether_each_decision_has_reached_the_servers(
         dynamo_resource, cognito_test_keys):
     client = _console(dynamo_resource, cognito_test_keys)
 
-    assert "At your servers" in client.get("/dashboard/ui").text
+    page = client.get("/dashboard/ui").text
+    assert ("Chưa đủ mọi máy" in page or "Chưa agent nào nhận" in page
+            or "agent đã nhận" in page)
 
 
 def test_a_decision_the_agent_has_not_collected_is_marked_as_such(
         dynamo_resource, cognito_test_keys):
     """The dangerous case. The product has written a block, the customer's
-    nginx has not changed, and a screen saying only "Blocked" is telling
+    nginx has not changed, and a screen saying only "Đang chặn" is telling
     them they are protected when they are not yet."""
     client = _console(dynamo_resource, cognito_test_keys,
                       agent_seen_ago=600, decided_ago=10)
 
     page = client.get("/dashboard/ui").text
 
-    assert "Not everywhere yet" in page
-    assert "c-reach--on" not in page
+    assert ("Chưa đủ mọi máy" in page or "Chưa agent nào nhận" in page)
+    assert "agent đã nhận" not in page
 
 
 def test_a_collected_decision_reads_differently_from_an_uncollected_one(
@@ -219,8 +221,8 @@ def test_a_collected_decision_reads_differently_from_an_uncollected_one(
 
     page = client.get("/dashboard/ui").text
 
-    assert "c-reach--on" in page
-    assert "In effect" in page
+    assert "agent đã nhận" in page
+    assert "Đã có hiệu lực" in page
 
 
 def test_the_detail_pane_states_both_facts(dynamo_resource, cognito_test_keys):
@@ -228,5 +230,5 @@ def test_the_detail_pane_states_both_facts(dynamo_resource, cognito_test_keys):
 
     page = client.get("/dashboard/ui?ip=10.0.0.7").text
 
-    assert "Blocked" in page
-    assert "Collected by 1 agent" in page
+    assert "Đang chặn" in page
+    assert "1 agent đã nhận" in page

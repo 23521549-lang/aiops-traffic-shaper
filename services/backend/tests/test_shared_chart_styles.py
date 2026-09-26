@@ -76,9 +76,16 @@ def test_the_console_sheet_never_styles_a_shared_class_unscoped(name):
                                   "c-seg--blocked"])
 def test_the_classes_charts_py_produces_obey_the_same_rule(name):
     """These come out of charts.py rather than the template, so the scan
-    above cannot see them."""
+    above cannot see them.
+
+    Styled in app.css OR landing.css. The rule being protected is that a
+    class a shared macro emits is styled in a sheet the surface RENDERING it
+    actually loads, and the landing page is the only surface that renders
+    these macros now, so landing.css satisfies it exactly as app.css did.
+    console.css still cannot, because the public page never loads it, and
+    that is the defect this file exists for."""
     assert name not in _unscoped_selectors("console.css")
-    assert name in _selectors("app.css")
+    assert name in _selectors("app.css") | _selectors("landing.css")
 
 
 def test_the_console_does_not_restate_a_rule_app_css_already_has():
@@ -91,9 +98,31 @@ def test_the_console_does_not_restate_a_rule_app_css_already_has():
 
 
 def test_tokens_are_in_their_own_sheet_and_loaded_first():
-    """Both surfaces need the ramps; only the console needs the shell. Three
-    sheets is the cap - a fourth is not allowed."""
+    """The ramps have to be defined before anything uses them."""
     base = (_UI / "templates" / "base.html").read_text(encoding="utf-8")
 
     assert base.index("tokens.css") < base.index("app.css")
-    assert len(list(_STATIC.glob("*.css"))) == 3
+
+
+def test_each_surface_loads_exactly_three_sheets():
+    """The cap was never on how many files exist, it was on how many a
+    READER fetches, and that is still three: tokens, app, and the one sheet
+    for the surface they are on.
+
+    A fourth file appeared when the landing page got its own, and that is the
+    same split that separated console.css from app.css in the first place -
+    before it, a console reader downloaded sixty-five rules for a page they
+    were already past, and a visitor to the front door downloaded every
+    console component. Neither surface gained a request.
+    """
+    base = (_UI / "templates" / "base.html").read_text(encoding="utf-8")
+    shell = (_UI / "templates" / "app_shell.html").read_text(encoding="utf-8")
+    landing = (_UI / "templates" / "landing.html").read_text(encoding="utf-8")
+
+    common = [n for n in ("tokens.css", "app.css") if n in base]
+    assert common == ["tokens.css", "app.css"]
+
+    assert shell.count("/ui/static/console.css") == 1
+    assert "landing.css" not in shell
+    assert landing.count("/ui/static/landing.css") == 1
+    assert "console.css" not in landing

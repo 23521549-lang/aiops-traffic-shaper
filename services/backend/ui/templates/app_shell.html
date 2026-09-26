@@ -1,112 +1,133 @@
 {% extends "base.html" %}
-{% import "_brand.html" as brand %}
 {% block head %}<link rel="stylesheet" href="/ui/static/console.css">{% endblock %}
 {% block body %}
-<a class="skip-link" href="#main-content">Skip to content</a>
+<a class="skip-link" href="#main-content">Bỏ qua, tới nội dung</a>
 
-{# The CSRF token is server-rendered into hx-headers rather than parsed out
+{# The shell as approved. Three regions and two rules between them: a bar
+   across the full width, a strip of navigation, and the work.
+
+   The CSRF token is server-rendered into hx-headers rather than parsed out
    of document.cookie by script. htmx inherits hx-headers down the DOM, so
    every request from inside the shell carries it, and the cookie no longer
    needs to be script-readable. #}
-<div class="console" hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'>
+<div class="console app" hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'>
 
-  <nav class="c-nav" aria-label="Primary">
-    <a class="c-brand" href="/">{{ brand.mark(18) }} Traffic Shaper</a>
+  {# Identity, cost, and the off switch, across the full width. The off
+     switch is here and not on one screen because a customer reaches for it
+     while their own customers are being turned away, and whichever page they
+     happen to be on is the page it has to be on. #}
+  <header class="bar">
+    <a class="brand" href="/">
+      <span class="beacon" aria-hidden="true"></span>Traffic Shaper
+    </a>
+    <span class="sp"></span>
+    {% if tenant_id %}<span class="who">{{ tenant_id }}</span>{% endif %}
+    {% if role == "tenant" %}
+    <span class="cost">Hôm nay <b>0 đồng</b></span>
+    {% if paused %}
+    <button type="button" class="btn btn--p"
+            hx-post="/dashboard/ui/enforcement?on=1"
+            hx-target="body" hx-swap="none"
+            hx-confirm="Bật lại bảo vệ? Máy chủ của bạn bắt đầu áp quyết định ở lần thu kế tiếp, trong khoảng năm giây.">
+      Bật lại bảo vệ
+    </button>
+    {% else %}
+    <button type="button" class="btn"
+            hx-post="/dashboard/ui/enforcement?on=0"
+            hx-target="body" hx-swap="none"
+            hx-confirm="Tắt thi hành? Máy chủ của bạn nhả mọi luật trong khoảng năm giây và không áp gì mới. Traffic Shaper vẫn đo, nên bạn vẫn thấy nó đáng lẽ làm gì.">
+      Chỉ theo dõi
+    </button>
+    {% endif %}
+    {% endif %}
+    {# Three body-less POSTs, each to a URL that already carries its value.
+       One form with named buttons would send a form-encoded BODY, and a body
+       behind CloudFront's OAC needs a payload hash only signed-post.js can
+       compute. #}
+    <div class="theme-toggle" role="group" aria-label="Màu nền">
+      {% for value, label in [('light', 'Sáng'), ('dark', 'Tối'), ('system', 'Tự động')] %}
+      <form method="post"
+            action="/ui/prefs/theme?theme={{ value }}&next_url={{ request.url.path }}">
+        <button type="submit" class="theme-opt"
+                {% if (theme or 'light') == value %}aria-pressed="true"{% endif %}>{{ label }}</button>
+      </form>
+      {% endfor %}
+    </div>
+    <button type="button" class="btn" data-palette-open>Lệnh <kbd>Ctrl K</kbd></button>
+    <a class="btn" href="/ui/logout">Đăng xuất</a>
+  </header>
 
-    <div class="c-nav-group">
+  <div class="body">
+    <nav class="nav" aria-label="Chính">
       {% if role == "tenant" %}
-      <div class="c-nav-label">Monitor</div>
-      <a class="c-nav-link" href="/dashboard/ui"
-         {% if active == 'status' %}aria-current="page"{% endif %}>
-        <span>Protection</span>
-        {% if active_count %}<span class="c-nav-count" data-tone="alarm">{{ active_count }}</span>{% endif %}
+      <div class="gp">Điều khiển</div>
+      <a href="/dashboard/ui" {% if active == 'status' %}aria-current="page"{% endif %}>
+        <span>Cổng</span>{% if active_count %}<span class="ct">{{ active_count }}</span>{% endif %}
       </a>
-      <a class="c-nav-link" href="/dashboard/ui/history"
-         {% if active == 'history' %}aria-current="page"{% endif %}>
-        <span>History</span>
-        {% if unread_count %}<span class="c-nav-count" data-tone="alarm">{{ unread_count }}</span>{% endif %}
+      <a href="/dashboard/ui/history" {% if active == 'history' %}aria-current="page"{% endif %}>
+        <span>Lịch sử</span>{% if unread_count %}<span class="ct">{{ unread_count }}</span>{% endif %}
       </a>
-      <a class="c-nav-link" href="/dashboard/ui/agents"
-         {% if active == 'agents' %}aria-current="page"{% endif %}>
-        <span>Agents</span>
-        {% if quiet_count %}<span class="c-nav-count" data-tone="alarm">{{ quiet_count }}</span>{% endif %}
+      <a href="/dashboard/ui/allowed" {% if active == 'whitelist' %}aria-current="page"{% endif %}>
+        <span>Cho qua</span>{% if allowed_count %}<span class="ct">{{ allowed_count }}</span>{% endif %}
       </a>
-
-      <div class="c-nav-label">Control</div>
-      <a class="c-nav-link" href="/dashboard/ui/allowed"
-         {% if active == 'whitelist' %}aria-current="page"{% endif %}>
-        <span>Allowed IPs</span>
-        {% if whitelist_count %}<span class="c-nav-count">{{ whitelist_count }}</span>{% endif %}
+      <div class="gp">Hệ thống</div>
+      <a href="/dashboard/ui/agents" {% if active == 'agents' %}aria-current="page"{% endif %}>
+        <span>Agent</span>{% if quiet_count %}<span class="ct">{{ quiet_count }}</span>{% endif %}
       </a>
-      <a class="c-nav-link" href="/dashboard/ui/model"
-         {% if active == 'model' %}aria-current="page"{% endif %}>
-        <span>Detection model</span>
+      <a href="/dashboard/ui/model" {% if active == 'model' %}aria-current="page"{% endif %}>
+        <span>Mô hình</span>
       </a>
-
-      {% elif role == "admin" %}
-      <div class="c-nav-label">Monitor</div>
-      <a class="c-nav-link" href="/admin/ui"
-         {% if active == 'overview' %}aria-current="page"{% endif %}>
-        <span>Overview</span>
+      <a href="/dashboard/ui/system" {% if active == 'system' %}aria-current="page"{% endif %}>
+        <span>Cách hoạt động</span>
       </a>
-
-      {# Two jobs and only two: am I about to be billed, and which tenant
-         caused it. The Agents page was a filter over a list wearing the shape
-         of a page, and the question it answered is a column on the tenant it
-         belongs to - so the count that used to sit on it sits here. #}
-      <div class="c-nav-label">Control</div>
-      <a class="c-nav-link" href="/admin/ui/tenants"
-         {% if active == 'tenants' %}aria-current="page"{% endif %}>
-        <span>Tenants</span>
-        {% if stale_count %}<span class="c-nav-count" data-tone="alarm">{{ stale_count }}</span>{% endif %}
-        {% if tenant_count %}<span class="c-nav-count">{{ tenant_count }}</span>{% endif %}
+      <div class="gp">Sổ sách</div>
+      <a href="/dashboard/ui/audit" {% if active == 'audit' %}aria-current="page"{% endif %}>
+        <span>Nhật ký</span>
+      </a>
+      {% else %}
+      <div class="gp">Điều hành</div>
+      <a href="/admin/ui" {% if active == 'overview' %}aria-current="page"{% endif %}>
+        <span>Tổng quan</span>
+      </a>
+      <a href="/admin/ui/tenants" {% if active == 'tenants' %}aria-current="page"{% endif %}>
+        <span>Khách hàng</span>
+        {# One badge. Two numbers side by side read as one number: "3 5".
+           The alarming count earns the badge; the total belongs on the page
+           it counts. #}
+        {% if stale_count %}<span class="ct">{{ stale_count }}</span>
+        {% elif tenant_count %}<span class="ct">{{ tenant_count }}</span>{% endif %}
       </a>
       {% endif %}
-    </div>
+    </nav>
 
-    <div class="c-nav-foot">
-      {% if tenant_id %}<div class="c-tenant">{{ tenant_id }}</div>{% endif %}
-      {# Three separate forms, each posting to a URL that already carries its
-         value. A single form with named buttons would send a form-encoded
-         BODY, and a body through CloudFront's OAC needs a payload hash only
-         signed-post.js can compute. Body-less POSTs need none. #}
-      <div class="theme-toggle" role="group" aria-label="Colour theme">
-        {% for value, label in [('light', 'Light'), ('dark', 'Dark'), ('system', 'Auto')] %}
-        <form method="post"
-              action="/ui/prefs/theme?theme={{ value }}&next_url={{ request.url.path }}">
-          <button type="submit" class="theme-opt"
-                  {% if (theme or 'system') == value %}aria-pressed="true"{% endif %}>{{ label }}</button>
-        </form>
-        {% endfor %}
-      </div>
-      <button type="button" class="c-btn c-btn--sm" data-palette-open>
-        Commands <kbd class="c-key">Ctrl K</kbd>
-      </button>
-      <a class="c-btn c-btn--sm" href="/ui/logout">Sign out</a>
-    </div>
-  </nav>
-
-  <div class="c-main">
-    <header class="c-header">
-      <div class="c-header-top">
-        <div>
-          <h1 class="c-title">{% block page_title %}{% endblock %}</h1>
-          {# A live summary, not a restatement of the nav item already
-             highlighted three inches to the left. #}
-          <p class="c-summary c-page-summary">{% block page_summary %}{% endblock %}</p>
-        </div>
-        <div class="c-header-actions">{% block page_actions %}{% endblock %}</div>
-      </div>
-      {% block page_tabs %}{% endblock %}
-    </header>
-
-    {# The failure surface. The old helper reported transport and HTTP
-       failures to console.error only, so an operator could suspend a tenant,
-       have it 403, and never find out. #}
-    <div class="alert alert-danger" id="ui-status" role="alert" tabindex="-1" hidden></div>
-
-    <main id="main-content" tabindex="-1" class="c-work"
+    <main id="main-content" tabindex="-1" class="main"
           {% if detail_open %}data-detail{% endif %}>
+      <div class="head">
+        <div>
+          <h1 class="h1">{% block page_title %}{% endblock %}</h1>
+          {# One line of live state, not a restatement of the nav item
+             highlighted three inches to the left. #}
+          <p class="sub">{% block page_summary %}{% endblock %}</p>
+        </div>
+        <div class="head-act">{% block page_actions %}{% endblock %}</div>
+      </div>
+
+      {# Not dismissible, and on every page. A console that lets you hide the
+         fact that nothing is being enforced is a console that will
+         eventually let someone forget. #}
+      {% if paused %}
+      <div class="alert alert-warning" role="status">
+        <strong>Thi hành đang tạm dừng.</strong>
+        Máy chủ của bạn không áp gì và đã nhả mọi luật. Traffic Shaper vẫn
+        đang đo, nên mọi thứ liệt kê bên dưới là thứ đáng lẽ đang có hiệu lực.
+      </div>
+      {% endif %}
+
+      {# The failure surface. The old helper reported transport and HTTP
+         failures to console.error only, so an operator could suspend a
+         tenant, have it 403, and never find out. #}
+      <div class="alert alert-danger" id="ui-status" role="alert" tabindex="-1" hidden></div>
+
       {% block page_content %}{% endblock %}
     </main>
   </div>
@@ -117,4 +138,5 @@
 <script src="/ui/static/ui-status.js" defer></script>
 <script src="/ui/static/bulk-select.js" defer></script>
 <script src="/ui/static/keys.js" defer></script>
+<script src="/ui/static/why.js" defer></script>
 {% endblock %}

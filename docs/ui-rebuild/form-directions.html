@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bốn hướng dáng giao diện</title>
+<style>
+/* ══════════════════════════════════════════════════════════════════════
+   BỐN HƯỚNG DÁNG
+
+   Cùng một màn hình, cùng một bộ dữ liệu, cùng kiểu chữ, cùng bảng màu.
+   Thứ duy nhất thay đổi giữa bốn phần là DÁNG: hình học của thành phần,
+   bộ khung của trang, chỗ đặt điều khiển, và mật độ.
+
+   Không có tài nguyên bên thứ ba nào trong file này. Font đọc thẳng từ
+   repo, đúng hai file đang chạy trong sản phẩm.
+   ══════════════════════════════════════════════════════════════════════ */
+
+@font-face {
+  font-family: "Plex Sans";
+  src: url("../../services/backend/ui/static/plex-sans-latin.woff2") format("woff2");
+  font-weight: 100 700; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "Plex Mono";
+  src: url("../../services/backend/ui/static/plex-mono-latin.woff2") format("woff2");
+  font-weight: 400 600; font-style: normal; font-display: swap;
+}
+
+:root {
+  --bg: #08080b;
+  --surface: #101017;
+  --sunken: #17171f;
+  --raised: #1b1b24;
+  --line: #26262f;
+  --line2: #34343f;
+  --ink: #ececed;
+  --dim: #9a9aa6;
+  --faint: #6e6e7a;
+  --act: #b9a3ff;
+  --act-dim: #1d1733;
+  --calm: #3fd9c2;
+  --near: #ffc247;
+  --stop: #ff6d8a;
+  --f-s: "Plex Sans", -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-m: "Plex Mono", ui-monospace, Consolas, monospace;
+}
+html[data-theme="light"] {
+  --bg: #faf9f6;
+  --surface: #ffffff;
+  --sunken: #f1efe9;
+  --raised: #ffffff;
+  --line: #e3e0d8;
+  --line2: #d2cec2;
+  --ink: #15161a;
+  --dim: #5b5c66;
+  --faint: #83848f;
+  --act: #5b3ad6;
+  --act-dim: #eeeaff;
+  --calm: #0c6b5e;
+  --near: #8a5200;
+  --stop: #ab1240;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--f-s); font-size: 14px; line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -.015em; }
+
+/* ── khung tài liệu ─────────────────────────────────────────────────── */
+.doc { max-width: 1240px; margin: 0 auto; padding: 0 28px 120px; }
+
+.doc-top {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 20px; padding: 14px 28px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.doc-top .who { font-family: var(--f-m); font-size: 12px; color: var(--dim); }
+.sw { display: flex; border: 1px solid var(--line2); border-radius: 999px; overflow: hidden; }
+.sw button {
+  font: inherit; font-size: 12px; padding: 5px 14px; cursor: pointer;
+  background: transparent; color: var(--dim); border: 0;
+}
+.sw button[aria-pressed="true"] { background: var(--act); color: var(--bg); }
+html[data-theme="light"] .sw button[aria-pressed="true"] { color: #fff; }
+
+.lede { padding: 56px 0 8px; max-width: 74ch; }
+.lede h1 { font-size: 34px; line-height: 1.15; margin-bottom: 14px; }
+.lede p { color: var(--dim); margin: 0 0 12px; }
+.lede b { color: var(--ink); font-weight: 600; }
+
+.held {
+  margin: 28px 0 0; padding: 16px 20px;
+  background: var(--act-dim); border-left: 3px solid var(--act);
+  border-radius: 0 6px 6px 0; max-width: 74ch;
+}
+.held p { margin: 0; color: var(--dim); font-size: 13.5px; }
+.held b { color: var(--ink); }
+
+/* ── tiêu đề mỗi hướng ──────────────────────────────────────────────── */
+.dir { padding-top: 84px; }
+.dir-head { max-width: 74ch; margin-bottom: 26px; }
+.eyebrow {
+  font-family: var(--f-m); font-size: 11px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--faint); margin: 0 0 10px;
+}
+.dir-head h2 { font-size: 25px; line-height: 1.2; margin-bottom: 10px; }
+.dir-head p { color: var(--dim); margin: 0 0 10px; }
+.lineage {
+  font-family: var(--f-m); font-size: 11.5px; color: var(--faint);
+  border-top: 1px solid var(--line); padding-top: 10px; margin-top: 16px;
+}
+.lineage b { color: var(--dim); font-weight: 400; }
+
+.cost {
+  margin-top: 18px; font-size: 13px; color: var(--dim);
+  display: grid; grid-template-columns: 74px 1fr; gap: 4px 12px;
+  max-width: 74ch;
+}
+.cost dt {
+  font-family: var(--f-m); font-size: 10.5px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--faint); padding-top: 3px;
+}
+.cost dd { margin: 0; }
+
+/* ── vỏ demo ────────────────────────────────────────────────────────── */
+.demo {
+  border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+  background: var(--surface);
+  box-shadow: 0 24px 64px -32px rgb(0 0 0 / .8);
+}
+html[data-theme="light"] .demo { box-shadow: 0 24px 64px -40px rgb(0 0 0 / .28); }
+
+/* ══════════════════════════════════════════════════════════════════════
+   A. INSTRUMENT
+   Không bo góc. Lưới kẻ mảnh. Thanh trạng thái tràn viền trên cùng,
+   điều khiển neo dưới đáy như một bàn điều khiển thật.
+   ══════════════════════════════════════════════════════════════════════ */
+.A { font-size: 13px; }
+.A-strip {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  border-bottom: 1px solid var(--line2); background: var(--sunken);
+}
+.A-cell { padding: 9px 14px; border-right: 1px solid var(--line); }
+.A-cell:last-child { border-right: 0; }
+.A-k {
+  font-family: var(--f-m); font-size: 9.5px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--faint); display: block;
+}
+.A-v {
+  font-family: var(--f-m); font-size: 17px; font-variant-numeric: tabular-nums;
+  margin-top: 2px; display: block;
+}
+.A-v.ok { color: var(--calm); }
+.A-v.hot { color: var(--stop); }
+.A-body { display: grid; grid-template-columns: 148px 1fr; }
+.A-nav { border-right: 1px solid var(--line); padding: 6px 0; }
+.A-nav a {
+  display: flex; justify-content: space-between; padding: 5px 14px;
+  font-family: var(--f-m); font-size: 11.5px; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--faint); text-decoration: none;
+}
+.A-nav a.on { color: var(--ink); background: var(--sunken); box-shadow: inset 2px 0 0 var(--act); }
+.A-nav .gp {
+  font-family: var(--f-m); font-size: 9.5px; letter-spacing: .14em;
+  color: var(--line2); padding: 12px 14px 4px;
+}
+.A-main { min-width: 0; }
+.A-sect {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 7px 16px; border-bottom: 1px solid var(--line);
+  background: var(--sunken);
+  font-family: var(--f-m); font-size: 10px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--faint);
+}
+.A-plot { padding: 0; border-bottom: 1px solid var(--line); }
+.A-scale {
+  display: flex; justify-content: space-between; padding: 4px 16px 8px;
+  font-family: var(--f-m); font-size: 10px; color: var(--faint);
+}
+.A-grid { display: grid; grid-template-columns: 1fr 1fr; }
+.A-grid > * { border-right: 1px solid var(--line); }
+.A-grid > *:last-child { border-right: 0; }
+.A-rows { padding: 8px 0; }
+.A-row {
+  display: grid; grid-template-columns: 62px 1fr 48px 62px;
+  align-items: center; gap: 10px; padding: 3px 16px;
+  font-family: var(--f-m); font-size: 11.5px; cursor: pointer;
+}
+.A-row:hover { background: var(--sunken); }
+.A-row[aria-current] { background: var(--act-dim); box-shadow: inset 2px 0 0 var(--act); }
+.A-bar { height: 6px; background: var(--line); }
+.A-bar i { display: block; height: 100%; background: var(--near); }
+.A-row[aria-current] .A-bar i { background: var(--act); }
+.A-n { text-align: right; font-variant-numeric: tabular-nums; }
+.A-f { font-size: 9.5px; color: var(--act); letter-spacing: .08em; text-transform: uppercase; }
+.A-tbl { width: 100%; border-collapse: collapse; font-family: var(--f-m); font-size: 11.5px; }
+.A-tbl th {
+  text-align: left; font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--faint); font-weight: 400; padding: 8px 12px; border-bottom: 1px solid var(--line);
+}
+.A-tbl td { padding: 7px 12px; border-bottom: 1px solid var(--line); }
+.A-tbl tr:last-child td { border-bottom: 0; }
+.A-dock {
+  display: flex; align-items: center; gap: 10px; padding: 8px 16px;
+  border-top: 1px solid var(--line2); background: var(--sunken);
+  font-family: var(--f-m); font-size: 11px; color: var(--faint);
+}
+.A-dock .sp { flex: 1; }
+.A-btn {
+  font-family: var(--f-m); font-size: 11px; letter-spacing: .06em;
+  text-transform: uppercase; padding: 5px 12px; cursor: pointer;
+  background: transparent; color: var(--ink);
+  border: 1px solid var(--line2); border-radius: 0;
+}
+.A-btn:hover { border-color: var(--act); color: var(--act); }
+.A-btn.p { background: var(--act); border-color: var(--act); color: var(--bg); }
+html[data-theme="light"] .A-btn.p { color: #fff; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   B. EDITORIAL
+   Một cột. Lề trái mang số mục và siêu dữ liệu. Biểu đồ nằm TRONG dòng
+   chảy văn bản chứ không nằm trong hộp riêng.
+   ══════════════════════════════════════════════════════════════════════ */
+.B { padding: 40px 0 8px; }
+.B-wrap { display: grid; grid-template-columns: 116px minmax(0, 66ch); gap: 0 32px; margin: 0 auto; max-width: 900px; }
+.B-mark {
+  font-family: var(--f-m); font-size: 10.5px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--faint); text-align: right;
+  padding-top: 5px; line-height: 1.7;
+}
+.B-mark b { display: block; color: var(--act); font-weight: 400; font-size: 13px; }
+.B-body { padding-bottom: 44px; }
+.B h3 { font-size: 21px; line-height: 1.25; margin-bottom: 12px; }
+.B p { margin: 0 0 14px; color: var(--dim); line-height: 1.72; }
+.B p b, .B p strong { color: var(--ink); font-weight: 600; }
+.B .num { font-family: var(--f-m); color: var(--ink); }
+.B-fig { margin: 22px 0; }
+.B-cap {
+  font-family: var(--f-m); font-size: 10.5px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--faint); margin-bottom: 8px;
+}
+.B-scale { display: flex; justify-content: space-between; font-family: var(--f-m); font-size: 10.5px; color: var(--faint); margin-top: 4px; }
+.B-rows { margin: 18px 0 6px; }
+.B-row {
+  display: grid; grid-template-columns: 74px 1fr 52px 96px; align-items: center;
+  gap: 14px; padding: 6px 0; border-bottom: 1px solid var(--line);
+  font-family: var(--f-m); font-size: 12.5px; cursor: pointer;
+}
+.B-row:hover { background: var(--sunken); }
+.B-row[aria-current] { font-weight: 600; }
+.B-row[aria-current] .B-f { color: var(--act); }
+.B-bar { height: 3px; background: var(--line); }
+.B-bar i { display: block; height: 100%; background: var(--near); }
+.B-row[aria-current] .B-bar i { background: var(--act); }
+.B-n { text-align: right; font-variant-numeric: tabular-nums; }
+.B-f { font-family: var(--f-s); font-size: 11px; color: var(--near); }
+.B-hold { border-top: 1px solid var(--line2); margin-top: 26px; padding-top: 18px; }
+.B-item { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.B-ip { font-family: var(--f-m); font-size: 15px; }
+.B-meta { font-size: 12.5px; color: var(--dim); margin-top: 3px; }
+.B-btn {
+  font: inherit; font-size: 12.5px; padding: 5px 14px; cursor: pointer; align-self: center;
+  background: transparent; color: var(--ink); border: 1px solid var(--line2); border-radius: 4px;
+}
+.B-btn:hover { border-color: var(--act); color: var(--act); }
+
+/* ══════════════════════════════════════════════════════════════════════
+   C. RAIL + CANVAS
+   Thanh ray rất mảnh. Một vật thể lớn giữa canvas rộng. Nhãn chữ thường,
+   thẻ mang dáng mã sản phẩm. Cấu trúc để lộ chứ không giấu.
+   ══════════════════════════════════════════════════════════════════════ */
+.C { display: grid; grid-template-columns: 62px 1fr; min-height: 560px; }
+.C-rail {
+  border-right: 1px solid var(--line); padding: 14px 0;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+.C-rail a {
+  width: 44px; padding: 7px 0; text-align: center; text-decoration: none;
+  font-family: var(--f-m); font-size: 9px; letter-spacing: .06em;
+  color: var(--faint); border-radius: 0;
+}
+.C-rail a b { display: block; font-size: 15px; font-weight: 400; line-height: 1.3; }
+.C-rail a.on { color: var(--ink); background: var(--sunken); box-shadow: inset 0 -2px 0 var(--act); }
+.C-rail .sep { width: 24px; height: 1px; background: var(--line); margin: 10px 0; }
+.C-canvas { padding: 30px 40px 26px; min-width: 0; }
+.C-tag {
+  display: inline-block; font-family: var(--f-m); font-size: 10px;
+  letter-spacing: .14em; color: var(--bg); background: var(--act);
+  padding: 2px 8px; margin-bottom: 14px;
+}
+html[data-theme="light"] .C-tag { color: #fff; }
+.C h3 { font-size: 30px; line-height: 1.1; letter-spacing: -.03em; text-transform: lowercase; margin-bottom: 6px; }
+.C-sub { font-family: var(--f-m); font-size: 11.5px; color: var(--faint); letter-spacing: .04em; margin: 0 0 26px; }
+.C-hero { margin: 0 0 8px; }
+.C-scale { display: flex; justify-content: space-between; font-family: var(--f-m); font-size: 10.5px; color: var(--faint); }
+.C-ends { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--faint); margin-top: 2px; }
+.C-split { display: grid; grid-template-columns: 1fr 296px; gap: 40px; margin-top: 34px; }
+.C-lab {
+  font-family: var(--f-m); font-size: 10px; letter-spacing: .16em;
+  text-transform: lowercase; color: var(--faint); margin-bottom: 12px;
+}
+.C-row {
+  display: grid; grid-template-columns: 60px 1fr 44px; align-items: center;
+  gap: 14px; padding: 7px 0; font-family: var(--f-m); font-size: 12px; cursor: pointer;
+}
+.C-row + .C-row { border-top: 1px solid var(--line); }
+.C-bar { height: 10px; background: var(--sunken); }
+.C-bar i { display: block; height: 100%; background: var(--near); }
+.C-row[aria-current] .C-bar i { background: var(--act); }
+.C-row[aria-current] { color: var(--ink); font-weight: 600; }
+.C-n { text-align: right; font-variant-numeric: tabular-nums; }
+.C-card { border-top: 2px solid var(--ink); padding-top: 12px; }
+.C-card + .C-card { margin-top: 22px; }
+.C-ip { font-family: var(--f-m); font-size: 16px; }
+.C-kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; margin-top: 10px; font-size: 12px; }
+.C-kv dt { font-family: var(--f-m); font-size: 10px; letter-spacing: .12em; color: var(--faint); text-transform: lowercase; }
+.C-kv dd { margin: 0; font-family: var(--f-m); font-size: 12px; }
+.C-btn {
+  margin-top: 12px; width: 100%; font-family: var(--f-m); font-size: 11px;
+  letter-spacing: .1em; text-transform: lowercase; padding: 8px; cursor: pointer;
+  background: transparent; color: var(--ink); border: 1px solid var(--ink); border-radius: 0;
+}
+.C-btn:hover { background: var(--ink); color: var(--bg); }
+
+/* ══════════════════════════════════════════════════════════════════════
+   D. SPLIT CONSOLE
+   Hai cột cố định. Danh sách đặc bên trái, thiết bị đo sống bên phải,
+   đổi theo dòng đang chọn. Phím tắt hiện sẵn.
+   ══════════════════════════════════════════════════════════════════════ */
+.D-top {
+  display: flex; align-items: center; gap: 14px; padding: 9px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.D-brand { font-weight: 600; font-size: 13px; letter-spacing: -.01em; }
+.D-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--calm); display: inline-block; margin-right: 7px; animation: beat 5s ease-out infinite; }
+@keyframes beat { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--calm) 55%, transparent); } 70%, 100% { box-shadow: 0 0 0 8px transparent; } }
+.D-crumb { font-family: var(--f-m); font-size: 11.5px; color: var(--faint); }
+.D-crumb b { color: var(--dim); font-weight: 400; }
+.D-sp { flex: 1; }
+.D-kbd {
+  font-family: var(--f-m); font-size: 10px; padding: 2px 6px;
+  border: 1px solid var(--line2); border-radius: 3px; color: var(--faint);
+}
+.D-body { display: grid; grid-template-columns: 340px 1fr; min-height: 520px; }
+.D-list { border-right: 1px solid var(--line); min-width: 0; }
+.D-filter {
+  display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line);
+}
+.D-chip {
+  font-family: var(--f-m); font-size: 10.5px; padding: 3px 9px; cursor: pointer;
+  border: 1px solid var(--line2); border-radius: 3px; background: transparent; color: var(--faint);
+}
+.D-chip.on { border-color: var(--act); color: var(--act); background: var(--act-dim); }
+.D-item {
+  display: grid; grid-template-columns: 4px 1fr auto; gap: 10px; align-items: center;
+  padding: 10px 12px; border-bottom: 1px solid var(--line); cursor: pointer;
+}
+.D-item:hover { background: var(--sunken); }
+.D-item[aria-current] { background: var(--act-dim); }
+.D-item[aria-current] .D-edge { background: var(--act); }
+.D-edge { width: 3px; height: 26px; border-radius: 1px; }
+.D-edge.stop { background: var(--stop); }
+.D-edge.near { background: var(--near); }
+.D-ip { font-family: var(--f-m); font-size: 13px; }
+.D-sub { font-size: 11.5px; color: var(--faint); margin-top: 1px; }
+.D-sig { font-family: var(--f-m); font-size: 14px; text-align: right; font-variant-numeric: tabular-nums; }
+.D-sig small { display: block; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+.D-pane { padding: 20px 24px; min-width: 0; }
+.D-h { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+.D-h h3 { font-family: var(--f-m); font-size: 22px; letter-spacing: -.01em; }
+.D-lead { color: var(--dim); font-size: 13px; margin: 0 0 20px; }
+.D-lab {
+  font-family: var(--f-m); font-size: 10px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--faint);
+  padding-bottom: 6px; border-bottom: 1px solid var(--line); margin-bottom: 12px;
+}
+.D-sec { margin-bottom: 24px; }
+.D-why { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.D-why th { text-align: left; font-weight: 400; color: var(--dim); padding: 5px 0; }
+.D-why td { text-align: right; font-family: var(--f-m); padding: 5px 0; font-variant-numeric: tabular-nums; }
+.D-why td.d { color: var(--stop); }
+.D-why tr + tr th, .D-why tr + tr td { border-top: 1px solid var(--line); }
+.D-acts { display: flex; gap: 8px; margin-top: 8px; }
+.D-btn {
+  font: inherit; font-size: 12.5px; padding: 6px 14px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px;
+  background: transparent; color: var(--ink);
+  border: 1px solid var(--line2); border-radius: 5px;
+}
+.D-btn:hover { border-color: var(--act); color: var(--act); }
+.D-btn.p { background: var(--act); border-color: var(--act); color: var(--bg); }
+html[data-theme="light"] .D-btn.p { color: #fff; }
+.D-btn .D-kbd { border-color: currentColor; color: inherit; opacity: .7; }
+
+/* ── phần chung: trục sigma ─────────────────────────────────────────── */
+.plot { display: block; width: 100%; height: auto; }
+.dot { animation: settle 1s cubic-bezier(.16,1,.3,1) both; }
+@keyframes settle { from { opacity: 0; transform: translateY(-18px); } to { opacity: 1; transform: none; } }
+.halo { animation: breathe 4s ease-in-out infinite; }
+@keyframes breathe { 0%, 100% { opacity: .22; } 50% { opacity: .7; } }
+.ridge { animation: rise .9s cubic-bezier(.16,1,.3,1) both; transform-origin: bottom; }
+@keyframes rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .dot, .halo, .ridge, .D-dot { animation: none; }
+}
+
+.tag {
+  font-family: var(--f-m); font-size: 10.5px; padding: 1px 7px;
+  border: 1px solid currentColor; border-radius: 3px; white-space: nowrap;
+}
+.t-stop { color: var(--stop); } .t-near { color: var(--near); } .t-ok { color: var(--calm); }
+
+/* ── bảng so sánh cuối ──────────────────────────────────────────────── */
+.cmp { width: 100%; border-collapse: collapse; margin-top: 26px; font-size: 13px; }
+.cmp th, .cmp td { text-align: left; padding: 11px 14px 11px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.cmp thead th {
+  font-family: var(--f-m); font-size: 10px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--faint); font-weight: 400;
+}
+.cmp tbody th { font-weight: 600; white-space: nowrap; }
+.cmp td { color: var(--dim); }
+
+@media (max-width: 900px) {
+  .B-wrap, .C-split, .D-body, .A-body, .A-grid { grid-template-columns: 1fr; }
+  .A-strip { grid-template-columns: repeat(2, 1fr); }
+  .C { grid-template-columns: 1fr; }
+  .doc { padding: 0 16px 80px; }
+}
+</style>
+</head>
+<body>
+
+<div class="doc-top">
+  <div class="who">aiops-traffic-shaper &middot; bốn hướng dáng &middot; 2026-09-25</div>
+  <div class="sw">
+    <button type="button" data-t="dark" aria-pressed="true">Tối</button>
+    <button type="button" data-t="light" aria-pressed="false">Sáng</button>
+  </div>
+</div>
+
+<div class="doc">
+
+<div class="lede">
+  <h1>Bốn hướng dáng, cùng một màn hình</h1>
+  <p>
+    Đây là màn <b>Cổng</b> của sản phẩm, dựng lại bốn lần. Cùng dữ liệu,
+    cùng con số, cùng câu chữ.
+  </p>
+  <p>
+    Mỗi hướng có một dòng dõi thật, không phải một biến thể trang trí:
+    một cái nhìn giao diện như <b>mặt đồng hồ đo</b>, một cái nhìn nó như
+    <b>một bản báo cáo</b>, một cái nhìn nó như <b>một vật thể trên bàn</b>,
+    và một cái nhìn nó như <b>một công cụ vận hành</b>.
+  </p>
+  <div class="held">
+    <p>
+      <b>Giữ nguyên ở cả bốn:</b> kiểu chữ (Plex Sans + Plex Mono), bảng màu,
+      và luật màu là khoảng cách. <b>Chỉ thay đổi dáng:</b> hình học thành
+      phần, bộ khung trang, chỗ đặt điều khiển, mật độ thông tin.
+      Nhờ vậy thứ bạn so sánh đúng là thứ bạn muốn đổi.
+    </p>
+  </div>
+</div>
+
+<!-- ══════════════ A ══════════════ -->
+<section class="dir">
+  <div class="dir-head">
+    <p class="eyebrow">Hướng A</p>
+    <h2>Instrument - giao diện là một mặt đồng hồ đo</h2>
+    <p>
+      Không có góc bo nào. Mọi thứ nằm trong một lưới kẻ mảnh, như các ô đo
+      trên một bàn điều khiển. Dải chỉ số tràn hết chiều ngang trên cùng và
+      không bao giờ rời khỏi mắt. Điều khiển neo dưới đáy, tách khỏi phần đọc.
+    </p>
+    <p>
+      Tiền đề: người mở màn này đang <b>trực</b>, không đang <b>duyệt</b>.
+      Họ cần biết tình trạng trong một giây và hành động trong hai giây.
+    </p>
+    <p class="lineage">
+      Dòng dõi: <b>Bloomberg Terminal</b> (mật độ cao, mọi thứ là readout,
+      phím tắt hiện sẵn) và <b>phòng điều khiển công nghiệp</b> (dải chỉ số
+      cố định, không trang trí, không cuộn để tìm trạng thái).
+    </p>
+    <dl class="cost">
+      <dt>Được</dt><dd>Trạng thái đọc được trong một giây. Nhiều dòng nhất trên một màn.</dd>
+      <dt>Mất</dt><dd>Đáng sợ với người lần đầu vào. Khó bán, dễ dùng.</dd>
+    </dl>
+  </div>
+
+  <div class="demo A">
+    <div class="A-strip">
+      <div class="A-cell"><span class="A-k">Agents</span><span class="A-v ok">5/5</span></div>
+      <div class="A-cell"><span class="A-k">Last seen</span><span class="A-v">8s</span></div>
+      <div class="A-cell"><span class="A-k">Measured 24h</span><span class="A-v">184,220</span></div>
+      <div class="A-cell"><span class="A-k">Acting on</span><span class="A-v hot">2</span></div>
+      <div class="A-cell"><span class="A-k">Cost today</span><span class="A-v ok">$0.00</span></div>
+    </div>
+    <div class="A-body">
+      <nav class="A-nav">
+        <div class="gp">CONTROL</div>
+        <a href="#" class="on"><span>Gate</span><span>2</span></a>
+        <a href="#"><span>History</span></a>
+        <a href="#"><span>Allowed</span></a>
+        <div class="gp">SYSTEM</div>
+        <a href="#"><span>Agents</span><span>5</span></a>
+        <a href="#"><span>Model</span></a>
+      </nav>
+      <div class="A-main">
+        <div class="A-sect"><span>Distribution by distance from your normal</span><span>24h</span></div>
+        <div class="A-plot">
+          <svg class="plot" viewBox="0 0 900 132" role="img" aria-label="Phân bố nguồn theo khoảng cách sigma">
+            <defs>
+              <linearGradient id="rampA" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" stop-color="var(--calm)" stop-opacity=".26"/>
+                <stop offset=".55" stop-color="var(--calm)" stop-opacity=".26"/>
+                <stop offset=".70" stop-color="var(--near)" stop-opacity=".38"/>
+                <stop offset=".88" stop-color="var(--stop)" stop-opacity=".44"/>
+                <stop offset="1" stop-color="var(--stop)" stop-opacity=".6"/>
+              </linearGradient>
+              <linearGradient id="ridgeA" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="var(--calm)" stop-opacity=".4"/>
+                <stop offset="1" stop-color="var(--calm)" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <rect x="0" y="0" width="900" height="118" fill="url(#rampA)"/>
+            <g class="ridge">
+              <path d="M0,118 L60,115 L140,104 L220,82 L300,54 L380,42 L450,54 L520,78 L580,98 L640,109 L720,115 L820,117 L900,118 L900,118 L0,118 Z" fill="url(#ridgeA)"/>
+            </g>
+            <path d="M0,118 L60,115 L140,104 L220,82 L300,54 L380,42 L450,54 L520,78 L580,98 L640,109 L720,115 L820,117 L900,118"
+                  fill="none" stroke="var(--calm)" stroke-width="1.5" opacity=".75"/>
+            <g class="dot">
+              <circle cx="186" cy="96" r="3" fill="var(--calm)" opacity=".85"/>
+              <circle cx="244" cy="86" r="3" fill="var(--calm)" opacity=".85"/>
+              <circle cx="303" cy="72" r="3.4" fill="var(--calm)" opacity=".9"/>
+              <circle cx="357" cy="84" r="3" fill="var(--calm)" opacity=".8"/>
+              <circle cx="405" cy="66" r="3" fill="var(--calm)" opacity=".8"/>
+              <circle cx="469" cy="78" r="3.4" fill="var(--calm)" opacity=".85"/>
+              <circle cx="513" cy="88" r="3" fill="var(--near)" opacity=".85"/>
+              <circle cx="549" cy="70" r="3" fill="var(--near)" opacity=".9"/>
+              <circle cx="577" cy="84" r="3" fill="var(--near)" opacity=".85"/>
+              <circle class="halo" cx="643" cy="58" r="11" fill="var(--stop)"/>
+              <circle cx="643" cy="58" r="4.6" fill="var(--stop)"/>
+              <circle class="halo" cx="836" cy="46" r="13" fill="var(--stop)"/>
+              <circle cx="836" cy="46" r="5.4" fill="var(--stop)"/>
+            </g>
+            <line x1="600" y1="0" x2="600" y2="118" stroke="var(--near)" stroke-width="1" stroke-dasharray="3 3"/>
+            <line x1="750" y1="0" x2="750" y2="118" stroke="var(--stop)" stroke-width="1" stroke-dasharray="3 3"/>
+            <text x="606" y="13" fill="var(--near)" font-size="10" font-family="Plex Mono, monospace">4.00 SLOW</text>
+            <text x="756" y="13" fill="var(--stop)" font-size="10" font-family="Plex Mono, monospace">5.00 BLOCK</text>
+            <line x1="0" y1="118" x2="900" y2="118" stroke="var(--line2)" stroke-width="1"/>
+          </svg>
+          <div class="A-scale"><span>0.0</span><span>1.0</span><span>2.0</span><span>3.0</span><span>4.0</span><span>5.0</span><span>6.0</span></div>
+        </div>
+        <div class="A-grid">
+          <div>
+            <div class="A-sect"><span>Slow gate</span><span>13 positions</span></div>
+            <div class="A-rows">
+              <div class="A-row"><span>3.50</span><span class="A-bar"><i style="width:100%"></i></span><span class="A-n">1,482</span><span></span></div>
+              <div class="A-row"><span>3.75</span><span class="A-bar"><i style="width:63%"></i></span><span class="A-n">940</span><span></span></div>
+              <div class="A-row" aria-current="true"><span>4.00</span><span class="A-bar"><i style="width:25%"></i></span><span class="A-n">371</span><span class="A-f">in use</span></div>
+              <div class="A-row"><span>4.25</span><span class="A-bar"><i style="width:11%"></i></span><span class="A-n">164</span><span></span></div>
+              <div class="A-row"><span>4.50</span><span class="A-bar"><i style="width:4%"></i></span><span class="A-n">61</span><span></span></div>
+            </div>
+          </div>
+          <div>
+            <div class="A-sect"><span>Being acted on</span><span>2</span></div>
+            <table class="A-tbl">
+              <thead><tr><th>Source</th><th>Dist</th><th>State</th><th>At your servers</th></tr></thead>
+              <tbody>
+                <tr><td>203.0.113.44</td><td>6.41</td><td><span class="tag t-stop">BLOCK</span></td><td><span class="tag t-ok">3/3</span></td></tr>
+                <tr><td>198.51.100.7</td><td>4.28</td><td><span class="tag t-near">SLOW</span></td><td><span class="tag t-near">1/3 behind</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="A-dock">
+          <span>2 selected</span>
+          <span class="sp"></span>
+          <button class="A-btn">Export</button>
+          <button class="A-btn">Allow</button>
+          <button class="A-btn p">Move gate</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ B ══════════════ -->
+<section class="dir">
+  <div class="dir-head">
+    <p class="eyebrow">Hướng B</p>
+    <h2>Editorial - giao diện là một bản báo cáo có thể bấm vào</h2>
+    <p>
+      Một cột duy nhất, bề rộng đọc được. Biểu đồ nằm <b>trong</b> dòng chảy
+      văn bản, đúng chỗ câu văn cần tới nó, chứ không nằm trong một hộp riêng
+      bên cạnh. Lề trái mang số mục và siêu dữ liệu, không mang điều hướng.
+    </p>
+    <p>
+      Tiền đề: thứ sản phẩm này bán không phải biểu đồ mà là <b>một lập luận</b>
+      - đây là bình thường của bạn, đây là chỗ khác bình thường, đây là
+      đường bạn tự đặt. Một lập luận thì đọc theo thứ tự.
+    </p>
+    <p class="lineage">
+      Dòng dõi: <b>thiết kế thông tin Thuỵ Sĩ</b> và bản đồ/báo cáo dạng
+      Tufte - đồ hoạ nằm trong văn bản, chú thích ngay cạnh dữ liệu,
+      không có khung thừa.
+    </p>
+    <dl class="cost">
+      <dt>Được</dt><dd>Người lần đầu hiểu ngay sản phẩm làm gì. Bán được.</dd>
+      <dt>Mất</dt><dd>Ít dòng trên một màn. Người trực cả ngày sẽ thấy dài.</dd>
+    </dl>
+  </div>
+
+  <div class="demo B">
+    <div class="B-wrap">
+      <div class="B-mark"><b>01</b>acme-prod<br>5 agents<br>8s ago</div>
+      <div class="B-body">
+        <h3>184,220 request đã được đo trong 24 giờ qua.</h3>
+        <p>
+          Trong số đó, <span class="num">2</span> nguồn đang bị giữ lại. Cả hai
+          đều nằm ngoài khoảng bình thường của <b>chính traffic của bạn</b>,
+          không phải của ai khác.
+        </p>
+        <p>
+          Đơn vị ở đây là sigma: <b>khoảng cách khỏi ngày thường của bạn</b>.
+          Số 0 là giống hệt bạn. Càng lớn càng lạ.
+        </p>
+        <div class="B-fig">
+          <div class="B-cap">Mỗi chấm là một nguồn &middot; màu chính là khoảng cách</div>
+          <svg class="plot" viewBox="0 0 800 120" role="img" aria-label="Phân bố nguồn theo khoảng cách sigma">
+            <defs>
+              <linearGradient id="ridgeB" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="var(--calm)" stop-opacity=".3"/>
+                <stop offset="1" stop-color="var(--calm)" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <g class="ridge">
+              <path d="M0,104 L53,101 L124,92 L195,72 L266,48 L338,37 L400,48 L462,69 L515,87 L569,96 L640,101 L729,103 L800,104 L800,104 L0,104 Z" fill="url(#ridgeB)"/>
+            </g>
+            <path d="M0,104 L53,101 L124,92 L195,72 L266,48 L338,37 L400,48 L462,69 L515,87 L569,96 L640,101 L729,103 L800,104"
+                  fill="none" stroke="var(--calm)" stroke-width="1.4" opacity=".8"/>
+            <g class="dot">
+              <circle cx="165" cy="84" r="2.8" fill="var(--calm)" opacity=".85"/>
+              <circle cx="217" cy="76" r="2.8" fill="var(--calm)" opacity=".85"/>
+              <circle cx="269" cy="64" r="3.2" fill="var(--calm)" opacity=".9"/>
+              <circle cx="317" cy="74" r="2.8" fill="var(--calm)" opacity=".8"/>
+              <circle cx="360" cy="58" r="2.8" fill="var(--calm)" opacity=".8"/>
+              <circle cx="417" cy="69" r="3.2" fill="var(--calm)" opacity=".85"/>
+              <circle cx="456" cy="78" r="2.8" fill="var(--near)" opacity=".85"/>
+              <circle cx="488" cy="62" r="2.8" fill="var(--near)" opacity=".9"/>
+              <circle cx="513" cy="74" r="2.8" fill="var(--near)" opacity=".85"/>
+              <circle class="halo" cx="571" cy="50" r="10" fill="var(--stop)"/>
+              <circle cx="571" cy="50" r="4.2" fill="var(--stop)"/>
+              <circle class="halo" cx="743" cy="40" r="12" fill="var(--stop)"/>
+              <circle cx="743" cy="40" r="5" fill="var(--stop)"/>
+            </g>
+            <line x1="533" y1="8" x2="533" y2="104" stroke="var(--near)" stroke-width="1" stroke-dasharray="3 3"/>
+            <line x1="667" y1="8" x2="667" y2="104" stroke="var(--stop)" stroke-width="1" stroke-dasharray="3 3"/>
+            <text x="538" y="16" fill="var(--near)" font-size="10" font-family="Plex Mono, monospace">4.00 slow</text>
+            <text x="672" y="16" fill="var(--stop)" font-size="10" font-family="Plex Mono, monospace">5.00 block</text>
+            <line x1="0" y1="104" x2="800" y2="104" stroke="var(--line2)" stroke-width="1"/>
+          </svg>
+          <div class="B-scale"><span>0σ</span><span>1σ</span><span>2σ</span><span>3σ</span><span>4σ</span><span>5σ</span><span>6σ</span></div>
+          <div class="B-scale" style="color:var(--faint)"><span>giống ngày thường của bạn</span><span>rất khác bạn</span></div>
+        </div>
+        <p>
+          Hai đường đứt là hai cổng <b>bạn</b> đặt. Bấm một dòng bên dưới là
+          dời cổng làm chậm; con số bên phải là số nguồn 24 giờ qua sẽ bị bắt
+          nếu đặt ở đó.
+        </p>
+        <div class="B-rows">
+          <div class="B-row"><span>3.50σ</span><span class="B-bar"><i style="width:100%"></i></span><span class="B-n">1,482</span><span class="B-f">nhiều báo nhầm</span></div>
+          <div class="B-row"><span>3.75σ</span><span class="B-bar"><i style="width:63%"></i></span><span class="B-n">940</span><span class="B-f">nhiều báo nhầm</span></div>
+          <div class="B-row" aria-current="true"><span>4.00σ</span><span class="B-bar"><i style="width:25%"></i></span><span class="B-n">371</span><span class="B-f">đang dùng</span></div>
+          <div class="B-row"><span>4.25σ</span><span class="B-bar"><i style="width:11%"></i></span><span class="B-n">164</span><span></span></div>
+          <div class="B-row"><span>4.50σ</span><span class="B-bar"><i style="width:4%"></i></span><span class="B-n">61</span><span></span></div>
+        </div>
+        <div class="B-hold">
+          <p style="color:var(--ink);font-weight:600;margin-bottom:4px">Hai nguồn đang bị giữ</p>
+          <div class="B-item">
+            <div>
+              <div class="B-ip">203.0.113.44</div>
+              <div class="B-meta">6.41σ &middot; <span class="tag t-stop">CHẶN</span> &middot; luật đã ghi trên cả 3 máy chủ của bạn</div>
+            </div>
+            <button class="B-btn">Cho qua</button>
+          </div>
+          <div class="B-item">
+            <div>
+              <div class="B-ip">198.51.100.7</div>
+              <div class="B-meta">4.28σ &middot; <span class="tag t-near">LÀM CHẬM</span> &middot; 1 trong 3 máy chủ chưa nhận</div>
+            </div>
+            <button class="B-btn">Cho qua</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ C ══════════════ -->
+<section class="dir">
+  <div class="dir-head">
+    <p class="eyebrow">Hướng C</p>
+    <h2>Rail + canvas - giao diện là một vật thể trên bàn</h2>
+    <p>
+      Điều hướng co lại thành một thanh ray rộng 62px. Phần còn lại là một
+      canvas trống, và <b>một vật thể duy nhất</b> chiếm chỗ giữa nó: trường
+      sigma, phóng to hết cỡ. Nhãn viết thường, thẻ mang dáng mã sản phẩm.
+      Cấu trúc để lộ chứ không giấu.
+    </p>
+    <p>
+      Tiền đề: màn này có <b>đúng một câu hỏi</b> - traffic của tôi
+      đang đứng ở đâu. Mọi thứ khác là phụ và nên nhường chỗ.
+    </p>
+    <p class="lineage">
+      Dòng dõi: <b>Teenage Engineering</b> - tỉ lệ đặt trước, chữ
+      thường mảnh, mã sản phẩm, một điểm nhấn màu duy nhất, khoảng trống là
+      vật liệu chứ không phải chỗ chưa dùng.
+    </p>
+    <dl class="cost">
+      <dt>Được</dt><dd>Đặc trưng nhất, không giống bất kỳ dashboard nào.</dd>
+      <dt>Mất</dt><dd>Ít thông tin nhất trên một màn. Phải chuyển màn nhiều hơn.</dd>
+    </dl>
+  </div>
+
+  <div class="demo C">
+    <nav class="C-rail">
+      <a href="#" class="on"><b>◧</b>gate</a>
+      <a href="#"><b>◔</b>hist</a>
+      <a href="#"><b>◇</b>allow</a>
+      <span class="sep"></span>
+      <a href="#"><b>▤</b>agent</a>
+      <a href="#"><b>◈</b>model</a>
+    </nav>
+    <div class="C-canvas">
+      <span class="C-tag">TS&ndash;01 GATE</span>
+      <h3>traffic của bạn, theo khoảng cách</h3>
+      <p class="C-sub">acme-prod &middot; 5 agents &middot; 184,220 req / 24h &middot; $0.00</p>
+
+      <div class="C-hero">
+        <svg class="plot" viewBox="0 0 900 200" role="img" aria-label="Phân bố nguồn theo khoảng cách sigma">
+          <defs>
+            <linearGradient id="ridgeC" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="var(--calm)" stop-opacity=".34"/>
+              <stop offset="1" stop-color="var(--calm)" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <g class="ridge">
+            <path d="M0,176 L60,171 L140,156 L220,120 L300,78 L380,58 L450,78 L520,116 L580,146 L640,164 L720,172 L820,175 L900,176 L900,176 L0,176 Z" fill="url(#ridgeC)"/>
+          </g>
+          <path d="M0,176 L60,171 L140,156 L220,120 L300,78 L380,58 L450,78 L520,116 L580,146 L640,164 L720,172 L820,175 L900,176"
+                fill="none" stroke="var(--calm)" stroke-width="2" opacity=".85"/>
+          <g class="dot">
+            <circle cx="186" cy="142" r="4" fill="var(--calm)" opacity=".85"/>
+            <circle cx="244" cy="128" r="4" fill="var(--calm)" opacity=".85"/>
+            <circle cx="303" cy="108" r="4.5" fill="var(--calm)" opacity=".9"/>
+            <circle cx="357" cy="122" r="4" fill="var(--calm)" opacity=".8"/>
+            <circle cx="405" cy="98" r="4" fill="var(--calm)" opacity=".8"/>
+            <circle cx="469" cy="114" r="4.5" fill="var(--calm)" opacity=".85"/>
+            <circle cx="513" cy="130" r="4" fill="var(--near)" opacity=".85"/>
+            <circle cx="549" cy="104" r="4" fill="var(--near)" opacity=".9"/>
+            <circle cx="577" cy="124" r="4" fill="var(--near)" opacity=".85"/>
+            <circle class="halo" cx="643" cy="86" r="17" fill="var(--stop)"/>
+            <circle cx="643" cy="86" r="7" fill="var(--stop)"/>
+            <circle class="halo" cx="836" cy="66" r="20" fill="var(--stop)"/>
+            <circle cx="836" cy="66" r="8" fill="var(--stop)"/>
+          </g>
+          <line x1="600" y1="0" x2="600" y2="176" stroke="var(--near)" stroke-width="1.5" stroke-dasharray="4 4"/>
+          <line x1="750" y1="0" x2="750" y2="176" stroke="var(--stop)" stroke-width="1.5" stroke-dasharray="4 4"/>
+          <text x="608" y="15" fill="var(--near)" font-size="12" font-family="Plex Mono, monospace">4.00 slow</text>
+          <text x="758" y="15" fill="var(--stop)" font-size="12" font-family="Plex Mono, monospace">5.00 block</text>
+          <line x1="0" y1="176" x2="900" y2="176" stroke="var(--line2)" stroke-width="1"/>
+        </svg>
+        <div class="C-scale"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span></div>
+        <div class="C-ends"><span>giống ngày thường của bạn</span><span>rất khác bạn</span></div>
+      </div>
+
+      <div class="C-split">
+        <div>
+          <div class="C-lab">slow gate &middot; 13 positions &middot; tap to move</div>
+          <div class="C-row"><span>3.50σ</span><span class="C-bar"><i style="width:100%"></i></span><span class="C-n">1482</span></div>
+          <div class="C-row"><span>3.75σ</span><span class="C-bar"><i style="width:63%"></i></span><span class="C-n">940</span></div>
+          <div class="C-row" aria-current="true"><span>4.00σ</span><span class="C-bar"><i style="width:25%"></i></span><span class="C-n">371</span></div>
+          <div class="C-row"><span>4.25σ</span><span class="C-bar"><i style="width:11%"></i></span><span class="C-n">164</span></div>
+          <div class="C-row"><span>4.50σ</span><span class="C-bar"><i style="width:4%"></i></span><span class="C-n">61</span></div>
+        </div>
+        <div>
+          <div class="C-lab">being acted on &middot; 2</div>
+          <div class="C-card">
+            <div class="C-ip">203.0.113.44</div>
+            <dl class="C-kv">
+              <dt>dist</dt><dd>6.41σ</dd>
+              <dt>state</dt><dd><span class="tag t-stop">blocked</span></dd>
+              <dt>servers</dt><dd>3 / 3 written</dd>
+            </dl>
+            <button class="C-btn">allow this source</button>
+          </div>
+          <div class="C-card">
+            <div class="C-ip">198.51.100.7</div>
+            <dl class="C-kv">
+              <dt>dist</dt><dd>4.28σ</dd>
+              <dt>state</dt><dd><span class="tag t-near">slowed</span></dd>
+              <dt>servers</dt><dd>1 / 3 behind</dd>
+            </dl>
+            <button class="C-btn">allow this source</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ D ══════════════ -->
+<section class="dir">
+  <div class="dir-head">
+    <p class="eyebrow">Hướng D</p>
+    <h2>Split console - giao diện là một công cụ vận hành</h2>
+    <p>
+      Hai cột cố định, không bao giờ đổi chỗ. Trái là danh sách đặc, quét
+      bằng mắt hoặc bằng phím mũi tên. Phải là <b>chỗ giải thích</b>, đổi
+      theo dòng đang chọn. Phím tắt in ngay trên nút chứ không giấu trong
+      bảng trợ giúp.
+    </p>
+    <p>
+      Tiền đề: việc thật ở màn này là <b>xử một danh sách</b>. Chọn, đọc lý
+      do, quyết, sang dòng kế. Bố cục nên đúng hình dạng của việc đó.
+    </p>
+    <p class="lineage">
+      Dòng dõi: master&ndash;detail của các công cụ vận hành chuyên nghiệp,
+      và <b>Linear</b> ở phần bàn phím là công dân hạng nhất. Đây là hướng
+      quen thuộc nhất trong bốn hướng.
+    </p>
+    <dl class="cost">
+      <dt>Được</dt><dd>Hợp nhất với việc thật. Xử nhanh nhất một danh sách dài.</dd>
+      <dt>Mất</dt><dd>Quen thuộc tới mức dễ trông giống công cụ khác. Cần màn rộng.</dd>
+    </dl>
+  </div>
+
+  <div class="demo">
+    <div class="D-top">
+      <span class="D-brand"><span class="D-dot"></span>Traffic Shaper</span>
+      <span class="D-crumb">acme-prod <b>/</b> Gate</span>
+      <span class="D-sp"></span>
+      <span class="D-crumb">184,220 req / 24h</span>
+      <span class="D-kbd">⌘K</span>
+    </div>
+    <div class="D-body">
+      <div class="D-list">
+        <div class="D-filter">
+          <button class="D-chip on">Acting on 2</button>
+          <button class="D-chip">Near gate 9</button>
+          <button class="D-chip">All 47</button>
+        </div>
+        <div class="D-item" aria-current="true">
+          <span class="D-edge stop"></span>
+          <span><span class="D-ip">203.0.113.44</span><span class="D-sub">blocked &middot; 3/3 written &middot; ends in 58m</span></span>
+          <span class="D-sig">6.41<small>sigma</small></span>
+        </div>
+        <div class="D-item">
+          <span class="D-edge near"></span>
+          <span><span class="D-ip">198.51.100.7</span><span class="D-sub">slowed &middot; 1/3 behind &middot; ends in 4m</span></span>
+          <span class="D-sig">4.28<small>sigma</small></span>
+        </div>
+        <div class="D-item">
+          <span class="D-edge" style="background:var(--line2)"></span>
+          <span><span class="D-ip">192.0.2.144</span><span class="D-sub">near gate, not acted on</span></span>
+          <span class="D-sig">3.91<small>sigma</small></span>
+        </div>
+        <div class="D-item">
+          <span class="D-edge" style="background:var(--line2)"></span>
+          <span><span class="D-ip">203.0.113.9</span><span class="D-sub">near gate, not acted on</span></span>
+          <span class="D-sig">3.74<small>sigma</small></span>
+        </div>
+        <div class="D-item">
+          <span class="D-edge" style="background:var(--line2)"></span>
+          <span><span class="D-ip">198.51.100.212</span><span class="D-sub">near gate, not acted on</span></span>
+          <span class="D-sig">3.52<small>sigma</small></span>
+        </div>
+      </div>
+      <div class="D-pane">
+        <div class="D-h">
+          <h3>203.0.113.44</h3>
+          <span class="tag t-stop">BLOCKED</span>
+          <span class="tag t-ok">3/3 written</span>
+        </div>
+        <p class="D-lead">
+          Sits 6.41 sigma from your own normal. Decided 10 minutes ago, and
+          every one of your servers has collected it.
+        </p>
+
+        <div class="D-sec">
+          <div class="D-lab">Where it sits on your scale</div>
+          <svg class="plot" viewBox="0 0 700 96" role="img" aria-label="Vị trí nguồn trên thang sigma">
+            <defs>
+              <linearGradient id="ridgeD" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="var(--calm)" stop-opacity=".28"/>
+                <stop offset="1" stop-color="var(--calm)" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <g class="ridge">
+              <path d="M0,82 L47,79 L109,72 L171,56 L233,36 L296,28 L350,36 L404,54 L451,68 L498,76 L560,79 L638,81 L700,82 L700,82 L0,82 Z" fill="url(#ridgeD)"/>
+            </g>
+            <path d="M0,82 L47,79 L109,72 L171,56 L233,36 L296,28 L350,36 L404,54 L451,68 L498,76 L560,79 L638,81 L700,82"
+                  fill="none" stroke="var(--calm)" stroke-width="1.3" opacity=".7"/>
+            <g class="dot">
+              <circle cx="145" cy="66" r="2.6" fill="var(--calm)" opacity=".7"/>
+              <circle cx="190" cy="58" r="2.6" fill="var(--calm)" opacity=".7"/>
+              <circle cx="236" cy="50" r="2.6" fill="var(--calm)" opacity=".7"/>
+              <circle cx="315" cy="54" r="2.6" fill="var(--calm)" opacity=".7"/>
+              <circle cx="399" cy="60" r="2.6" fill="var(--near)" opacity=".8"/>
+              <circle cx="427" cy="48" r="2.6" fill="var(--near)" opacity=".8"/>
+              <circle class="halo" cx="650" cy="34" r="14" fill="var(--stop)"/>
+              <circle cx="650" cy="34" r="5.6" fill="var(--stop)"/>
+            </g>
+            <line x1="467" y1="6" x2="467" y2="82" stroke="var(--near)" stroke-width="1" stroke-dasharray="3 3"/>
+            <line x1="583" y1="6" x2="583" y2="82" stroke="var(--stop)" stroke-width="1" stroke-dasharray="3 3"/>
+            <text x="472" y="14" fill="var(--near)" font-size="9.5" font-family="Plex Mono, monospace">4.00</text>
+            <text x="588" y="14" fill="var(--stop)" font-size="9.5" font-family="Plex Mono, monospace">5.00</text>
+            <text x="612" y="34" fill="var(--stop)" font-size="10" font-family="Plex Mono, monospace" text-anchor="end">this one</text>
+            <line x1="0" y1="82" x2="700" y2="82" stroke="var(--line2)" stroke-width="1"/>
+          </svg>
+        </div>
+
+        <div class="D-sec">
+          <div class="D-lab">Why this source</div>
+          <table class="D-why">
+            <tr><th>Requests per minute</th><td>412</td><td class="d">+5.8σ</td></tr>
+            <tr><th>Distinct paths</th><td>1</td><td class="d">+4.1σ</td></tr>
+            <tr><th>404 rate</th><td>0.94</td><td class="d">+3.7σ</td></tr>
+            <tr><th>User agents</th><td>1</td><td style="color:var(--dim)">+0.4σ</td></tr>
+          </table>
+        </div>
+
+        <div class="D-acts">
+          <button class="D-btn p">Allow this source <span class="D-kbd">A</span></button>
+          <button class="D-btn">Episodes <span class="D-kbd">E</span></button>
+          <button class="D-btn">Next <span class="D-kbd">J</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ so sánh ══════════════ -->
+<section class="dir">
+  <div class="dir-head">
+    <p class="eyebrow">Chọn thế nào</p>
+    <h2>Bốn hướng cạnh nhau</h2>
+    <p>
+      Không có hướng nào thắng ở mọi cột. Câu hỏi thật là: <b>người mở màn
+      này nhiều nhất là ai</b> - người đang trực, hay người đang cân
+      nhắc mua.
+    </p>
+  </div>
+  <table class="cmp">
+    <thead>
+      <tr><th></th><th>Hợp với ai</th><th>Mật độ</th><th>Mức đặc trưng</th><th>Rủi ro chính</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <th>A. Instrument</th>
+        <td>Người trực, đã quen sản phẩm</td><td>Cao nhất</td><td>Cao</td>
+        <td>Doạ người mới, khó bán</td>
+      </tr>
+      <tr>
+        <th>B. Editorial</th>
+        <td>Người đang cân nhắc, người ký duyệt</td><td>Thấp nhất</td><td>Cao</td>
+        <td>Người trực cả ngày thấy dài dòng</td>
+      </tr>
+      <tr>
+        <th>C. Rail + canvas</th>
+        <td>Người muốn một câu trả lời mỗi lần</td><td>Thấp</td><td>Cao nhất</td>
+        <td>Phải chuyển màn nhiều, ít ngữ cảnh</td>
+      </tr>
+      <tr>
+        <th>D. Split console</th>
+        <td>Người xử danh sách hàng ngày</td><td>Trung bình cao</td><td>Thấp nhất</td>
+        <td>Dễ trông giống mọi công cụ khác</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="held" style="margin-top:32px;max-width:none">
+    <p>
+      <b>Có thể ghép.</b> Bốn hướng này không loại trừ nhau theo màn hình:
+      chẳng hạn <b>B</b> cho trang giới thiệu và màn Cổng lần đầu đăng nhập,
+      rồi <b>D</b> cho công việc hằng ngày, dùng chung một bộ token. Nếu bạn
+      muốn hướng đó thì nói, tôi dựng bản ghép để bạn xem trước khi động vào
+      sản phẩm.
+    </p>
+  </div>
+</section>
+
+</div>
+
+<script>
+// Đổi chế độ sáng/tối. Chỉ có ở tài liệu này; sản phẩm dùng POST không thân
+// và ba nút thật, vì CSP của nó chặn script nội tuyến.
+document.querySelectorAll('.sw button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    document.documentElement.dataset.theme = b.dataset.t;
+    document.querySelectorAll('.sw button').forEach(function (o) {
+      o.setAttribute('aria-pressed', String(o === b));
+    });
+  });
+});
+</script>
+</body>
+</html>

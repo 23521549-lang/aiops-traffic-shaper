@@ -1,197 +1,133 @@
 {% extends "app_shell.html" %}
-{% block title %}Agents · Traffic Shaper{% endblock %}
-{% block page_title %}Agents{% endblock %}
+{% import "_fleet.html" as fleet %}
+{% block title %}Agent · Traffic Shaper{% endblock %}
+{% block page_title %}Agent{% endblock %}
 {% block page_summary %}
-{%- if agent_count -%}
-{{ live_count }} of {{ agent_count }} reporting
-{%- if quiet_count %} · {{ quiet_count }} quiet{% endif -%}
-{%- if toothless_count %} · {{ toothless_count }} enforcing nothing{% endif -%}
-{%- else -%}
-nothing registered yet
-{%- endif -%}
+<b>{{ agent_count }}</b> đã đăng ký · {{ live_count }} đang thu
+{%- if toothless_count %} · {{ toothless_count }} không ghi luật{% endif %}
 {% endblock %}
 {% block page_actions %}
-<a class="c-btn" href="/dashboard/ui">Protection</a>
+<a class="btn" href="#them-agent">Thêm agent</a>
 {% endblock %}
 {% block page_content %}
 
-<div class="c-list">
-
-  {% if created %}
-  {# Shown once. The key is stored hashed, so there is no second chance to
-     display it, and an operator who assumes they can come back for it loses
-     the machine's credential. Saying so is part of the control. #}
-  <div class="c-panel">
-    <div class="alert alert-ok" role="status">
-      <strong>Agent created.</strong>
-      Its key is shown once, here, and cannot be shown again.
-    </div>
-    <div class="c-section-label">Run this on the machine you want protected</div>
-    {# `connect`, not `register`. Registration is what just happened, here,
-       against this session. The machine is only handed the result. #}
-    <pre class="c-code"><code>traffic-shaper connect \
+{% if created %}
+{# Shown once and never again. The key is not stored anywhere this console
+   can read it back, which is the only reason it is safe to print here. #}
+<div class="alert alert-ok" role="status">
+  <strong>Đã tạo agent.</strong>
+  Khoá dưới đây <b>chỉ hiện một lần (shown once)</b>, ngay tại đây, và không hiện lại được. Chép nó ra trước khi rời trang.
+</div>
+<div class="code">aiops-agent register \
   --backend-url {{ backend_url }} \
   --tenant-id {{ created.tenant_id }} \
   --agent-id {{ created.agent_id }} \
-  --api-key {{ created.api_key }}
+  --api-key {{ created.api_key }}</div>
+{% endif %}
 
-traffic-shaper run</code></pre>
-    <p class="c-summary">
-      The agent writes these to <code>~/.aiops-agent/config.json</code> with
-      owner-only permissions and needs nothing else. Nothing is enforced
-      until the first model is trained, which takes one night.
-    </p>
+{% if agents %}
+{# ---- đội agent -------------------------------------------------------- #}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Đội agent của bạn</h2>
+    <div class="sec-m">{{ agent_count }} đã đăng ký · {{ live_count }} đang thu</div>
   </div>
-  {% endif %}
+  <p class="one">
+    Báo cáo không phải là bảo vệ. Một agent không có bộ thi hành vẫn gửi số
+    và <b>không ghi luật nào</b>, mà mọi màn khác đều gọi nó là khoẻ.
+  </p>
+  {{ fleet.render(agents) }}
+</section>
 
-  {% if toothless_count %}
-  {# The loudest thing on this page when it is true. An agent in this state
-     is reporting, is green everywhere else in the product, and is protecting
-     nothing at all. #}
-  <div class="c-panel">
-    <div class="alert alert-warning">
-      <strong>{{ toothless_count }} agent{{ 's' if toothless_count != 1 }} can enforce nothing.</strong>
-      {{ 'They are' if toothless_count != 1 else 'It is' }} sending telemetry
-      and we are scoring it, but {{ 'they' if toothless_count != 1 else 'it' }}
-      found no nginx and no iptables to write a rule with, so nothing we
-      decide is being applied. Install one of those on the machine, or run the
-      agent with permission to use it, and it starts enforcing on its own.
-    </div>
+{# ---- điều khiển từng máy ---------------------------------------------- #}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Điều khiển từng agent</h2>
+    <div class="sec-m">và máy chủ nó đang chạy trên đó</div>
   </div>
-  {% endif %}
-
-  {% if quiet_count %}
-  <div class="c-panel">
-    <div class="alert alert-warning">
-      <strong>{{ quiet_count }} agent{{ 's' if quiet_count != 1 }} stopped reporting.</strong>
-      Traffic through {{ 'those machines' if quiet_count != 1 else 'that machine' }}
-      is not being checked. The quiet ones are named below.
-    </div>
-  </div>
-  {% endif %}
-
-  {% if agents %}
-  <div class="c-table-scroll" tabindex="0" role="region"
-       aria-label="Your agents">
-    <table class="c-table">
-      <caption class="sr-only">Your agents, most recently seen first</caption>
-      <thead>
-        <tr>
-          <th scope="col">Agent</th>
-          <th scope="col">State</th>
-          <th scope="col">Enforcing with</th>
-          <th scope="col">Last seen</th>
-          <th scope="col">Version</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for a in agents %}
-        <tr {% if selected and selected.agent_id == a.agent_id %}aria-selected="true"{% endif %}>
-          {# The label its owner chose. The uuid stays in the title for anyone
-             who needs to paste it into a ticket. #}
-          <th scope="row" title="{{ a.agent_id }}">
-            <a href="/dashboard/ui/agents?id={{ a.agent_id }}">{{ a.label }}</a>
-          </th>
-          <td><span class="c-state c-state--{{ a.state }}">{{ a.state_label }}</span></td>
-          {# Reporting is not protecting. An agent that found no nginx and no
-             iptables sends telemetry forever and enforces none of the
-             decisions it is handed, and every screen here called it
-             healthy. #}
-          <td><span class="c-enforce c-enforce--{{ a.can_enforce }}">{{ a.enforce_label }}</span></td>
-          <td class="d" title="{{ a.last_seen_exact }}">{{ a.last_seen }}</td>
-          <td class="d">{{ a.version }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% else %}
-  <div class="c-empty-state">
-    <strong>No agent has registered</strong>
-    <p>
-      Install the agent on the server you want protected and register it with
-      your tenant id. Nothing is being checked until one reports in, so an
-      empty Protection list right now is not evidence that your traffic is
-      clean.
-    </p>
-  </div>
-  {% endif %}
-
-  {# Last, deliberately. Adding an agent is an occasional errand;
-     a quiet machine is why someone opened this page, and the form
-     used to sit on top of that news. #}
-  <div class="c-panel">
-    <div class="c-section-label">Add an agent</div>
-    {% if error %}<p class="field-error" role="alert">{{ error }}</p>{% endif %}
-    {# Body-less: the label rides in the query string, so this POST needs no
-       CloudFront payload hash (ADR-005). #}
-    <form class="c-form-row" data-params-in-url
-          hx-post="/dashboard/ui/agents" hx-target="body" hx-swap="innerHTML">
-      <div class="field">
-        <label for="agent-label">Machine name</label>
-        <input type="text" id="agent-label" name="label" required maxlength="60"
-               placeholder="web-01" aria-describedby="agent-label-hint">
+  <p class="one">
+    <b>Chỉ theo dõi</b> là công tắc của cả tài khoản, không theo từng máy:
+    một công tắc theo máy sẽ để bạn bị chặn ở bốn host và mở ở host thứ năm.
+  </p>
+  <div class="ctl-grid">
+    {% for a in agents %}
+    <div class="ctl">
+      <div class="ctl-h">
+        <span class="ctl-n">{{ a.label }}</span>
+        <span class="pill {{ 'on' if a.live else 'off' }}"><i></i>{{ a.state_label }}</span>
       </div>
-      <button type="submit" class="c-btn c-btn--primary">Add</button>
-      {# Below the row, not inside the field: inside, it dragged the submit
-         button a line down from the input it belongs to. The association is
-         by id, which works from anywhere in the document. #}
-      <span class="field-hint" id="agent-label-hint">
-        What you will want to read when this one goes quiet at 3am.
-      </span>
-    </form>
+      <div class="ctl-d">
+        {{ a.enforce_label }} · {{ a.version }} · thu {{ a.last_seen }}<br>
+        đăng ký {{ a.registered }}
+      </div>
+      <div class="ctl-b">
+        {# The one action this console can genuinely take on an agent today.
+           Everything else a control platform wants here - reload the
+           enforcer, flush the local rules, restart, rotate the key - needs a
+           command channel that does not exist yet, and drawing the buttons
+           before the channel exists is how a mockup becomes a promise. #}
+        <a class="btn btn--sm" href="/dashboard/ui/agents?id={{ a.agent_id }}">Chi tiết</a>
+      </div>
+    </div>
+    {% endfor %}
   </div>
-</div>
+</section>
+{% else %}
+<section class="sec">
+  <div class="sec-h"><h2 class="sec-t">Chưa có agent nào</h2></div>
+  <p class="one">
+    Bảo vệ bắt đầu ngay khi agent đầu tiên báo về. Trước đó, sản phẩm này
+    không thấy gì và không làm gì.
+  </p>
+</section>
+{% endif %}
 
 {% if selected %}
-<aside class="c-detail" aria-label="Agent detail">
-  <div class="c-detail-head">
-    <div class="c-detail-id">{{ selected.label }}</div>
-    <div>
-      <span class="c-state c-state--{{ selected.state }}">{{ selected.state_label }}</span>
-      <span class="c-summary">last seen {{ selected.last_seen }}</span>
-    </div>
+{# Selecting a machine opens its detail. The list answers "which of my
+   machines", this answers "and what is going on with that one", and they are
+   different questions. #}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Chi tiết agent (Agent detail)</h2>
+    <div class="sec-m">{{ selected.label }}</div>
   </div>
-
-  <div class="c-detail-body">
-    <div>
-      <div class="c-section-label">Agent detail</div>
-      <dl class="c-kv">
-        <dt>Agent id</dt><dd>{{ selected.agent_id }}</dd>
-        <dt>Version</dt><dd>{{ selected.version }}</dd>
-        <dt>Registered</dt><dd>{{ selected.registered }}</dd>
-        <dt>Last seen</dt><dd>{{ selected.last_seen_exact or selected.last_seen }}</dd>
-      </dl>
-    </div>
-
-    <div>
-      <div class="c-section-label">What this state means</div>
-      {% if selected.state == 'live' %}
-      <p class="c-summary">
-        This machine made an authenticated call within the last five minutes.
-        Its traffic is being scored against your baseline.
-      </p>
-      {% elif selected.state == 'revoked' %}
-      <p class="c-summary">
-        This key was revoked, which happens when a tenant is suspended. The
-        process may well still be running and healthy; it simply cannot
-        report any more. It has to register again to come back.
-      </p>
-      {% else %}
-      <p class="c-summary">
-        Nothing has arrived from this machine in over five minutes. Either
-        the process stopped, or it cannot reach the API. Traffic through it
-        is not being checked while that is true.
-      </p>
-      {% endif %}
-    </div>
+  <dl class="kv">
+    <dt>Tên</dt><dd><span class="src-ip">{{ selected.label }}</span></dd>
+    <dt>Mã</dt><dd>{{ selected.agent_id }}</dd>
+    <dt>Phiên bản</dt><dd>{{ selected.version }}</dd>
+    <dt>Trạng thái</dt>
+    <dd><span class="verdict{{ '' if selected.live else ' open' }}"><i></i>{{ selected.state_label }}</span></dd>
+    <dt>Ghi luật bằng</dt><dd>{{ selected.enforce_label }}</dd>
+    <dt>Thu gần nhất</dt><dd title="{{ selected.last_seen_exact }}">{{ selected.last_seen }}</dd>
+    <dt>Đăng ký</dt><dd title="{{ selected.registered_exact }}">{{ selected.registered }}</dd>
+  </dl>
+  <div class="ctl-b">
+    <a class="btn" href="/dashboard/ui/agents" data-key="Escape">Đóng <kbd>Esc</kbd></a>
   </div>
-
-  <div class="c-actions">
-    <a class="c-btn" href="/dashboard/ui">Protection</a>
-    <a class="c-btn" href="/dashboard/ui/agents" data-key="Escape">Close <kbd class="c-key">Esc</kbd></a>
-  </div>
-</aside>
+</section>
 {% endif %}
+
+{# ---- thêm máy --------------------------------------------------------- #}
+<section class="sec" id="them-agent">
+  <div class="sec-h">
+    <h2 class="sec-t">Thêm một agent</h2>
+    <div class="sec-m">khoá chỉ hiện một lần</div>
+  </div>
+  <form class="c-form-stack" method="post" action="/dashboard/ui/agents">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="agent-label">Tên máy</label>
+    <input id="agent-label" name="label" value="{{ new_label or '' }}"
+           maxlength="64" autocomplete="off" placeholder="web-01">
+    <p class="field-hint">
+      Tên bạn sẽ nhận ra lúc 3 giờ sáng. Nó không rời khỏi tài khoản của bạn.
+    </p>
+    {% if error %}<p class="field-error" role="alert">{{ error }}</p>{% endif %}
+    <button type="submit" class="btn btn--p">Đăng ký máy này</button>
+  </form>
+  <p class="one one--gap">Rồi chạy trên chính máy đó:</p>
+  <div class="code">curl -fsSL {{ backend_url }}/install.sh | sh
+sudo systemctl enable --now aiops-agent
+traffic-shaper run</div>
+</section>
 
 {% endblock %}

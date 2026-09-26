@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agents &middot; Traffic Shaper</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="mock"><span>Bản dựng xem thử</span><span class="sp"></span><span class="key"><span class="key-s"></span>nét đứt = chưa có trong sản phẩm</span><span><a href="index.html">index</a> &middot; <a href="agents.html">agents</a> &middot; <a href="history.html">history</a> &middot; <a href="allowed.html">allowed</a> &middot; <a href="system.html">system</a> &middot; <a href="model.html">model</a></span></div>
+<div class="app">
+  <header class="bar">
+    <span class="brand"><span class="beacon"></span>Traffic Shaper</span>
+    <span class="sp"></span>
+    <span class="who">acme-prod</span>
+    <span class="cost">Today <b>$0.00</b></span>
+    <button class="btn">Commands<kbd>K</kbd></button>
+    <button class="btn">Sign out</button>
+  </header>
+  <div class="body">
+    <nav class="nav">
+      <div class="gp">Control</div>
+      <a href="index.html"><span>Gate</span><span class="ct">2</span></a>
+      <a href="history.html"><span>History</span></a>
+      <a href="allowed.html"><span>Allowed</span><span class="ct">6</span></a>
+      <div class="gp">System</div>
+      <a href="agents.html" aria-current="page"><span>Agents</span><span class="ct">5</span></a>
+      <a href="system.html"><span>How it works</span></a>
+      <a href="model.html"><span>Model</span></a>
+    </nav>
+    <main class="main">
+      <div class="head">
+        <div>
+          <h1 class="h1">Agents</h1>
+          <p class="sub"><b>5</b> registered &middot; 4 collecting &middot; 1 writing no rules</p>
+        </div>
+        <div class="head-act"><button class="btn">Add agent</button><button class="btn btn--p" data-new title="Chưa có trong sản phẩm">Collect now</button></div>
+      </div>
+      <section class="sec">
+        <div class="sec-h"><h2 class="sec-t">Your fleet</h2><div class="sec-m">5 registered &middot; 4 collecting</div></div>
+        <svg class="plot" viewBox="0 0 980 230" role="img"
+             aria-labelledby="fl-t fl-d">
+          <title id="fl-t">Five agents, and how fresh each one is</title>
+          <desc id="fl-d">Four agents are collecting decisions every few seconds. One has
+            no enforcement backend and writes no rule.</desc>
+          <rect class="sys-box sys-box--on" x="400" y="88" width="180" height="52" rx="5"/>
+          <text class="sys-t" x="490" y="110" text-anchor="middle">one decision</text>
+          <text class="sys-s" x="490" y="126" text-anchor="middle">every server, not per machine</text>
+          <g class="sys-wire">
+            <path d="M400,114 L220,44"/><path d="M400,114 L220,100"/><path d="M400,114 L220,158"/>
+            <path d="M580,114 L760,44"/>
+          </g>
+          <path class="sys-wire" style="stroke:#d4d6dd;stroke-dasharray:4 4" d="M580,114 L760,166"/>
+          <circle class="p5" r="3.5"><animateMotion dur="5s" repeatCount="indefinite" path="M220,44 L400,114"/></circle>
+          <circle class="p5" r="3.5"><animateMotion dur="5s" begin=".8s" repeatCount="indefinite" path="M220,100 L400,114"/></circle>
+          <circle class="p5" r="3.5"><animateMotion dur="5s" begin="1.6s" repeatCount="indefinite" path="M220,158 L400,114"/></circle>
+          <circle class="p5" r="3.5"><animateMotion dur="5s" begin="2.4s" repeatCount="indefinite" path="M760,44 L580,114"/></circle>
+          <rect class="sys-box" x="60" y="22" width="160" height="42" rx="5"/>
+          <text class="sys-t" x="74" y="41">web-01</text><text class="sys-s" x="74" y="56">nginx &middot; 2 s</text>
+          <rect class="sys-box" x="60" y="80" width="160" height="42" rx="5"/>
+          <text class="sys-t" x="74" y="99">web-02</text><text class="sys-s" x="74" y="114">nginx &middot; 4 s</text>
+          <rect class="sys-box" x="60" y="138" width="160" height="42" rx="5"/>
+          <text class="sys-t" x="74" y="157">api-01</text><text class="sys-s" x="74" y="172">iptables &middot; 3 s</text>
+          <rect class="sys-box" x="760" y="22" width="160" height="42" rx="5"/>
+          <text class="sys-t" x="774" y="41">api-02</text><text class="sys-s" x="774" y="56">nginx &middot; 8 s</text>
+          <rect class="sys-box" x="760" y="144" width="160" height="42" rx="5"/>
+          <text class="sys-t" x="774" y="163">batch-01</text>
+          <text class="sys-s" x="774" y="178">no enforcer &middot; 4 h</text>
+          <circle cx="926" cy="165" r="6" fill="#0c0e12"/>
+        </svg>
+      </section>
+      <section class="sec">
+        <div class="sec-h"><h2 class="sec-t">Control each agent</h2><div class="sec-m">and the machine it runs on</div></div>
+        <p class="one">Every button here is one command on that host. <b>Watch only</b> keeps it reporting and stops it writing rules.</p>
+        <div class="ctl-grid">
+        <div class="ctl">
+          <div class="ctl-h"><span class="ctl-n">web-01</span>
+            <span class="pill on" id="ag-0"><i></i>running</span></div>
+          <div class="ctl-d">nginx &middot; v1.4.0 &middot; collected 2 s ago<br>Ubuntu 22.04 &middot; 4 vCPU &middot; load 0.42</div>
+          <div class="ctl-b">
+            <button class="btn btn--sm" data-toggle="ag-0" aria-pressed="false"
+                    data-alt="Enforce again" data-new title="Chưa có trong sản phẩm">Watch only</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Collect now</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Reload nginx</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Flush local rules</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Restart agent</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Rotate key</button>
+            <button class="btn btn--sm btn--d" data-new title="Chưa có trong sản phẩm">Revoke</button>
+          </div>
+        </div>
+        <div class="ctl">
+          <div class="ctl-h"><span class="ctl-n">web-02</span>
+            <span class="pill on" id="ag-1"><i></i>running</span></div>
+          <div class="ctl-d">nginx &middot; v1.4.0 &middot; collected 4 s ago<br>Ubuntu 22.04 &middot; 4 vCPU &middot; load 0.38</div>
+          <div class="ctl-b">
+            <button class="btn btn--sm" data-toggle="ag-1" aria-pressed="false"
+                    data-alt="Enforce again" data-new title="Chưa có trong sản phẩm">Watch only</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Collect now</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Reload nginx</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Flush local rules</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Restart agent</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Rotate key</button>
+            <button class="btn btn--sm btn--d" data-new title="Chưa có trong sản phẩm">Revoke</button>
+          </div>
+        </div>
+        <div class="ctl">
+          <div class="ctl-h"><span class="ctl-n">api-01</span>
+            <span class="pill on" id="ag-2"><i></i>running</span></div>
+          <div class="ctl-d">iptables &middot; v1.4.0 &middot; collected 3 s ago<br>Debian 12 &middot; 2 vCPU &middot; load 1.10</div>
+          <div class="ctl-b">
+            <button class="btn btn--sm" data-toggle="ag-2" aria-pressed="false"
+                    data-alt="Enforce again" data-new title="Chưa có trong sản phẩm">Watch only</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Collect now</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Reload nginx</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Flush local rules</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Restart agent</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Rotate key</button>
+            <button class="btn btn--sm btn--d" data-new title="Chưa có trong sản phẩm">Revoke</button>
+          </div>
+        </div>
+        <div class="ctl">
+          <div class="ctl-h"><span class="ctl-n">api-02</span>
+            <span class="pill on" id="ag-3"><i></i>running</span></div>
+          <div class="ctl-d">nginx &middot; v1.3.2 &middot; collected 8 s ago<br>Ubuntu 20.04 &middot; 2 vCPU &middot; load 0.21</div>
+          <div class="ctl-b">
+            <button class="btn btn--sm" data-toggle="ag-3" aria-pressed="false"
+                    data-alt="Enforce again" data-new title="Chưa có trong sản phẩm">Watch only</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Collect now</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Reload nginx</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Flush local rules</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Restart agent</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Rotate key</button>
+            <button class="btn btn--sm btn--d" data-new title="Chưa có trong sản phẩm">Revoke</button>
+          </div>
+        </div>
+        <div class="ctl">
+          <div class="ctl-h"><span class="ctl-n">batch-01</span>
+            <span class="pill off" id="ag-4"><i></i>no enforcer</span></div>
+          <div class="ctl-d">none &middot; v1.4.0 &middot; collected 4 h ago<br>Debian 12 &middot; 8 vCPU &middot; load 3.90</div>
+          <div class="ctl-b">
+            <button class="btn btn--sm" data-toggle="ag-4" aria-pressed="false"
+                    data-alt="Enforce again" data-new title="Chưa có trong sản phẩm">Watch only</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Collect now</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Reload nginx</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Flush local rules</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Restart agent</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Rotate key</button>
+            <button class="btn btn--sm btn--d" data-new title="Chưa có trong sản phẩm">Revoke</button>
+          </div>
+        </div>
+        </div>
+      </section>
+      <section class="sec">
+        <div class="sec-h"><h2 class="sec-t">Whole fleet</h2><div class="sec-m">acts on all 5 at once</div></div>
+        <div class="ctl-b">
+          <button class="btn" data-new title="Chưa có trong sản phẩm">Collect now, everywhere</button>
+          <button class="btn" data-new title="Chưa có trong sản phẩm">Reload every enforcer</button>
+          <button class="btn" data-toggle="pl-all" aria-pressed="false"
+                  data-alt="Enforce everywhere">Watch only</button>
+          <button class="btn" data-new title="Chưa có trong sản phẩm">Flush every local rule</button>
+          <button class="btn btn--d" data-new title="Chưa có trong sản phẩm">Revoke all keys</button>
+        </div>
+        <p class="one" style="margin-top:12px">Add a machine:</p>
+        <div class="code">curl -fsSL https://get.trafficshaper.dev/install.sh | sh
+sudo aiops-agent register --key acme-prod.&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;</div>
+      </section>
+
+    </main>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

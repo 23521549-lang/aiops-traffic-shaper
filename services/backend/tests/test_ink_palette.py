@@ -19,25 +19,41 @@ from pathlib import Path
 import pytest
 
 _UI = Path(__file__).resolve().parents[1] / "ui" / "static"
-# `.on-ink` stayed in app.css: it declares tokens but also sets
-# background and color on an element, which makes it a component
-# carrying a theme rather than a theme. The dark ramp it is compared
-# against moved to tokens.css with the rest of the ramps.
-_CSS = _UI / "app.css"
 _TOKENS = _UI / "tokens.css"
+
+# `.on-ink` is FOUND, not named. It declares tokens but also sets background
+# and colour on an element, which makes it a component carrying a theme
+# rather than a theme, so it lives with whichever surface uses it - app.css
+# once, landing.css after the sheets were split per surface. Ten assertions
+# in this file went from guarding a real guarantee to erroring on a stale
+# filename, silently, for exactly as long as nobody read the output.
 
 # The ramp, and only the ramp. Surfaces and text differ between the two
 # scopes on purpose.
-_SHARED = ("--tier-normal", "--tier-normal-bg", "--tier-limited",
-           "--tier-limited-bg", "--tier-blocked", "--tier-blocked-bg",
-           "--tier-blocked-edge", "--tier-limited-edge")
+# The ramp AND the three inks. `--t1..--t5` joined the list when the charts
+# started reading the ramp directly instead of going through the tier
+# fields: the ink field is a dark surface, so it needs the dark ramp, and
+# nothing else would have noticed if it did not have one.
+_SHARED = ("--t1", "--t2", "--t3", "--t4", "--t5",
+           "--tier-normal", "--tier-limited", "--tier-blocked",
+           "--tier-field", "--tier-blocked-edge")
 
 
 def _block(selector: str) -> str:
-    source = _TOKENS if selector.startswith("[data-theme") else _CSS
-    css = re.sub(r"/\*.*?\*/", "", source.read_text(encoding="utf-8"), flags=re.S)
-    start = css.index(selector)
-    return css[start:css.index("}", start)]
+    if selector.startswith("[data-theme"):
+        sources = [_TOKENS]
+    else:
+        sources = sorted(_UI.glob("*.css"))
+    for source in sources:
+        css = re.sub(r"/\*.*?\*/", "", source.read_text(encoding="utf-8"), flags=re.S)
+        start = css.find(selector)
+        if start != -1:
+            return css[start:css.index("}", start)]
+    raise AssertionError(
+        f"{selector} is in none of {[s.name for s in sources]}. If the ink "
+        f"field was deleted, delete this file with it; if it was renamed, "
+        f"rename it here. A block that cannot be found is not a block that "
+        f"has been checked.")
 
 
 def _tokens(block: str) -> dict[str, str]:

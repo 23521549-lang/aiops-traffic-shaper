@@ -54,10 +54,20 @@ def _hours_of_traffic(resource, dead_hour=True):
                             hour_start=hour, now=now)
 
 
-def test_the_history_screen_draws_the_grid(client, dynamo_resource):
+# THREE MORE REMOVED, all of them about a grid CELL.
+#
+# "one row per hour", "an empty cell says so rather than printing zero", and
+# "the gate lines use this tenant's own thresholds" have no counterpart on a
+# timeline: it has no cells and no gate lines. The principle behind the
+# second one survives as a sentence, tested above.
+
+def test_the_history_screen_draws_the_window(client, dynamo_resource):
+    """The grid this replaced spent 168 cells answering "did anything
+    happen", and the answer is almost always no. The timeline says the same
+    thing in a tenth of the height, and every mark is pressable."""
     _hours_of_traffic(dynamo_resource)
 
-    assert "c-grid" in client.get("/dashboard/ui/history").text
+    assert 'class="tl"' in client.get("/dashboard/ui/history").text
 
 
 def test_the_deviation_chart_is_gone_from_the_console(client, dynamo_resource):
@@ -68,31 +78,31 @@ def test_the_deviation_chart_is_gone_from_the_console(client, dynamo_resource):
     assert "Worst deviation per hour" not in client.get("/dashboard/ui/history").text
 
 
-def test_the_gates_cut_through_the_whole_grid(client, dynamo_resource):
-    """Not a decoration per row. The shape exists so an operator sees the
-    gate literally cutting across their own history."""
+# REMOVED: the gates drawn cutting across the grid.
+#
+# The timeline has no gate lines, because it plots EPISODES and an episode is
+# by definition already past a gate. Drawing the lines would be drawing a
+# threshold every mark on the chart has already crossed.
+
+
+def test_a_window_with_nothing_measured_says_so_in_words(client, dynamo_resource):
+    """Principle 1.3, carried over. A quiet window and a dead agent look
+    identical on any chart, so the distinction is made in a sentence rather
+    than in a shade of a cell."""
+    page = client.get("/dashboard/ui/history").text
+
+    assert "Không có telemetry nào trong khoảng này." in page
+
+
+def test_the_page_costs_one_mark_per_episode_and_no_more(client, dynamo_resource):
+    """The requirement behind the old cell count, restated for the shape
+    that replaced it: a window with two episodes draws two marks, whatever
+    the window length, so a long history cannot become a long page."""
     _hours_of_traffic(dynamo_resource)
 
-    assert client.get("/dashboard/ui/history").text.count("c-grid-gate ") == 2
+    page = client.get("/dashboard/ui/history").text
 
-
-def test_an_hour_with_no_telemetry_is_drawn_as_a_hole(client, dynamo_resource):
-    """Principle 1.3. An empty row from a working agent and an empty row
-    from a dead one look identical, and only one is evidence."""
-    _hours_of_traffic(dynamo_resource)
-
-    assert "c-grid-dead" in client.get("/dashboard/ui/history").text
-
-
-def test_only_populated_cells_reach_the_page(client, dynamo_resource):
-    """Spec 3.4 states this as a requirement. Three populated bins and one
-    identified source is four cells, whatever the window length."""
-    _hours_of_traffic(dynamo_resource)
-
-    # Counted on the opening of the class attribute: an identified cell
-    # carries both c-grid-cell and c-grid-cell--id, so a bare substring count
-    # reports it twice.
-    assert client.get("/dashboard/ui/history").text.count('class="c-grid-cell') == 4
+    assert page.count('class="tl-ep"') == page.count('class="src-h"')
 
 
 def test_the_grid_carries_a_table_for_a_screen_reader(client, dynamo_resource):
@@ -101,7 +111,7 @@ def test_the_grid_carries_a_table_for_a_screen_reader(client, dynamo_resource):
     _hours_of_traffic(dynamo_resource)
     page = client.get("/dashboard/ui/history").text
 
-    assert "<caption>" in page[page.index("c-grid"):]
+    assert "<caption>" in page[page.index('class="tl"'):]
 
 
 def test_the_grid_offers_no_link_to_the_sub_threshold_sources(client, dynamo_resource):
@@ -117,49 +127,14 @@ def test_a_window_with_no_telemetry_at_all_draws_no_reading(client):
     with a warning beside it; it renders no reading."""
     page = client.get("/dashboard/ui/history").text
 
-    assert 'class="c-grid-cell' not in page
-    assert "no telemetry" in page.lower()
-
-
-def test_the_grid_uses_the_tenants_own_gates(client, dynamo_resource):
-    """Bands drawn from the module constants would show every tenant
-    somebody else's threshold, on their own history."""
-    _hours_of_traffic(dynamo_resource)
-    TenantsTable(dynamo_resource).set_threshold("t-1", "tier1_z", -3.5)
-
-    from services.backend.ui.charts import axis_x
-
-    page = client.get("/dashboard/ui/history").text
-
-    assert f'x1="{axis_x(3.5)}"' in page
+    assert 'class="tl-ep"' not in page
+    assert "Không có telemetry" in page
 
 
 def test_no_sigma_label_is_uppercased_into_summation(client, dynamo_resource):
     _hours_of_traffic(dynamo_resource)
 
     assert "Σ" not in client.get("/dashboard/ui/history").text
-
-
-def test_the_table_has_one_row_per_hour(client, dynamo_resource):
-    """Spec 8: 24 rows by 3 columns. The first version shipped a four-row
-    aggregate, which can say that three hours had a source past the gate and
-    cannot say which three - and which three is the question the picture
-    answers at a glance."""
-    _hours_of_traffic(dynamo_resource)
-
-    page = client.get("/dashboard/ui/history").text
-    table = page[page.index("<caption>"):page.index("</table>",
-                                                    page.index("<caption>"))]
-
-    # 25 data rows, not 24: query_series zero-fills inclusively from the hour
-    # containing `since` to the hour containing `until`, and a 24-hour window
-    # starting mid-hour touches 25 of them. The invariant is one row per
-    # charted hour, not a round number.
-    data_rows = table.count('<th scope="row">')
-
-    assert data_rows in (24, 25)
-    assert table.count("<tr>") == data_rows + 1
-    assert table.count("<td>") == data_rows * 2
 
 
 def test_the_table_is_not_a_matrix_of_every_bin(client, dynamo_resource):
@@ -185,11 +160,3 @@ def test_the_table_names_the_hour_rather_than_an_epoch(client, dynamo_resource):
     assert ":00" in table
 
 
-def test_an_hour_with_no_reading_says_so_rather_than_saying_zero(client, dynamo_resource):
-    """Zero sigma means "exactly normal". An hour with no telemetry measured
-    nothing, and those are opposite claims."""
-    _hours_of_traffic(dynamo_resource)
-
-    page = client.get("/dashboard/ui/history").text
-
-    assert "no reading" in page

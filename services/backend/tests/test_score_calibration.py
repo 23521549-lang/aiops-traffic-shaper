@@ -192,7 +192,7 @@ def test_a_decision_records_how_many_deviations_out_it_was(dynamo_resource, monk
 def test_no_sigma_when_the_model_had_no_usable_spread():
     """score_std <= 0 is the degenerate case `classify` already falls back on
     (ml/model.py). There is no meaningful z to record, and inventing one
-    would be worse than admitting it — the UI says 'not measurable'."""
+    would be worse than admitting it — the UI says 'không đo được'."""
     from services.backend.ml.model import ScoreStats, z_score
 
     assert z_score(-0.5, ScoreStats(mean=0.0, std=0.0)) is None

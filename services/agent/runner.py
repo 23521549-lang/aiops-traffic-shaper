@@ -77,6 +77,15 @@ def _apply(store, adapters, result) -> None:
     if not result:
         return
     try:
+        # The customer has switched enforcement off in their console. The
+        # release itself needs nothing new: the served set comes back empty
+        # and the reconcile below drops every local rule, which is why the
+        # switch works on agents that were installed before it existed. This
+        # branch only makes the log say WHY, instead of leaving an operator
+        # reading what looks like the backend having lost every decision.
+        if result.get("enforce") is False and store.active_ips():
+            logger.warning("enforcement paused for this tenant; releasing %d "
+                           "local rule(s)", len(store.active_ips()))
         store.apply(result.get("decisions") or [], adapters)
         if "active_ips" in result:
             store.reconcile(result["active_ips"] or [], adapters)

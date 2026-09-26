@@ -15,8 +15,8 @@ from services.backend.ui.presenters import (
     DEGRADED, HEALTHY, NEVER_CONNECTED, axis_state,
 )
 
-FED = {"state": HEALTHY, "reporting": 3, "last_seen_label": "12 seconds ago"}
-QUIET = {"state": DEGRADED, "reporting": 0, "last_seen_label": "3 hours ago"}
+FED = {"state": HEALTHY, "reporting": 3, "last_seen_label": "12 giây trước"}
+QUIET = {"state": DEGRADED, "reporting": 0, "last_seen_label": "3 giờ trước"}
 NEVER = {"state": NEVER_CONNECTED, "reporting": 0, "last_seen_label": None}
 OPEN = {"throttled": False, "throttled_reason": None}
 CAPPED = {"throttled": True, "throttled_reason": "tenant"}
@@ -39,8 +39,8 @@ def test_a_dead_feed_deletes_the_reading():
 def test_a_dead_feed_says_nothing_is_being_measured_and_when_it_stopped():
     state = axis_state(QUIET, OPEN, model_ready=True)
 
-    assert "3 hours ago" in state["sentence"]
-    assert "not" in state["sentence"].lower()
+    assert "3 giờ trước" in state["sentence"]
+    assert "không" in state["sentence"].lower()
 
 
 def test_a_tenant_that_never_connected_is_not_the_same_as_one_gone_quiet():
@@ -53,8 +53,8 @@ def test_a_tenant_that_never_connected_is_not_the_same_as_one_gone_quiet():
     # The distinguishing fact, not a keyword: a tenant that never connected
     # has no "since when", and a sentence that invents one would send them
     # looking for a machine that stopped, which is the other case entirely.
-    assert "since" not in never["sentence"].lower()
-    assert "since" in quiet["sentence"].lower()
+    assert "từ" not in never["sentence"].lower()
+    assert "từ" in quiet["sentence"].lower()
 
 
 def test_an_empty_axis_and_a_dead_agent_never_read_the_same():
@@ -71,7 +71,7 @@ def test_a_throttled_tenant_is_told_the_truth_about_its_agent():
 
     assert state["state"] == "throttled"
     assert state["plot"] == "frozen"
-    assert "restart" in state["sentence"].lower()
+    assert "khởi động lại" in state["sentence"].lower()
 
 
 def test_the_two_throttle_reasons_are_different_sentences():
@@ -99,7 +99,7 @@ def test_day_one_draws_the_gates_unarmed():
     state = axis_state(FED, OPEN, model_ready=False)
 
     assert state["gates_armed"] is False
-    assert "measuring" in state["sentence"].lower()
+    assert "đang đo" in state["sentence"].lower()
 
 
 def test_a_fed_and_modelled_tenant_has_armed_gates():

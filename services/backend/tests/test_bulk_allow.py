@@ -79,7 +79,7 @@ def test_a_partial_run_reports_the_number_that_went_through(client, dynamo_resou
 
 def test_the_page_states_the_outcome_it_was_sent(client):
     page = client.get("/dashboard/ui?allowed=2&skipped=1").text
-    assert "2 source" in page
+    assert "2 nguồn" in page
     assert "1" in page
 
 
@@ -87,7 +87,7 @@ def test_a_run_where_nothing_worked_does_not_read_as_success(client):
     r = _bulk(client, ["nonsense", "also-nonsense"])
     assert r.headers.get("HX-Redirect") == "/dashboard/ui?allowed=0&skipped=2"
     page = client.get("/dashboard/ui?allowed=0&skipped=2").text
-    assert "Nothing was allowed" in page
+    assert "Không nguồn nào được cho qua" in page
 
 
 def test_too_many_at_once_is_refused_rather_than_truncated(client, dynamo_resource):

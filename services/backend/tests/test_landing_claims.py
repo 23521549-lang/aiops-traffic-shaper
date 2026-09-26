@@ -79,5 +79,5 @@ def test_the_page_does_not_claim_a_sign_in_method_that_was_replaced(page):
 def test_the_page_still_admits_what_is_missing(page):
     """The honesty section is load-bearing. A rewrite that quietly drops it
     turns this page into every other security vendor's page."""
-    assert "doesn" in page and "yet" in page
-    assert "No single sign-on" in page
+    assert "chưa làm được" in page
+    assert "Chưa có đăng nhập một lần" in page

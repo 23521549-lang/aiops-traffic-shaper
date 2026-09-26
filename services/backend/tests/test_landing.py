@@ -32,7 +32,7 @@ def _requests_today(resource) -> int:
 def test_an_anonymous_visitor_gets_the_product_not_a_login_form(dynamo_resource):
     resp = _client(dynamo_resource).get("/", follow_redirects=False)
     assert resp.status_code == 200
-    assert "Your traffic has a normal" in resp.text
+    assert "Traffic của bạn có một mức bình thường" in resp.text
 
 
 def test_a_signed_in_visitor_goes_straight_to_their_console(dynamo_resource):
@@ -86,7 +86,7 @@ def test_the_chart_is_readable_without_seeing_it(dynamo_resource):
     reader cannot reach is not a chart, it is a picture of one."""
     html = _client(dynamo_resource).get("/").text
     assert "<title>" in html and "<desc>" in html
-    assert "Most unusual source" in html
+    assert "Nguồn khác thường nhất" in html
 
 
 def test_the_page_states_what_the_product_cannot_do(dynamo_resource):
@@ -94,9 +94,9 @@ def test_the_page_states_what_the_product_cannot_do(dynamo_resource):
     Keeping it is the strongest anti-generic decision on the page, and it
     matches the tone the repo already uses in its own README."""
     html = _client(dynamo_resource).get("/").text
-    assert "What it doesn’t do yet" in html
-    assert "No external tenant has used it" in html
-    assert "We store end-user IP addresses" in html
+    assert "Những thứ nó chưa làm được" in html
+    assert "Chưa khách hàng bên ngoài nào dùng" in html
+    assert "Chúng tôi có lưu địa chỉ IP của người dùng cuối" in html
 
 
 def test_the_false_positive_rate_is_published_with_its_caveat(dynamo_resource):
@@ -105,7 +105,7 @@ def test_the_false_positive_rate_is_published_with_its_caveat(dynamo_resource):
     half of the same act."""
     html = _client(dynamo_resource).get("/").text
     assert "0.27%" in html
-    assert "modelled traffic" in html
+    assert "traffic mô phỏng" in html
 
 
 def test_the_page_is_reachable_without_javascript(dynamo_resource):

@@ -20,7 +20,7 @@ def test_login_page_renders(dynamo_resource, cognito_test_keys):
     client = _client(dynamo_resource, cognito_test_keys)
     resp = client.get("/ui/login")
     assert resp.status_code == 200
-    assert "Sign in" in resp.text
+    assert "Đăng nhập" in resp.text
 
 
 def test_login_tenant_token_redirects_to_dashboard(dynamo_resource, cognito_test_keys):
@@ -128,9 +128,14 @@ def test_the_static_route_serves_only_known_files(dynamo_resource, cognito_test_
 # --- ADR-005: CloudFront OAC does not sign request bodies -----------------
 
 def _static(name: str) -> str:
+    """UTF-8 explicitly. `read_text()` uses the platform's preferred codec,
+    which on a Windows developer machine is cp1252, and every template in
+    this product is now Vietnamese: the helper stopped being able to open
+    the file it was asserting about and failed with a decode error that said
+    nothing about the assertion."""
     from pathlib import Path
     root = Path(__file__).resolve().parents[1] / "ui"
-    return (root / name).read_text()
+    return (root / name).read_text(encoding="utf-8")
 
 
 def test_login_form_is_marked_for_signed_submission():

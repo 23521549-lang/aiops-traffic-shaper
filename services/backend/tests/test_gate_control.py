@@ -63,9 +63,9 @@ def _control(page):
     """Just the gate control, so a match elsewhere on the page cannot pass
     for a match inside it. The curve is the last thing in its panel, so it
     ends wherever the next structure on the page begins."""
-    start = page.index("c-gate-curve")
+    start = page.index("class=\"gate\"")
     ends = [page.find(marker, start)
-            for marker in ("c-panel", "<form", "c-empty-state", "c-detail")]
+            for marker in ("</section>", "<form", "class=\"src\"")]
     return page[start:min([e for e in ends if e != -1], default=len(page))]
 
 
@@ -121,7 +121,7 @@ def test_the_not_recommended_positions_say_so_in_words(client, dynamo_resource):
     ticket."""
     _with_model(dynamo_resource)
 
-    assert "false positives" in _control(client.get("/dashboard/ui").text).lower()
+    assert "báo nhầm" in _control(client.get("/dashboard/ui").text).lower()
 
 
 def test_the_control_never_offers_a_link_to_the_sub_threshold_sources(client, dynamo_resource):
@@ -135,7 +135,7 @@ def test_the_control_never_offers_a_link_to_the_sub_threshold_sources(client, dy
 def test_a_tenant_with_no_model_is_not_offered_a_gate_to_move(client):
     """Nothing is enforced yet, so a control that cannot take effect would
     be a promise the product is not keeping."""
-    assert "c-gate-curve" not in client.get("/dashboard/ui").text
+    assert "gate-row" not in client.get("/dashboard/ui").text
 
 
 def test_no_sigma_label_is_uppercased_into_summation(client, dynamo_resource):
@@ -151,11 +151,11 @@ def test_the_control_sits_in_the_same_panel_as_the_axis(client, dynamo_resource)
     _with_model(dynamo_resource)
 
     page = client.get("/dashboard/ui").text
-    axis_at = page.index("c-axis")
-    gate_at = page.index("c-gate-curve")
+    axis_at = page.index("Cổng làm chậm")
+    gate_at = page.index("class=\"gate\"")
 
     assert axis_at < gate_at
-    assert "c-panel" not in page[axis_at:gate_at]
+    assert "</section>" not in page[axis_at:gate_at]
 
 
 def test_the_screen_shows_the_gate_of_record_not_the_models_copy(client, dynamo_resource):
@@ -186,11 +186,11 @@ def test_a_moved_gate_says_it_applies_now_and_not_tonight(client, dynamo_resourc
 
     page = client.get("/dashboard/ui").text.lower()
 
-    assert "next batch" in page
+    assert "lô telemetry kế tiếp" in page
     assert "4.0" in page          # the copy the model still carries
 
 
 def test_an_unmoved_gate_makes_no_claim_about_a_pending_change(client, dynamo_resource):
     _with_model(dynamo_resource)
 
-    assert "next batch" not in client.get("/dashboard/ui").text.lower()
+    assert "lô telemetry kế tiếp" not in client.get("/dashboard/ui").text.lower()

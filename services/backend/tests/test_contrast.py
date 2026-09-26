@@ -61,7 +61,15 @@ def _tokens(scope: str) -> dict[str, str]:
             for m in re.finditer(r"(--[\w-]+):\s*(#[0-9a-fA-F]{6})", block)}
 
 
-LIGHT = _tokens(":root {")
+# `:root` is the LIGHT theme again, and there is no separate
+# `[data-theme="light"]` block to parse: the default IS light, so a second
+# copy of it would be a duplicate waiting to drift.
+#
+# The default moved twice. It went dark when the palette was three saturated
+# hues that a dark field held apart, and came back to light when the palette
+# became one hue in five steps, which separates on white. Both scopes are
+# measured either way; only which one a reader lands on ever moved.
+DEFAULT = LIGHT = _tokens(":root {")
 
 
 def _pairs(t: dict[str, str]) -> list[tuple[str, str, str, float]]:
@@ -86,10 +94,13 @@ def _pairs(t: dict[str, str]) -> list[tuple[str, str, str, float]]:
     label = "#ffffff" if luminance(t["--accent"]) < 0.4 else t["--ink"]
     out.append(("button label on --accent", label, t["--accent"], 4.5))
 
-    # Axis A: what the product did to traffic. Each on its own tinted pill.
+    # Axis A: how far a source sits from this tenant's own normal. All three
+    # sit on ONE field now. Each used to have its own darker tint, which read
+    # well and measured 4.08:1 - a chip nobody could use. Magnitude moved to
+    # the ink; the field stayed pale so the ink can be read on it.
     for tier in ("normal", "limited", "blocked"):
-        out.append((f"--tier-{tier} on its bg", t[f"--tier-{tier}"],
-                    t[f"--tier-{tier}-bg"], 4.5))
+        out.append((f"--tier-{tier} on the field", t[f"--tier-{tier}"],
+                    t["--tier-field"], 4.5))
         out.append((f"--tier-{tier} on surface", t[f"--tier-{tier}"], t["--surface"], 4.5))
 
     # Axis B: is the product itself healthy. These shipped unmeasured.
@@ -103,7 +114,15 @@ def _pairs(t: dict[str, str]) -> list[tuple[str, str, str, float]]:
 @pytest.mark.parametrize("label,fg,bg,need", _pairs(LIGHT), ids=lambda v: None)
 def test_light_theme_pair_meets_wcag(label, fg, bg, need):
     got = ratio(fg, bg)
-    assert got >= need, f"{label}: {got:.2f}:1 < {need}:1  ({fg} on {bg})"
+    assert got >= need, f"light {label}: {got:.2f}:1 < {need}:1  ({fg} on {bg})"
+
+
+@pytest.mark.parametrize("label,fg,bg,need", _pairs(DEFAULT), ids=lambda v: None)
+def test_the_default_theme_pair_meets_wcag(label, fg, bg, need):
+    """What a reader gets before choosing anything. It used to be the light
+    ramp; it is the dark one now, and the pairs are measured either way."""
+    got = ratio(fg, bg)
+    assert got >= need, f"default {label}: {got:.2f}:1 < {need}:1  ({fg} on {bg})"
 
 
 def test_the_border_that_was_wrong_is_right_now():

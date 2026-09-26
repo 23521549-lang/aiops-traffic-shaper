@@ -118,7 +118,7 @@ def test_a_temporary_password_leads_to_choosing_a_real_one(client):
                        data={"email": "new@acme.test", "password": "Temp-1234abcd"})
 
     assert resp.status_code == 200
-    assert "Choose a password" in resp.text
+    assert "Chọn mật khẩu" in resp.text
     assert "opaque-session" in resp.text
 
 
@@ -210,5 +210,5 @@ def test_the_login_page_leads_with_email_and_password(client):
     assert 'name="email"' in page
     assert 'autocomplete="current-password"' in page
     # The token field is still there, behind a disclosure rather than first.
-    assert "Sign in with an ID token instead" in page
+    assert "Đăng nhập bằng ID token" in page
     assert page.index('name="email"') < page.index('name="id_token"')

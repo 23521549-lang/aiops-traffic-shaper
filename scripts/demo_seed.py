@@ -133,8 +133,15 @@ def seed(resource, primary_tenant: str) -> dict:
     total = int(_DAILY_REQUEST_CEILING * 0.84)
     UsageCountersTable(resource).put(date=today, total_requests=total,
                                      estimated_gb_seconds=18.42)
-    for tenant_id, share in [(primary_tenant, 0.55), ("globex-docs", 0.12),
-                             ("initech-api", 0.26), ("hooli-legacy", 0.07)]:
+    # The primary tenant stays INSIDE its own 25% quota and one other tenant
+    # blows through theirs. That is both the more interesting story for the
+    # operations console - one customer hogging while the others are fine -
+    # and the only arrangement in which the tenant console is worth looking
+    # at: over its quota, axis_state correctly freezes the plot and draws no
+    # reading at all, which is right and which hides every source on the one
+    # screen the demo exists to show.
+    for tenant_id, share in [(primary_tenant, 0.17), ("globex-docs", 0.09),
+                             ("initech-api", 0.62), ("hooli-legacy", 0.12)]:
         UsageCountersTable(resource).put(
             date=f"{today}{_TENANT_KEY_MARKER}{tenant_id}",
             total_requests=int(total * share),
@@ -157,8 +164,14 @@ def seed(resource, primary_tenant: str) -> dict:
     for i, requests in enumerate(shape):
         hour = hour_now - (23 - i) * 3600
         busy = requests > 400
+        # tier1 and tier2 were seeded at zero, which made the three figures
+        # at the ends of the traffic lanes read "9.270 / 0 / 0" on a screen
+        # that was simultaneously holding five sources. The counts are what
+        # `record_traffic` has always written on ingest; the demo simply
+        # never wrote them, so the one screen that reads them looked broken.
         history.record_traffic(
-            primary_tenant, hour_start=hour, requests=requests, tier1=0, tier2=0,
+            primary_tenant, hour_start=hour, requests=requests,
+            tier1=(9 if busy else 2), tier2=(2 if busy else 0),
             bins={k: max(1, v // (2 if busy else 6)) for k, v in tail.items()})
 
     # Episodes, placed where the traffic is busiest so the chart and the

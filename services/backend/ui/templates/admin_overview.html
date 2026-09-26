@@ -1,78 +1,86 @@
 {% extends "app_shell.html" %}
-{% block title %}Overview · Traffic Shaper{% endblock %}
-{% block page_title %}Overview{% endblock %}
+{% block title %}Tổng quan · Traffic Shaper{% endblock %}
+{% block page_title %}Tổng quan{% endblock %}
 {% block page_summary %}
-{{ share.pct_label }} of today free-tier share · {{ tenant_count }} tenant{{ 's' if tenant_count != 1 }} · {{ live_count }} agent{{ 's' if live_count != 1 }} reporting
+{{ share.pct_label }} phần miễn phí của hôm nay · {{ tenant_count }} khách hàng · {{ live_count }} agent đang báo về
 {% endblock %}
 {% block page_content %}
 
-<div class="c-list">
+<div >
 
   {# Two independent alarms, both rendered. An earlier version put the cost
      warning in an elif, so a fleet with no agents reporting silently
      swallowed the news that the free tier was about to run out. They are not
      alternatives to each other. #}
   {% if live_count == 0 or usage.ceiling_warning %}
-  <div class="c-panel">
+  <div class="sec">
     {% if live_count == 0 %}
     <div class="alert alert-danger">
-      <strong>No agents are reporting.</strong>
-      Every tenant is currently unprotected.
+      <strong>Không agent nào đang báo về.</strong>
+      Ngay lúc này mọi khách hàng đều không được bảo vệ.
     </div>
     {% endif %}
     {% if usage.ceiling_warning %}
     <div class="alert alert-warning">
-      <strong>Usage is approaching the Always-Free ceiling.</strong>
-      Telemetry is refused for the rest of the UTC day at 100 percent.
+      <strong>Mức dùng đang tiến sát trần Always-Free.</strong>
+      Chạm 100 phần trăm là telemetry bị từ chối cho tới hết ngày UTC.
     </div>
     {% endif %}
   </div>
   {% endif %}
 
-  <div class="c-panel">
-    <div class="c-section-label">Today · {{ usage.date }} · resets at midnight UTC</div>
-    <div class="c-figures">
-      <div class="c-figure">
-        <div class="c-figure-value">{{ share.pct_label }}</div>
-        <div class="c-figure-label">Of the daily share</div>
+  <section class="sec">
+    <div class="sec-h">
+      <h2 class="sec-t">Hôm nay · {{ usage.date }} · đặt lại lúc nửa đêm UTC</h2>
+    </div>
+    <div >
+    <div class="stats">
+      <div class="stat">
+        <div class="v">{{ share.pct_label }}</div>
+        <div class="k">Phần của ngày</div>
       </div>
-      <div class="c-figure">
+      <div class="stat">
         {# Never a bare count. A number with no denominator cannot tell the
            operator whether to worry. #}
-        <div class="c-figure-value">{{ share.used }}<span class="c-dim"> / {{ share.ceiling|int }}</span></div>
-        <div class="c-figure-label">Requests</div>
+        <div class="v">{{ share.used }}<span class="c-dim"> / {{ share.ceiling|int }}</span></div>
+        <div class="k">Request</div>
       </div>
-      <div class="c-figure">
-        <div class="c-figure-value">{{ "%.2f"|format(usage.estimated_gb_seconds) }}</div>
-        <div class="c-figure-label">GB-seconds</div>
+      <div class="stat">
+        <div class="v">{{ "%.2f"|format(usage.estimated_gb_seconds) }}</div>
+        <div class="k">GB-giây</div>
       </div>
     </div>
     <div class="meter stack-sm" {% if usage.ceiling_warning %}data-tone="warn"{% endif %}
-         role="img" aria-label="{{ share.used }} of {{ share.ceiling|int }} requests used today">
+         role="img" aria-label="Đã dùng {{ share.used }} trên {{ share.ceiling|int }} request hôm nay">
       <span data-width="{{ ((share.pct / 5)|round|int) * 5 }}"></span>
     </div>
   </div>
+  </section>
 
-  <div class="c-panel">
-    <div class="c-section-label">Fleet</div>
-    <div class="c-figures">
-      <div class="c-figure">
-        <div class="c-figure-value">{{ tenant_count }}</div>
-        <div class="c-figure-label">Tenants</div>
+  <section class="sec">
+    <div class="sec-h">
+      <h2 class="sec-t">Đội agent</h2>
+    </div>
+    <div >
+    <div class="stats">
+      <div class="stat">
+        <div class="v">{{ tenant_count }}</div>
+        <div class="k">Khách hàng</div>
       </div>
-      <div class="c-figure">
-        <div class="c-figure-value">{{ live_count }}</div>
-        <div class="c-figure-label">Agents reporting</div>
+      <div class="stat">
+        <div class="v">{{ live_count }}</div>
+        <div class="k">Agent đang báo về</div>
       </div>
-      <div class="c-figure">
-        <div class="c-figure-value">{{ stale_count }}</div>
-        <div class="c-figure-label">Agents gone quiet</div>
+      <div class="stat">
+        <div class="v">{{ stale_count }}</div>
+        <div class="k">Agent đã im lặng</div>
       </div>
     </div>
-    <p class="c-summary">
-      An agent counts as reporting if it made an authenticated call in the
-      last five minutes.
+    <p class="one">
+      Một agent được tính là đang báo về nếu nó có lượt gọi đã xác thực
+      trong năm phút gần nhất.
     </p>
   </div>
+  </section>
 </div>
 {% endblock %}

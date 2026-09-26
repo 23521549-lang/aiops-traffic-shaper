@@ -1,4 +1,4 @@
-"""Reporting is not protecting.
+"""Đang báo cáo is not protecting.
 
 `detect_adapters()` returning an empty list is a legitimate outcome: no nginx,
 no iptables, nothing on the machine that can write a rule. The agent then
@@ -164,7 +164,7 @@ def test_an_agent_with_no_backend_is_reporting_and_not_protecting():
     state = agent_state(row, now)
 
     assert state["can_enforce"] == "no"
-    assert "nothing" in state["enforce_label"].lower()
+    assert "không thi hành gì" in state["enforce_label"].lower()
 
 
 def test_an_agent_that_has_not_said_is_neither_confirmed_nor_denied():
@@ -189,8 +189,8 @@ def test_the_screen_shows_both_states(client, seeded):
 
     page = client.get("/dashboard/ui/agents").text
 
-    assert "Enforcing" in page or "Can enforce" in page
-    assert "nothing" in page.lower()
+    assert "Đang báo cáo" in page or "Can enforce" in page
+    assert "không thi hành gì" in page.lower()
 
 
 def test_the_page_summary_does_not_call_a_non_enforcing_fleet_healthy(client, seeded):

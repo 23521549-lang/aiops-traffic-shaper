@@ -1,127 +1,105 @@
 {% extends "app_shell.html" %}
-{% block title %}Detection model · Traffic Shaper{% endblock %}
-{% block page_title %}Detection model{% endblock %}
+{% block title %}Mô hình · Traffic Shaper{% endblock %}
+{% block page_title %}Mô hình{% endblock %}
 {% block page_summary %}
-{% if model.model_ready %}version {{ model.version }} · {{ model.training_samples }} training samples · retrained nightly
-{% else %}no model yet, collecting a baseline{% endif %}
+{% if model.trained_at %}{{ model.version }} · huấn luyện {{ model.trained_at }}{% else %}chưa có mô hình nào{% endif %}
 {% endblock %}
 {% block page_content %}
 
-<div class="c-list">
-  {% if model.model_ready %}
-  <div class="c-panel">
-    <div class="c-section-label">Current model</div>
-    <div class="c-figures">
-      <div class="c-figure">
-        <div class="c-figure-value">{{ model.version }}</div>
-        <div class="c-figure-label">Version</div>
-      </div>
-      <div class="c-figure">
-        <div class="c-figure-value">{{ model.training_samples }}</div>
-        <div class="c-figure-label">Training samples</div>
-      </div>
-    </div>
-    <p class="c-summary">Trained {{ model.trained_at }}</p>
-  </div>
+{% if not model.trained_at %}
+<section class="sec">
+  <div class="sec-h"><h2 class="sec-t">Chưa có mô hình nào</h2></div>
+  <p class="one">
+    Bình thường của bạn (baseline) được dựng từ traffic của chính bạn, nên
+    nó cần traffic trước đã. Việc phải xảy ra: cài agent, để nó báo về một
+    ngày, rồi lần huấn luyện đầu tiên chạy trong đêm (night). Trước đó sản phẩm này
+    không thi hành gì cả.
+  </p>
+</section>
+{% else %}
 
-  {% if baseline %}
-  {# The sentence this product exists to be able to say. A rule engine can
-     describe its rules; an IP-reputation service can describe somebody
-     else's traffic. Neither can print this table, because neither has a
-     per-customer baseline to print. The numbers have been on the model item
-     since Phase 0 and nothing carried them off it. #}
-  <div class="c-panel">
-    <div class="c-section-label">The shape of your normal</div>
-    <p class="c-summary">
-      Measured from your own traffic over the window this model was trained
-      on. Every distance the product reports is measured against these.
-    </p>
-    <div class="c-table-scroll" tabindex="0" role="region"
-         aria-label="Your baseline, by feature">
-      <table class="c-table">
-        <caption class="sr-only">This tenant baseline, one row per feature</caption>
-        <thead>
-          <tr>
-            <th scope="col">Feature</th>
-            <th scope="col">Your normal</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for f in baseline %}
-          <tr>
-            <th scope="row">{{ f.label }}</th>
-            <td>{{ f.normal }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+{# ---- mô hình đang chạy ------------------------------------------------- #}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Mô hình đang chạy</h2>
+    <div class="sec-m">huấn luyện {{ model.trained_at }}</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="v">{{ model.version }}</div><div class="k">phiên bản</div></div>
+    <div class="stat"><div class="v">{{ baseline|length }}</div><div class="k">đặc trưng</div></div>
+    <div class="stat"><div class="v">{{ "{:,}".format(model.training_samples or 0).replace(",", ".") }}</div><div class="k">lượt đo</div></div>
+    <div class="stat">
+      <div class="v">{% if thresholds %}{{ "%.2f"|format(thresholds.slow_sigma) }}<small>σ</small>{% else %}<span class="c-dim">chưa đặt</span>{% endif %}</div>
+      <div class="k">cổng làm chậm</div>
+    </div>
+    <div class="stat">
+      <div class="v">{% if thresholds %}{{ "%.2f"|format(thresholds.block_sigma) }}<small>σ</small>{% else %}<span class="c-dim">chưa đặt</span>{% endif %}</div>
+      <div class="k">cổng chặn</div>
     </div>
   </div>
-  {% endif %}
+</section>
 
-  {% if thresholds %}
-  <div class="c-panel">
-    <div class="c-section-label">Sensitivity</div>
-    {# This tenant own gates, from Tenants. The figures here used to be
-       written into the template and read from the module constants, so a
-       customer who had moved their gate was shown somebody else threshold on
-       the one page that claims to explain their model. #}
-    <dl class="c-kv">
-      <dt>Slow a source at</dt>
-      <dd>{{ "%.2f"|format(thresholds.slow_sigma) }} sigma · score {{ "%.4f"|format(thresholds.slow) }}</dd>
-      <dt>Block a source at</dt>
-      <dd>{{ "%.2f"|format(thresholds.block_sigma) }} sigma · score {{ "%.4f"|format(thresholds.block) }}</dd>
-    </dl>
-    <p class="c-summary">
-      These thresholds move with your traffic. Each night of retraining
-      recalculates what normal means for your site, which is why a raw
-      anomaly score is not comparable between two nights and why this product
-      reports distance from your own baseline instead.
-    </p>
-    <p class="c-summary">
-      False-positive rates for these thresholds were measured on modelled
-      traffic, not yet on live customer traffic.
-    </p>
+{# ---- hình dạng của bình thường ---------------------------------------- #}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Bình thường của bạn nghĩa là gì</h2>
+    <div class="sec-m">trung bình và một độ lệch chuẩn</div>
   </div>
-  {% endif %}
+  <p class="one">
+    Đây là điều chữ <b>bình thường</b> có nghĩa với tài khoản của bạn, và
+    không với ai khác. Dải là một độ lệch chuẩn về mỗi phía của trung bình;
+    vạch mực là chính trung bình đó. Một nguồn được chấm so với cái này, chứ
+    không so với một luật ai đó viết sẵn.
+  </p>
+  {% for f in baseline %}
+  <div class="feat">
+    <span class="nm">{{ f.label }}</span>
+    {# Each feature is scaled against its own range: the seven are measured
+       in different units, and a shared scale would flatten six of them. #}
+    <svg class="plot" viewBox="0 0 300 20" preserveAspectRatio="none" aria-hidden="true">
+      <line x1="0" y1="10" x2="300" y2="10" stroke="var(--border)"/>
+      <rect class="grow" x="{{ f.x }}" y="4" width="{{ f.w }}" height="12" rx="2" fill="var(--t2)"/>
+      <rect x="{{ f.mid }}" y="0" width="2" height="20" fill="var(--t5)"/>
+    </svg>
+    <span class="val">{{ f.mean }}</span>
+    <span class="val">± {{ f.spread }}</span>
+  </div>
+  {% endfor %}
+</section>
 
-  {% if staged %}
-  {# Written every night even when promotion is refused, deliberately,
-     because it is the evidence for why. No screen has ever read it, so the
-     evidence has never been evidence to anyone. #}
-  <div class="c-panel">
-    <div class="c-section-label">Trained last night, not promoted</div>
-    <p class="c-summary">
-      Version <strong>{{ staged.version }}</strong> was trained on
-      {{ staged.training_samples }} measurements and did not replace the model
-      above. The product keeps a refused model rather than discarding it, and
-      production keeps serving until one passes. Nothing about your protection
-      changed.
-    </p>
+{# ---- ứng viên chưa được thăng cấp -------------------------------------- #}
+{% if staged %}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Đêm qua có huấn luyện, nhưng không thăng cấp</h2>
+    <div class="sec-m">{{ staged.get('version', 'bản mới') }}</div>
   </div>
-  {% endif %}
+  <p class="one">
+    Mỗi đêm một mô hình được huấn luyện, và nó <b>chỉ thay thế mô hình đang
+    chạy nếu chấm tốt hơn</b> trên phần traffic được giữ lại. Bản đêm qua thì
+    không.
+  </p>
+  <dl class="kv">
+    <dt>Ứng viên</dt><dd>{{ staged.get('version', 'bản mới') }}, huấn luyện {{ staged.get('trained_at', '') }}</dd>
+    <dt>Đang chạy</dt><dd>{{ model.version }}</dd>
+    <dt>Quyết định</dt><dd>giữ {{ model.version }}</dd>
+  </dl>
+</section>
+{% endif %}
 
-  {# Spec 4.8, said plainly rather than answered with a number that looks
-     like the answer. #}
-  <div class="c-panel">
-    <div class="c-section-label">What we cannot tell you</div>
-    <p class="c-summary">
-      We cannot tell you how many requests were actually refused. The agent
-      enforces on your own server and does not report back what it turned
-      away, so the only honest figure this product has is the number of
-      decisions it made. Every count you see here and on History is a count
-      of decisions, not of requests.
-    </p>
+{# ---- giới hạn ---------------------------------------------------------- #}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Điều chúng tôi không nói được</h2>
   </div>
+  <p class="one">
+    Bảy con số đếm được là toàn bộ những gì rời khỏi máy chủ của bạn. Không
+    có nội dung request, không header, không cookie, không nội dung trang.
+    Đó là giới hạn của thiết kế chứ không phải một tuỳ chọn, và nó cũng có
+    nghĩa là <b>một nguồn có thể giống hệt bạn mà vẫn có hại</b>, và sản phẩm
+    này sẽ không bắt được.
+  </p>
+</section>
+{% endif %}
 
-  {% else %}
-  <div class="c-empty-state">
-    <strong>Learning what your normal looks like</strong>
-    <p>
-      The product is watching and changing nothing. Until your first model is
-      trained you see everything it sees. That usually takes one night.
-    </p>
-  </div>
-  {% endif %}
-</div>
 {% endblock %}

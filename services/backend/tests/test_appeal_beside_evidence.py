@@ -81,7 +81,8 @@ def test_every_driver_row_carries_its_own_appeal(client, dynamo_resource):
     _blocked_source(dynamo_resource)
 
     page = client.get("/dashboard/ui?ip=10.0.0.7").text
-    table = page[page.index("c-why"):page.index("</table>", page.index("c-why"))]
+    start = page.index('class="src-why"')
+    table = page[start:page.index("</section>", start)]
 
     assert "because=" in table
 
@@ -182,4 +183,4 @@ def test_the_corner_action_is_still_there(client, dynamo_resource):
     _blocked_source(dynamo_resource)
     page = client.get("/dashboard/ui?ip=10.0.0.7").text
 
-    assert "Allow this source" in page
+    assert "Cho qua" in page

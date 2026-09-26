@@ -25,7 +25,7 @@ from services.backend.tests.conftest import sign_test_token
 #
 # This was a module-level constant, and liveness is derived by comparing
 # last_seen_at against the clock AT REQUEST TIME with a five-minute cutoff.
-# On a nine-minute suite run the agent seeded "20 seconds ago" was already
+# On a nine-minute suite run the agent seeded "20 giây trước" was already
 # nine minutes stale by the time its test executed, so it read as Quiet and
 # the assertion failed - in the full run only, never when the file was run
 # on its own.
@@ -64,7 +64,7 @@ def test_no_selection_leaves_the_table_alone(client):
 
 def test_selecting_a_tenant_opens_its_detail(client):
     page = client.get("/admin/ui/tenants?id=t-1").text
-    assert "Tenant detail" in page
+    assert "Chi tiết khách hàng" in page
     assert "Acme" in page
 
 
@@ -97,12 +97,12 @@ def test_a_tenant_whose_agents_are_all_quiet_says_so(client, dynamo_resource):
     _agent(dynamo_resource, "t-1", "a-1", "web-01", timedelta(hours=6))
 
     page = client.get("/admin/ui/tenants?id=t-1").text
-    assert "not protected" in page
+    assert "không được bảo vệ" in page
 
 
 def test_a_tenant_with_no_agents_at_all_is_not_a_blank_list(client):
     page = client.get("/admin/ui/tenants?id=t-1").text
-    assert "No agent has ever registered" in page
+    assert "Chưa có agent nào đăng ký" in page
 
 
 def test_the_pane_offers_suspend_for_an_active_tenant(client):
@@ -125,4 +125,4 @@ def test_the_suspend_confirmation_states_how_many_keys_it_revokes(client, dynamo
     _agent(dynamo_resource, "t-1", "a-2", "web-02", timedelta(seconds=20))
 
     page = client.get("/admin/ui/tenants?id=t-1").text
-    assert "2 agent key" in page
+    assert "2 khoá agent" in page

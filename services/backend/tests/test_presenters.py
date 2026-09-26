@@ -27,13 +27,13 @@ NOW = datetime(2026, 9, 23, 12, 0, 0, tzinfo=timezone.utc)
 # --- severity ------------------------------------------------------------
 
 @pytest.mark.parametrize("z,expected", [
-    (-7.0, "Far outside your normal"),
-    (-6.0, "Far outside your normal"),
-    (-5.4, "Well outside your normal"),
-    (-5.0, "Well outside your normal"),
-    (-4.7, "Clearly outside your normal"),
-    (-4.2, "Outside your normal"),
-    (-4.0, "Outside your normal"),
+    (-7.0, "Rất xa bình thường của bạn"),
+    (-6.0, "Rất xa bình thường của bạn"),
+    (-5.4, "Khá xa bình thường của bạn"),
+    (-5.0, "Khá xa bình thường của bạn"),
+    (-4.7, "Rõ ràng ngoài bình thường của bạn"),
+    (-4.2, "Ngoài bình thường của bạn"),
+    (-4.0, "Ngoài bình thường của bạn"),
 ])
 def test_severity_reads_as_a_comparison_not_a_number(z, expected):
     assert severity_phrase(z) == expected
@@ -49,13 +49,13 @@ def test_an_unmeasurable_score_says_so_rather_than_inventing_one():
 
 def test_the_figure_is_kept_alongside_the_phrase():
     """Disclosure, not deletion — a support ticket needs the number."""
-    assert severity_detail(-5.26) == "Well outside your normal · 5.3σ"
+    assert severity_detail(-5.26) == "Khá xa bình thường của bạn · 5.3σ"
 
 
 def test_the_attack_production_missed_reads_as_severe():
     """The real case from ADR-006: raw score -0.092 went undetected against
     an absolute threshold, and sits 5.26 deviations out."""
-    assert severity_detail(-5.26).startswith("Well outside your normal")
+    assert severity_detail(-5.26).startswith("Khá xa bình thường của bạn")
 
 
 def test_the_same_attack_against_a_different_model_reads_the_same():
@@ -66,32 +66,32 @@ def test_the_same_attack_against_a_different_model_reads_the_same():
 
 
 def test_tier_labels_name_the_outcome_not_the_mechanism():
-    assert tier_label(2) == "Blocked"
-    assert tier_label(1) == "Slowed"
+    assert tier_label(2) == "Đang chặn"
+    assert tier_label(1) == "Đang làm chậm"
 
 
 # --- expiry --------------------------------------------------------------
 
 def test_expiry_is_relative_because_the_question_is_is_it_still_happening():
-    assert relative_expiry(int((NOW + timedelta(minutes=47)).timestamp()), NOW) == "Ends in 47 min"
+    assert relative_expiry(int((NOW + timedelta(minutes=47)).timestamp()), NOW) == "47 phút nữa"
     assert relative_expiry(int((NOW + timedelta(seconds=30)).timestamp()), NOW) \
-        == "Ends in under a minute"
+        == "dưới một phút nữa"
 
 
 def test_a_tier_one_rate_limit_is_legible_at_its_real_scale():
     """300 seconds. An absolute UTC timestamp to minute precision was being
     shown for something whose whole life is five minutes."""
-    assert relative_expiry(int((NOW + timedelta(seconds=300)).timestamp()), NOW) == "Ends in 5 min"
+    assert relative_expiry(int((NOW + timedelta(seconds=300)).timestamp()), NOW) == "5 phút nữa"
 
 
 def test_an_hour_long_block_does_not_read_as_sixty_minutes():
-    assert relative_expiry(int((NOW + timedelta(minutes=58)).timestamp()), NOW) == "Ends in 58 min"
+    assert relative_expiry(int((NOW + timedelta(minutes=58)).timestamp()), NOW) == "58 phút nữa"
     assert relative_expiry(int((NOW + timedelta(minutes=75)).timestamp()), NOW) \
-        == "Ends in about an hour"
+        == "khoảng một giờ nữa"
 
 
 def test_something_already_over_says_so():
-    assert relative_expiry(int((NOW - timedelta(minutes=1)).timestamp()), NOW) == "Ended"
+    assert relative_expiry(int((NOW - timedelta(minutes=1)).timestamp()), NOW) == "Đã kết thúc"
 
 
 def test_no_expiry_says_so_in_words():
@@ -111,7 +111,7 @@ def test_an_agent_reporting_now_is_healthy():
     health = agent_health([{"last_seen_at": (NOW - timedelta(seconds=14)).isoformat()}], NOW)
     assert health["state"] == HEALTHY
     assert health["reporting"] == 1
-    assert health["last_seen_label"] == "14 seconds ago"
+    assert health["last_seen_label"] == "14 giây trước"
 
 
 def test_an_agent_that_went_quiet_is_degraded_not_healthy():
@@ -120,7 +120,7 @@ def test_an_agent_that_went_quiet_is_degraded_not_healthy():
     health = agent_health([{"last_seen_at": (NOW - timedelta(hours=3)).isoformat()}], NOW)
     assert health["state"] == DEGRADED
     assert health["reporting"] == 0
-    assert health["last_seen_label"] == "3 hours ago"
+    assert health["last_seen_label"] == "3 giờ trước"
 
 
 def test_one_live_agent_is_enough_to_be_watching():

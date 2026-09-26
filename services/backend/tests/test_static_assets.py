@@ -87,14 +87,31 @@ CSS_CEILING = 80_000
 JS_CEILING = 20_480
 
 
-def test_the_stylesheets_stay_under_their_ceiling():
-    """One number for all three sheets, because a reader loads two of them on
-    every page and three in the console. Splitting tokens out of app.css did
-    not buy any room; it bought the shared-macro rule."""
-    total = sum((_STATIC_DIR / name).stat().st_size
-                for name in _ASSETS if name.endswith(".css"))
+# What one reader actually fetches. The sheets are surface-specific now, so
+# the sum of all four is a number nobody downloads: a console reader never
+# loads landing.css and a visitor to the front door never loads console.css.
+# The ceiling is unchanged and is applied to each surface, which is the
+# figure it was always about.
+SURFACES = {
+    "console": ("tokens.css", "app.css", "console.css"),
+    "landing": ("tokens.css", "app.css", "landing.css"),
+}
 
-    assert total <= CSS_CEILING, f"{total} bytes of {CSS_CEILING}"
+
+@pytest.mark.parametrize("surface", sorted(SURFACES))
+def test_each_surface_stays_under_the_stylesheet_ceiling(surface):
+    total = sum((_STATIC_DIR / n).stat().st_size for n in SURFACES[surface])
+
+    assert total <= CSS_CEILING, f"{surface}: {total} bytes of {CSS_CEILING}"
+
+
+def test_no_stylesheet_is_left_out_of_a_surface():
+    """A sheet nobody is measured on is a sheet that can grow without limit.
+    Every css file in the manifest has to belong to at least one surface."""
+    served = {n for n in _ASSETS if n.endswith(".css")}
+    measured = {n for names in SURFACES.values() for n in names}
+
+    assert served == measured, served ^ measured
 
 
 def test_the_hand_written_javascript_stays_under_its_ceiling():

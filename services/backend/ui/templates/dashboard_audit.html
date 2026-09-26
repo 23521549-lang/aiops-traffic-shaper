@@ -1,0 +1,66 @@
+{% extends "app_shell.html" %}
+{% block title %}Nhật ký · Traffic Shaper{% endblock %}
+{% block page_title %}Nhật ký{% endblock %}
+{% block page_summary %}
+<b>{{ entries|length }}</b> thay đổi trong {{ days }} ngày
+{% endblock %}
+{% block page_actions %}
+<a class="btn{{ ' btn--p' if days == 7 }}" href="/dashboard/ui/audit?days=7">7 ngày</a>
+<a class="btn{{ ' btn--p' if days == 30 }}" href="/dashboard/ui/audit?days=30">30 ngày</a>
+{% endblock %}
+{% block page_content %}
+
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Ai đổi gì</h2>
+    <div class="sec-m">mới nhất trước</div>
+  </div>
+
+  {% if entries %}
+  <p class="one">
+    Sản phẩm <b>đã ghi</b> sổ này từ lâu và chưa từng cho ai xem. Đây là câu
+    hỏi đầu tiên của mọi buổi rà soát sau sự cố.
+  </p>
+  {% for e in entries %}
+  <div class="log-row">
+    <span class="log-when" title="{{ e.exact }}">{{ e.when }}</span>
+    <span class="log-what">
+      <b>{{ e.what }}</b>
+      {% if e.old and e.new %}
+      · <span class="log-move"><s>{{ e.old }}</s> → <b>{{ e.new }}</b></span>
+      {% elif e.new %}
+      · <span class="log-move">{{ e.new }}</span>
+      {% elif e.old %}
+      · <span class="log-move">{{ e.old }}</span>
+      {% endif %}
+      {% if e.because %}<span class="c-dim"> · vì {{ e.because }}</span>{% endif %}
+    </span>
+    <span class="log-who">{{ e.actor }}</span>
+  </div>
+  {% endfor %}
+  {% else %}
+  <p class="one">
+    Chưa có thay đổi nào trong {{ days }} ngày qua. Cổng, danh sách cho qua
+    và trạng thái thi hành đều đang ở nguyên chỗ bạn để chúng.
+  </p>
+  {% endif %}
+</section>
+
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Sổ này ghi gì, và không ghi gì</h2>
+  </div>
+  <p class="one">
+    Chỉ những hành động <b>thay đổi cách sản phẩm cư xử</b>: dời cổng, cho
+    qua hoặc bỏ một địa chỉ, tắt hoặc bật thi hành, đăng ký hoặc thu hồi
+    agent. Việc xem một trang không được ghi, vì một cuốn sổ ghi cả việc đọc
+    là cuốn sổ không ai đọc nổi.
+  </p>
+  <p class="one">
+    Người thực hiện lấy từ token đã xác thực, <b>không bao giờ từ một trường
+    trong request</b>. Đó là thứ giữ cho mỗi dòng có kích thước cố định, và
+    cũng là thứ khiến dòng này đáng tin khi bị đem ra tranh cãi.
+  </p>
+</section>
+
+{% endblock %}

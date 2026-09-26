@@ -29,7 +29,6 @@ This module returns plain data. The markup lives in `_charts.html`, which
 keeps the templates readable and lets these functions be tested on numbers
 rather than on strings of angle brackets.
 """
-import math
 from dataclasses import dataclass, field
 
 # Thresholds, in standard deviations below the tenant's own mean. Mirrors
@@ -264,6 +263,11 @@ class Band:
     css: str
     label: str
     short: str
+    # How many whole sigma this band covers. The SVG places the band by `x`
+    # and `width`; the LABEL is HTML in a six-column grid, and with no span
+    # the three labels took columns one to three and bunched into the left
+    # half of a chart whose bands ran the full width.
+    cols: int = 1
 
 
 def axis_bands(tier1_sigma: float, tier2_sigma: float) -> list[Band]:
@@ -278,13 +282,17 @@ def axis_bands(tier1_sigma: float, tier2_sigma: float) -> list[Band]:
     reached an incident screen once already.
     """
     edges = [(0.0, tier1_sigma, "c-seg c-seg--normal",
-              "YOUR NORMAL TRAFFIC", "NORMAL"),
+              "TRAFFIC BÌNH THƯỜNG CỦA BẠN", "BÌNH THƯỜNG"),
              (tier1_sigma, tier2_sigma, "c-seg c-seg--limited",
-              f"{tier1_sigma:.0f}σ SLOWED", f"{tier1_sigma:.0f}σ"),
+              f"{tier1_sigma:.0f}σ LÀM CHẬM", f"{tier1_sigma:.0f}σ"),
              (tier2_sigma, SIGMA_CEILING, "c-seg c-seg--blocked",
-              f"{tier2_sigma:.0f}σ BLOCKED", f"{tier2_sigma:.0f}σ")]
+              f"{tier2_sigma:.0f}σ CHẶN", f"{tier2_sigma:.0f}σ")]
+    # At least one column each, and never more than the scale has: a gate
+    # dragged to the far end would otherwise hand one band every column and
+    # push the other two off the grid entirely.
     return [Band(x=axis_x(lo), width=axis_x(hi) - axis_x(lo), css=css,
-                 label=label, short=short)
+                 label=label, short=short,
+                 cols=max(1, min(int(SIGMA_CEILING), round(hi - lo))))
             for lo, hi, css, label, short in edges]
 
 
@@ -293,7 +301,6 @@ class DensityBar:
     x: float
     width: float
     height: float     # 0..1, relative to the tallest bar
-    css: str
     sigma: float
     count: int
 
@@ -317,9 +324,13 @@ def density_bars(bins: dict[str, int]) -> list[DensityBar]:
     tallest = max(counts) if counts else 0
     step = (edges[1] - edges[0]) if len(edges) > 1 else 0.25
 
+    # No `css` any more. The thirteen bars these described were replaced by
+    # one ridge path, and nothing has read the class since; the numbers stay
+    # because `density_ridge` shapes the path from them and the screen
+    # reader's summary table sums them.
     return [DensityBar(x=axis_x(s), width=axis_x(s + step) - axis_x(s),
                        height=(c / tallest) if tallest else 0.0,
-                       css="c-density", sigma=s, count=c)
+                       sigma=s, count=c)
             for s, c in zip(edges, counts)]
 
 
@@ -329,6 +340,12 @@ class Mark:
     sigma: float
     css: str
     ip: str
+    # Where the dot sits vertically. The axis is one dimension of meaning and
+    # the second is free, so it is spent on separation: two sources at the
+    # same distance would otherwise draw on top of each other and read as
+    # one. Deterministic from the address, so a source does not jump between
+    # page loads - a dot that moves on refresh looks like a new measurement.
+    y: float = 0.0
     # Selection is a second state ON TOP of severity, never instead of it. A
     # selected blocked source that stops rendering as blocked would be a lie
     # about what was done to it.
@@ -355,12 +372,46 @@ def source_marks(rows: list[dict],
         ip = row.get("ip", "")
         marks.append(Mark(x=axis_x(z), sigma=abs(z),
                           css=_tier_css(abs(z)).replace("c-bar", "c-mark"),
-                          ip=ip,
+                          ip=ip, y=_mark_y(ip),
                           # `?ip=` with nothing after it arrives as an empty
                           # string, which would otherwise match every row
                           # whose ip is also missing.
                           selected=bool(selected_ip) and ip == selected_ip))
     return marks
+
+
+# Enough room for a dot and its halo without either touching an edge. The
+# axis was 48 units tall when it drew vertical rules, which have no radius.
+AXIS_HEIGHT = 96.0
+_MARK_BAND = (22.0, 64.0)
+
+
+def _mark_y(ip: str) -> float:
+    """A stable vertical offset for one source.
+
+    Hashed from the address rather than randomised or taken from the loop
+    index: random moves the dot on every refresh, which reads as a new
+    reading, and the index reshuffles every dot the moment one source is
+    allowed through.
+    """
+    lo, hi = _MARK_BAND
+    return round(lo + (sum(ip.encode()) % 97) / 96 * (hi - lo), 2)
+
+
+def density_ridge(bars: list["DensityBar"], width: float, height: float) -> str:
+    """The shape below the gate as one path, not thirteen bars.
+
+    Thirteen separate bars assert that 3.00 and 3.25 sigma are two different
+    worlds. They are two readings on one continuous slope, and a ridge is
+    what a slope looks like. Returns "" when nothing was measured, so the
+    caller draws nothing at all rather than a flat line along the floor -
+    which would be a reading, and there is none.
+    """
+    if not bars or not any(b.count for b in bars):
+        return ""
+    pts = [f"{round(b.x + b.width / 2, 2)},{round(height * (1 - b.height), 2)}"
+           for b in bars]
+    return "M0," + str(height) + " L" + " L".join(pts) + f" L{width},{height}"
 
 
 @dataclass
@@ -375,6 +426,7 @@ class Axis:
     gate2_x: float = 0.0
     gate1_sigma: float = 0.0
     gate2_sigma: float = 0.0
+    ridge: str = ""
 
 
 def build_axis(tier1_sigma: float, tier2_sigma: float,
@@ -387,11 +439,14 @@ def build_axis(tier1_sigma: float, tier2_sigma: float,
     above the gate - the mitigation list, already bounded - become individual
     marks.
     """
+    width = SIGMA_CEILING * AXIS_UNITS_PER_SIGMA
+    bars = density_bars(bins)
     return Axis(
-        width=SIGMA_CEILING * AXIS_UNITS_PER_SIGMA,
-        height=48,
+        width=width,
+        height=AXIS_HEIGHT,
         bands=axis_bands(tier1_sigma, tier2_sigma),
-        density=density_bars(bins),
+        density=bars,
+        ridge=density_ridge(bars, width, AXIS_HEIGHT),
         marks=source_marks(rows, selected_ip),
         # Integer sigma only. Sitting at integers is precisely why these need
         # no computed position, and therefore no enumerated CSS rule: in the
@@ -457,85 +512,6 @@ def gate_curve(bins: dict[str, int], current_sigma: float,
             for s, t in zip(edges, totals)]
 
 
-# --- zoom 2: one feature of one source, hour by hour -----------------------
-
-FEATURE_TRACK_WIDTH = 600.0
-FEATURE_TRACK_HEIGHT = 120.0
-# The same ceiling the sigma axis uses, so a point at 6 sigma here and a mark
-# at 6 sigma there sit at the same distance off the same scale.
-FEATURE_TRACK_CEILING = SIGMA_CEILING
-
-
-@dataclass
-class FeaturePoint:
-    hour_start: int
-    sigma: float | None
-    x: float
-    y: float
-
-
-def feature_track(episodes, index: int, mean: float,
-                  std: float) -> list[FeaturePoint]:
-    """One feature of one source, hour by hour.
-
-    This is the only honest chart the stored data supports for a single
-    dimension. A mean and a standard deviation describe a position, not a
-    shape, so a curve drawn from them would assert something about this
-    tenant's traffic that nothing has ever measured. The value frozen onto
-    each hourly episode is a real measurement, and a series of them is a real
-    series.
-
-    `sigma` is None wherever it genuinely cannot be computed - no vector, a
-    vector too short to line up, or a baseline with no spread. Those are holes
-    and the caller must draw them as holes: a hole says the instrument had
-    nothing, a zero says the source was normal, and in an hour when it was
-    being blocked those are opposite claims.
-
-    `y` is DISTANCE from normal, so a feature four sigma below the baseline
-    sits as high as one four sigma above. `sigma` keeps its sign, because the
-    table beside the chart has to be able to say which way.
-    """
-    ordered = sorted(episodes, key=lambda e: e.hour_start)
-    span = max(len(ordered) - 1, 1)
-    points = []
-    for i, e in enumerate(ordered):
-        vector = list(e.last_features or [])
-        sigma = None
-        if std > 0 and index < len(vector):
-            sigma = (float(vector[index]) - mean) / std
-        # Clamped for DRAWING only. The reading itself is never clipped: a
-        # source at 98 sigma is reported at 98 sigma and drawn at the edge.
-        magnitude = min(abs(sigma), FEATURE_TRACK_CEILING) if sigma is not None else 0.0
-        points.append(FeaturePoint(
-            hour_start=e.hour_start,
-            sigma=sigma,
-            x=round(i * FEATURE_TRACK_WIDTH / span, 2),
-            y=round(FEATURE_TRACK_HEIGHT * (1 - magnitude / FEATURE_TRACK_CEILING), 2),
-        ))
-    return points
-
-
-def feature_runs(points: list[FeaturePoint]) -> list[list[FeaturePoint]]:
-    """Consecutive readings, split on every hole.
-
-    One polyline through the lot would draw a straight line across the hours
-    that have no reading, which is precisely the claim the hole exists to
-    avoid making.
-    """
-    runs: list[list[FeaturePoint]] = []
-    current: list[FeaturePoint] = []
-    for p in points:
-        if p.sigma is None:
-            if current:
-                runs.append(current)
-            current = []
-        else:
-            current.append(p)
-    if current:
-        runs.append(current)
-    return runs
-
-
 # --- history: the same axis, rotated and stacked ---------------------------
 
 # Twenty-four rows read comfortably at 10 units each; a hundred and sixty
@@ -546,142 +522,3 @@ GRID_MAX_ROW_HEIGHT = 10.0
 GRID_LEVELS = 4
 
 
-@dataclass
-class GridCell:
-    x: float
-    width: float
-    count: int
-    level: int
-    sigma: float
-    identified: bool
-
-
-@dataclass
-class GridRow:
-    hour_start: int
-    y: float
-    live: bool
-    cells: list[GridCell] = field(default_factory=list)
-    # The two figures spec 8 asks the parallel table for, beside the hour.
-    # Position on an axis is what a screen reader cannot read, so the table is
-    # mandatory - and it is a SUMMARY per row, not a matrix: 24 by 13 is 312
-    # numbers and nobody wants 312 numbers read aloud.
-    past_gate: int = 0
-    peak_sigma: float | None = None
-
-    @property
-    def label(self) -> str:
-        """The hour, as a person says it. Read aloud one row at a time, so a
-        raw epoch would be the worst possible thing here."""
-        from datetime import datetime, timezone
-
-        return datetime.fromtimestamp(self.hour_start,
-                                      tz=timezone.utc).strftime("%d %b %H:00")
-
-
-@dataclass
-class Grid:
-    width: float
-    height: float
-    row_height: float
-    busiest: int
-    rows: list[GridRow] = field(default_factory=list)
-    bands: list[Band] = field(default_factory=list)
-    gate1_x: float = 0.0
-    gate2_x: float = 0.0
-    gate1_sigma: float = 0.0
-    gate2_sigma: float = 0.0
-    ticks: list[tuple[int, str]] = field(default_factory=list)
-
-def history_grid(series, episodes, tier1_sigma: float,
-                 tier2_sigma: float) -> Grid:
-    """One row per hour, sigma along the row, the gates straight through.
-
-    The deviation chart this replaces plotted one number per hour - the worst
-    sigma seen - which answers "was there a spike" and cannot answer "where
-    did my traffic sit", the question the gate control is for. Both come out
-    of the thirteen bins the hourly row already carries, so this is a second
-    reading of a Query the page already makes rather than a second Query.
-
-    Only cells with a count are emitted. That is a requirement and not an
-    optimisation: a dense 168-row grid emitting all thirteen bins per row is
-    about 22KB of markup describing absence.
-    """
-    from services.backend.core.tables import TenantHistoryTable
-
-    ordered = sorted(series, key=lambda p: p.hour_start)
-    width = SIGMA_CEILING * AXIS_UNITS_PER_SIGMA
-    if not ordered:
-        return Grid(width=width, height=0, row_height=0, busiest=0)
-
-    row_height = min(GRID_MAX_ROW_HEIGHT, GRID_MAX_HEIGHT / len(ordered))
-    edges = TenantHistoryTable.NEAR_BINS
-    step = (edges[1] - edges[0]) if len(edges) > 1 else 0.25
-    cell_width = step * AXIS_UNITS_PER_SIGMA
-
-    # Identified sources are not in the bins: a source past the gate is stored
-    # by address and never folded into the anonymous shape, so without this
-    # the grid would simply stop at the gate.
-    by_hour: dict[int, list] = {}
-    for e in episodes:
-        if e.last_z is None:
-            continue
-        by_hour.setdefault(int(e.hour_start), []).append(e)
-
-    rows: list[GridRow] = []
-    busiest = 0
-    for i, point in enumerate(ordered):
-        hour = int(point.hour_start)
-        cells: list[GridCell] = []
-        for edge in edges:
-            count = int((point.near or {}).get("n%d" % round(edge * 100), 0))
-            if not count:
-                continue
-            busiest = max(busiest, count)
-            cells.append(GridCell(x=axis_x(edge), width=cell_width,
-                                  count=count, level=0, sigma=edge,
-                                  identified=False))
-        for e in by_hour.get(hour, []):
-            magnitude = abs(e.last_z)
-            # Clamped for DRAWING only, exactly as the main axis clamps: the
-            # reading itself is reported unclipped beside it.
-            cells.append(GridCell(x=axis_x(magnitude), width=2.0, count=1,
-                                  level=GRID_LEVELS, sigma=magnitude,
-                                  identified=True))
-        # None rather than zero where nothing was read: zero sigma is a
-        # measurement meaning "exactly normal", and an hour with no telemetry
-        # measured nothing at all.
-        peak = max((c.sigma for c in cells), default=None)
-        rows.append(GridRow(
-            hour_start=hour, y=round(i * row_height, 2),
-            # An hour whose only record is a block it issued has plainly not
-            # lost its feed, whatever the batch counter says.
-            live=bool(point.batches) or bool(cells),
-            cells=cells,
-            past_gate=sum(1 for c in cells if c.identified),
-            peak_sigma=peak))
-
-    # Bucketed after the fact, because the busiest cell is not known until
-    # every row has been read.
-    for row in rows:
-        for cell in row.cells:
-            if cell.identified:
-                continue
-            share = cell.count / busiest if busiest else 0
-            # Never zero. One near-miss in an otherwise empty hour is exactly
-            # the reading this grid exists to show, and level 0 draws nothing.
-            cell.level = max(1, math.ceil(share * GRID_LEVELS))
-
-    return Grid(
-        width=width,
-        height=round(len(rows) * row_height, 2),
-        row_height=round(row_height, 2),
-        busiest=busiest,
-        rows=rows,
-        bands=axis_bands(tier1_sigma, tier2_sigma),
-        gate1_x=axis_x(tier1_sigma),
-        gate2_x=axis_x(tier2_sigma),
-        gate1_sigma=tier1_sigma,
-        gate2_sigma=tier2_sigma,
-        ticks=[(i, f"{i}σ") for i in range(int(SIGMA_CEILING) + 1)],
-    )

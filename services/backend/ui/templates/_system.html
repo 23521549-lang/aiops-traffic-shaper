@@ -1,0 +1,164 @@
+{% macro render(sys) %}
+{# How the machinery actually works, drawn.
+
+   Not an illustration. Every name, every file path and every interval here
+   is read off the code that runs: the agent batches 100 lines or 5 seconds,
+   writes /etc/nginx/conf.d/aiops-agent-deny.conf and reloads nginx, the
+   backend buckets at 5 seconds and scores 7 features, and the TTLs are 300
+   and 3600. If any of those change, this drawing becomes a lie, which is why
+   test_system_diagram.py reads them from the same constants.
+
+   The one moving part is a pulse on a 5 second cycle, which is the agent's
+   real flush interval. It costs NOTHING: no polling, no socket, no request.
+   Spec 12.3 refuses auto-refresh under 60 seconds because one tab at five
+   seconds is 52% of the account's whole daily request ceiling, and hitting
+   that ceiling makes the platform refuse telemetry for every tenant. A
+   dashboard that polled would switch off protection. The liveness here is in
+   how the picture draws itself. #}
+<div class="sys">
+  <svg class="sys-plot" viewBox="0 0 1160 470" role="img"
+       aria-labelledby="sys-t sys-d">
+    <title id="sys-t">Agent của bạn thi hành trên chính máy chủ của bạn ra sao</title>
+    <desc id="sys-d">Máy chủ của bạn chạy nginx và agent Traffic Shaper.
+      Agent đọc đuôi log truy cập, gom tối đa 100 dòng hoặc 5 giây một lô,
+      rồi gửi qua HTTPS. Nền tảng chia lô theo khoảng thời gian, đo bảy đặc
+      trưng cho mỗi nguồn, so từng đặc trưng với nền của chính bạn, rồi đối
+      chiếu kết quả với hai cổng bạn đặt. Quyết định trả về kèm danh sách đầy
+      đủ các địa chỉ đang có hiệu lực cho khách hàng của bạn, nên mọi agent
+      bạn chạy đều thi hành thứ mà bất kỳ agent nào tìm ra.</desc>
+
+    <defs>
+      <marker id="sys-ar" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+      </marker>
+      <linearGradient id="sys-up" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="var(--tier-normal)" stop-opacity=".22"/>
+        <stop offset="1" stop-color="var(--tier-normal)" stop-opacity=".85"/>
+      </linearGradient>
+      <linearGradient id="sys-down" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="var(--tier-blocked)" stop-opacity=".85"/>
+        <stop offset="1" stop-color="var(--tier-blocked)" stop-opacity=".22"/>
+      </linearGradient>
+    </defs>
+
+    <!-- column headings -->
+    <text x="120" y="24" text-anchor="middle" class="sys-z">MÁY CHỦ CỦA BẠN</text>
+    <text x="620" y="24" text-anchor="middle" class="sys-z">NỀN TẢNG</text>
+    <text x="1056" y="24" text-anchor="middle" class="sys-z">NHỮNG GÌ NÓ NHỚ</text>
+
+    <!-- ══ your server ══ -->
+    <rect x="22" y="38" width="196" height="300" rx="8" class="sys-zone"/>
+
+    <rect x="40" y="56" width="160" height="50" rx="5" class="sys-box"/>
+    <text x="54" y="76" class="sys-t">nginx</text>
+    <text x="54" y="93" class="sys-s">access.log</text>
+    <circle cx="184" cy="74" r="3.5" class="sys-s"/>
+
+    <line x1="120" y1="106" x2="120" y2="132" class="sys-edge"
+          marker-end="url(#sys-ar)"/>
+    <text x="128" y="124" class="sys-s">đọc từng dòng một</text>
+
+    <rect x="40" y="134" width="160" height="62" rx="5" class="sys-box sys-box--on"/>
+    <text x="54" y="154" class="sys-t">Traffic Shaper agent</text>
+    <text x="54" y="171" class="sys-s">gửi mỗi 5 giây,</text>
+    <text x="54" y="185" class="sys-s">hoặc mỗi 100 dòng</text>
+
+    <text x="40" y="222" class="sys-z">NÓ GHI LUẬT BẰNG GÌ</text>
+    <rect x="40" y="232" width="76" height="40" rx="5" class="sys-box sys-box--on"/>
+    <text x="51" y="249" class="sys-t">nginx</text>
+    <text x="51" y="263" class="sys-s">deny</text>
+    <rect x="124" y="232" width="76" height="40" rx="5" class="sys-box sys-box--on"/>
+    <text x="135" y="249" class="sys-t">iptables</text>
+    <text x="135" y="263" class="sys-s">DROP</text>
+    <text x="40" y="292" class="sys-s">/etc/nginx/conf.d/</text>
+    <text x="40" y="305" class="sys-s">aiops-agent-deny.conf</text>
+    <text x="40" y="318" class="sys-s">rồi: nginx -s reload</text>
+    <text x="40" y="331" class="sys-s">{{ sys.tools }}</text>
+
+    <!-- ══ the wire up ══ -->
+    <line x1="218" y1="165" x2="466" y2="165" stroke="url(#sys-up)" stroke-width="2"/>
+    <text x="342" y="157" text-anchor="middle" class="sys-s">traffic của bạn, đã tóm tắt</text>
+    <text x="342" y="184" text-anchor="middle" class="sys-s">HTTPS, ký bằng khoá của chính agent này</text>
+    <circle r="4" class="p5">
+      <animateMotion dur="5s" repeatCount="indefinite" path="M218,165 L466,165"/>
+    </circle>
+    <circle r="3" class="p3">
+      <animateMotion dur="5s" begin="0.8s" repeatCount="indefinite" path="M218,165 L466,165"/>
+    </circle>
+
+    <!-- ══ the platform ══ -->
+    <rect x="466" y="38" width="308" height="300" rx="8" class="sys-zone"/>
+
+    <rect x="484" y="56" width="272" height="42" rx="5" class="sys-box"/>
+    <text x="498" y="76" class="sys-box">1</text>
+    <text x="520" y="76" class="sys-t">Gom theo cửa sổ 5 giây</text>
+    <text x="520" y="90" class="sys-s">một tổng chạy cho mỗi địa chỉ</text>
+
+    <rect x="484" y="106" width="272" height="52" rx="5" class="sys-box"/>
+    <text x="498" y="126" class="sys-box">2</text>
+    <text x="520" y="126" class="sys-t">Đo bảy thói quen của địa chỉ đó</text>
+    <text x="520" y="141" class="sys-s">nhanh cỡ nào, bao nhiêu lỗi, to cỡ nào,</text>
+    <text x="520" y="153" class="sys-s">lâu cỡ nào, bao nhiêu URL, user agent, POST</text>
+
+    <rect x="484" y="166" width="272" height="52" rx="5" class="sys-box"/>
+    <text x="498" y="186" class="sys-box">3</text>
+    <text x="520" y="186" class="sys-t">So với bình thường CỦA BẠN</text>
+    <text x="520" y="201" class="sys-s">không phải của trang nào khác.</text>
+    <text x="520" y="213" class="sys-s">Ra một con số duy nhất: lạ tới đâu</text>
+
+    <rect x="484" y="226" width="272" height="52" rx="5" class="sys-box sys-box--on"/>
+    <text x="498" y="246" class="sys-box sys-box--on">4</text>
+    <text x="520" y="246" class="sys-t">Đối chiếu với hai đường bạn đặt</text>
+    <text x="520" y="261" class="sys-s">quá {{ sys.slow }} thì làm chậm {{ sys.slow_for }}</text>
+    <text x="520" y="273" class="sys-s">quá {{ sys.block }} thì chặn {{ sys.block_for }}</text>
+
+    <text x="620" y="302" text-anchor="middle" class="sys-s">Dời một đường thì đúng lô
+      kế tiếp đã bị xét theo nó.</text>
+    <text x="620" y="318" text-anchor="middle" class="sys-s">Không phải chờ huấn luyện đêm nay.</text>
+
+    <!-- ══ what it remembers ══ -->
+    <line x1="774" y1="180" x2="954" y2="180" class="sys-edge" marker-end="url(#sys-ar)"/>
+    <rect x="954" y="56" width="184" height="282" rx="8" class="sys-zone"/>
+    <text x="970" y="80" class="sys-t">Những gì được giữ</text>
+    <text x="970" y="100" class="sys-s">cái gì đang có hiệu lực</text>
+    <text x="970" y="116" class="sys-s">30 ngày chuyện đã xảy ra</text>
+    <text x="970" y="132" class="sys-s">hình dạng của những lần suýt</text>
+    <text x="970" y="148" class="sys-s">ai đổi gì, và lúc nào</text>
+    <line x1="970" y1="166" x2="1122" y2="166" class="sys-rule"/>
+    <text x="970" y="190" class="sys-s">{{ sys.rcu }} trên {{ sys.rcu_cap }} năng lực đọc</text>
+    <text x="970" y="206" class="sys-s">{{ sys.wcu }} trên {{ sys.wcu_cap }} năng lực ghi</text>
+    <text x="970" y="238" class="sys-n">0 đồng</text>
+    <text x="970" y="255" class="sys-s">tháng này, và mọi tháng</text>
+    <text x="970" y="282" class="sys-s">Chạm trần thì nó TỪ CHỐI việc</text>
+    <text x="970" y="295" class="sys-s">chứ không bao giờ tính tiền bạn.</text>
+    <text x="970" y="318" class="sys-s">Đó là lý do console này không bao giờ</text>
+    <text x="970" y="331" class="sys-s">hỏi liên tục: làm vậy là tiêu mất ngân sách</text>
+
+    <!-- ══ the wire back ══ -->
+    <path d="M774,290 L774,382 L218,382" fill="none" stroke="url(#sys-down)" stroke-width="2"/>
+    <text x="496" y="374" text-anchor="middle" class="sys-s">làm gì, và mọi địa chỉ đang bị giữ</text>
+    <circle r="4" class="pk">
+      <animateMotion dur="5s" begin="2.2s" repeatCount="indefinite"
+                     path="M774,290 L774,382 L218,382"/>
+    </circle>
+
+    <!-- ══ the fleet ══ -->
+    <rect x="22" y="398" width="1116" height="60" rx="8" class="sys-zone"/>
+    <text x="40" y="420" class="sys-t">Các máy của bạn gánh cho nhau</text>
+    <text x="40" y="438" class="sys-s">{{ sys.fleet_line }}</text>
+    <text x="40" y="452" class="sys-s">Một bộ luật cứng không làm được điều này: nó không có khái niệm chung về bình thường của bạn.</text>
+
+    {# One dot per machine, filled when it is holding the set and hollow when
+       it is not. The two-character label that used to sit inside a 13px
+       circle came out as "01 x) al": a circle is a COUNT, and the words
+       belong beside it. #}
+    {% for a in sys.fleet %}
+    <circle cx="{{ 700 + loop.index0 * 30 }}" cy="428" r="9"
+            class="{{ 'p5' if a.holding else 'sys-box' }}"/>
+    {% endfor %}
+    <text x="1122" y="422" text-anchor="end" class="sys-s">{{ sys.fleet_state }}</text>
+    <text x="1122" y="438" text-anchor="end" class="sys-s">hết hạn thì agent tự gỡ luật</text>
+  </svg>
+</div>
+{% endmacro %}

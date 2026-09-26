@@ -20,7 +20,11 @@ from pathlib import Path
 
 _UI = Path(__file__).resolve().parents[1] / "ui"
 _AXIS = (_UI / "templates" / "shared" / "_axis.html").read_text(encoding="utf-8")
-_GRID = (_UI / "templates" / "_grid.html").read_text(encoding="utf-8")
+# `_grid.html` is gone. The rotated axis it drew was 168 cells answering
+# "did anything happen", and the approved history screen replaced it with a
+# timeline: a few marks in the right places, each one pressable. The rule
+# this file holds did not change - colour is a continuous ramp and the
+# words stay - it now has one chart to hold it on instead of two.
 _CSS = (_UI / "static" / "app.css").read_text(encoding="utf-8")
 
 
@@ -68,18 +72,19 @@ def test_the_bands_still_carry_their_words():
     assert "b.label" in _AXIS
 
 
-def test_the_rotated_axis_uses_the_same_ramp():
-    """History is the same ruler turned ninety degrees. Two axes with two
-    colour stories would be worse than one axis with none."""
-    assert "linearGradient" in _GRID
-    stops = " ".join(re.findall(r"<stop[^>]*stop-color=\"([^\"]+)\"", _GRID))
-    for token in ("--tier-normal", "--tier-blocked"):
-        assert token in stops, token
+def test_the_timeline_carries_no_colour_of_its_own():
+    """History used to draw a second ramp in a second chart. It now draws
+    marks whose SIZE is the magnitude and whose fill is ink, so there is no
+    second colour story to keep in step with the first."""
+    hist = (_UI / "templates" / "dashboard_history.html").read_text(encoding="utf-8")
+
+    assert "linearGradient" not in hist
+    assert not re.search(r"(fill|stroke|stop-color)=\"#", hist)
 
 
 def test_no_raw_hex_reaches_either_chart():
     """The rule the token system exists for, checked where it is easiest to
     break: SVG attributes are not CSS, so no stylesheet lint would catch a
     hex dropped in here."""
-    for name, source in (("_axis.html", _AXIS), ("_grid.html", _GRID)):
+    for name, source in (("_axis.html", _AXIS),):
         assert not re.search(r"(fill|stroke|stop-color)=\"#", source), name

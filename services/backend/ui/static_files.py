@@ -37,17 +37,22 @@ _ASSETS = {
     "tokens.css": "text/css",
     "app.css": "text/css",
     "console.css": "text/css",
+    # The landing page only. Console readers were downloading sixty-five
+    # rules for a page they are already past, and front-door visitors were
+    # downloading the console components.
+    "landing.css": "text/css",
     "htmx.min.js": "application/javascript",
     "signed-post.js": "application/javascript",
     "ui-status.js": "application/javascript",
     "bulk-select.js": "application/javascript",
     "keys.js": "application/javascript",
+    "why.js": "application/javascript",
     # Self-hosted because spec 12.9 refuses third-party resources: a font CDN
     # is a third party that would see every request a customer makes to this
-    # console, and one more origin the CSP would have to open. Latin subset,
-    # 59KB for both. Plex Sans is variable, so one file covers every weight.
-    "plex-sans-latin.woff2": "font/woff2",
-    "plex-mono-latin.woff2": "font/woff2",
+    # console, and one more origin the CSP would have to open. Latin plus
+    # Vietnamese, 54KB, variable across 100-900: one family for the words and
+    # the numbers both, so there is one file and not two.
+    "inter-vi.woff2": "font/woff2",
 }
 
 CACHE_CONTROL = "public, max-age=300"

@@ -1,189 +1,190 @@
 {% extends "app_shell.html" %}
-{% import "shared/_charts.html" as charts %}
-{% import "_grid.html" as grid_macro %}
 {% import "_gate.html" as gate_macro %}
-{% block title %}History · Traffic Shaper{% endblock %}
-{% block page_title %}History{% endblock %}
+{% block title %}Lịch sử · Traffic Shaper{% endblock %}
+{% block page_title %}Lịch sử{% endblock %}
 {% block page_summary %}
-{% if filter_ip %}{{ filter_ip }} · {% endif -%}
-{{ total_blocked + total_slowed }} decision{{ 's' if total_blocked + total_slowed != 1 }} ({{ total_blocked }} to block, {{ total_slowed }} to slow) across {{ episodes|length }} {{ 'episode' if filter_ip else 'source' }}{{ 's' if episodes|length != 1 }} over the last {{ '24 hours' if days == 1 else '7 days' }}
+{{ days }} ngày · <b>{{ episodes|length }}</b> đợt
+{%- if unread %} · {{ unread }} chưa đọc{% endif %}
+{%- if filter_ip %} · chỉ {{ filter_ip }}{% endif %}
 {% endblock %}
 {% block page_actions %}
-{% if unread %}
-<button type="button" class="c-btn"
-        hx-post="/dashboard/ui/history/mark-read"
-        hx-target="#unread-note" hx-swap="innerHTML"
-        aria-label="Mark all {{ unread }} new episodes as read">Mark {{ unread }} read</button>
-{% endif %}
-{% endblock %}
-{% block page_tabs %}
-<div class="c-tabs" role="group" aria-label="Time window">
-  <a class="c-tab" href="/dashboard/ui/history?days=1"
-     {% if days == 1 %}aria-current="true"{% endif %}>24 hours</a>
-  <a class="c-tab" href="/dashboard/ui/history?days=7"
-     {% if days == 7 %}aria-current="true"{% endif %}>7 days</a>
-</div>
+<a class="btn{{ ' btn--p' if days == 1 }}" href="/dashboard/ui/history?days=1">1 ngày</a>
+<a class="btn{{ ' btn--p' if days != 1 }}" href="/dashboard/ui/history?days=7">7 ngày</a>
+{% if filter_ip %}<a class="btn" href="/dashboard/ui/history">Bỏ lọc</a>{% endif %}
 {% endblock %}
 {% block page_content %}
-{{ charts.patterns() }}
 
-<div class="c-list">
-  <div class="c-panel">
-    <div class="c-section-label">Your traffic against your gates</div>
-    {# The grid and the table below come from the same query window, so they
-       cannot disagree. A chart showing a spike the table does not list is
-       worse than no chart at all.
-
-       This is the same sigma ruler the Protection screen draws, turned
-       ninety degrees: one row per hour, position along the row is distance
-       from this tenant own normal, and the two gates run straight down
-       through every hour. #}
-    {% if has_feed %}
-    {{ grid_macro.render(grid,
-        "Every hour in this window, on the sigma scale, with your gates",
-        "One row per hour, oldest at the top. Darker means more sources sat at that distance from your normal. A red mark is a source that crossed a gate and was acted on by address. A greyed row is an hour with no telemetry, which is not the same as a quiet hour.") }}
-    {% else %}
-    <div class="c-empty-state">
-      <strong>{{ empty_message }}</strong>
-      <p>
-        Nothing was measured in this window, so there is no reading to draw.
-        An empty scale here would not be evidence that your traffic was calm.
-      </p>
-    </div>
-    {% endif %}
-  </div>
-
-  {% if block_curve %}
-  {# The block gate lives here and not on the Protection screen, because this
-     is the only window with evidence under it. ADR-006 measured 0.00% false
-     positives below 5 sigma, so those bins are empty on almost every single
-     day and a 24-hour curve would offer thirteen measured zeroes at exactly
-     the line being moved. #}
-  <div class="c-panel">
-    <div class="c-section-label">Where you block</div>
-    <p class="c-summary">
-      Traffic Shaper blocks a source outright once it sits this far outside
-      your own normal. Each line says how many sources it would have caught
-      across the last 7 days, which is the shortest window with enough
-      evidence this far out to be worth reading.
-    </p>
-    {{ gate_macro.render(block_curve, 2, "Where the block gate sits") }}
-  </div>
-  {% endif %}
-
-  <div id="unread-note"></div>
-
-  {% if filter_ip %}
-  {# A filtered list that looks exactly like an unfiltered one is how an
-     operator concludes a source has no other episodes. It says what it is
-     showing and offers the way back in the same line. #}
-  <div class="c-panel">
-    <div class="c-filter-note">
-      <span>Showing only {{ filter_ip }}.</span>
-      <a class="c-btn c-btn--sm" href="/dashboard/ui/history{% if days == 7 %}?days=7{% endif %}">Show every source</a>
+{# ---- trục thời gian ---------------------------------------------------- #}
+{# A timeline, not a grid. The grid it replaces spent 168 cells answering
+   "did anything happen", and the answer is almost always no. A few marks in
+   the right places say the same thing in a tenth of the height, and each
+   mark is a thing you can press. #}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">{{ days }} ngày qua</h2>
+    <div class="sec-m">
+      {% if episodes %}{{ episodes|length }} đợt · bấm một dấu{% else %}không có đợt nào{% endif %}
     </div>
   </div>
-
-  {% if selected_episode %}
-  <div class="c-panel">
-    <div class="c-section-label">Why this source</div>
-
-    {% if drifted %}
-    <div class="alert alert-warning">
-      <strong>Your model has been retrained since this decision.</strong>
-      The measurements below are the ones taken at the time. The normal they
-      are compared against is today, so the distances shown are not the
-      distances this decision was made on.
-    </div>
-    {% endif %}
-
-    {% if breakdown %}
-    <table class="c-why">
-      <caption class="sr-only">Each feature, against this tenant own baseline</caption>
-      <thead>
-        <tr>
-          <th scope="col">Feature</th>
-          <th scope="col">This source</th>
-          <th scope="col">Your normal</th>
-          <th scope="col">Distance</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for f in breakdown %}
-        <tr>
-          <th scope="row">{{ f.label }}</th>
-          <td>{{ f.value }}</td>
-          <td class="c-dim">{{ f.normal }}</td>
-          <td class="{{ 'drives' if f.drives }}">{{ f.display }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <p class="c-summary">
-      This episode does not carry the measurements that were taken. Episodes
-      started recording them recently, so anything older than that explains
-      itself by deviation alone.
-    </p>
-    {% endif %}
-  </div>
-  {% endif %}
-  {% endif %}
 
   {% if episodes %}
-  <div class="c-table-scroll" tabindex="0" role="region"
-       aria-label="Past episodes">
-    <table class="c-table">
-      <caption class="sr-only">Mitigation episodes, newest first</caption>
-      <thead>
-        <tr>
-          <th scope="col">Source</th>
-          <th scope="col">Hour</th>
-          <th scope="col">State</th>
-          <th scope="col">Deviation</th>
-          <th scope="col">Decisions</th>
-        </tr>
-      </thead>
+  <p class="one">
+    Mỗi dấu là một đợt. <b>Dấu càng to thì nguồn đó càng xa bình thường của
+    bạn</b>, trên cùng thang sáu sigma mà mọi biểu đồ ở đây dùng.
+  </p>
+  {# SVG, not positioned boxes.
+
+     The approved mockup placed each mark with `style="left: N%"`, which
+     works in a file on disk and does not work here at all: this product
+     runs under `style-src 'self'`, and that blocks the ATTRIBUTE and not
+     only the <style> block. Every mark landed at zero, stacked on top of
+     the paragraph above, and nothing in the markup looked wrong.
+
+     SVG geometry is not CSS. `x` and `r` are presentation attributes the
+     policy never sees, which is the same split the sigma axis uses and the
+     reason it survived the same rule. #}
+  <svg class="tl" viewBox="0 0 1000 64" role="img" aria-labelledby="tl-t"
+       preserveAspectRatio="none">
+    <title id="tl-t">{{ episodes|length }} đợt trong {{ days }} ngày qua</title>
+    <line class="tl-axis" x1="0" y1="40" x2="1000" y2="40"/>
+    {% for d in range(days + 1) %}
+    <line class="tl-day" x1="{{ (d / days * 1000)|round(1) }}" y1="34"
+          x2="{{ (d / days * 1000)|round(1) }}" y2="46"/>
+    {% endfor %}
+    {% for e in episodes %}
+    <a href="/dashboard/ui/history?days={{ days }}&amp;ip={{ e.ip }}">
+      <title>{{ e.ip }} · {{ e.sigma_short }} · {{ e.hour }}</title>
+      <circle class="tl-ep" cx="{{ (e.left * 10)|round(1) }}" cy="40"
+              r="{{ (e.size / 2)|round(1) }}"/>
+    </a>
+    {% endfor %}
+  </svg>
+  <div class="scale">
+    {% for d in range(days + 1) %}<span>{{ d }}</span>{% endfor %}
+  </div>
+  {# Position on an axis is exactly what a screen reader cannot read, so the
+     same episodes are a list underneath. #}
+  <div class="sr-only">
+    <table>
+      <caption>Các đợt trong {{ days }} ngày qua</caption>
+      <thead><tr><th scope="col">Nguồn</th><th scope="col">Khi nào</th>
+        <th scope="col">Xa nhất</th></tr></thead>
       <tbody>
         {% for e in episodes %}
-        <tr data-tier="{{ e.tier }}">
-          <th scope="row">
-            <a href="/dashboard/ui?ip={{ e.ip }}">{{ e.ip }}</a>
-            {% if e.is_new %}<kbd>new</kbd>{% endif %}
-          </th>
-          <td class="d">{{ e.hour }} <span class="c-dim">{{ e.span }}</span></td>
-          <td><span class="c-state c-state--{{ 'blocked' if e.tier >= 2 else 'slowed' }}">{{ e.tier_label }}</span></td>
-          <td class="d">{{ e.sigma_short }}</td>
-          {# The total and the breakdown were both printed, so four blocks read
-             "4 4 blocked". Only a screenshot showed it: the test asserted the
-             substring "4 blocked", which was genuinely present. #}
-          <td class="d">
-            {%- if e.tier2 and e.tier1 -%}{{ e.tier2 }} blocked, {{ e.tier1 }} slowed
-            {%- elif e.tier2 -%}{{ e.tier2 }} blocked
-            {%- else -%}{{ e.tier1 }} slowed{%- endif -%}
-          </td>
-        </tr>
+        <tr><th scope="row">{{ e.ip }}</th><td>{{ e.hour }}</td><td>{{ e.sigma_short }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   {% else %}
-  <div class="c-empty-state">
-    <strong>Nothing in this window</strong>
-    <p>
-      No source crossed your threshold. The chart above covers the same
-      window, so a flat run of bars inside the calm band is the evidence
-      rather than the absence of it.
-    </p>
-  </div>
+  <p class="one">{{ empty_message }}</p>
   {% endif %}
+  <p class="one">
+    Lịch sử bắt đầu từ ngày tính năng này được bật, không sớm hơn.
+    Không có backfill và cũng không thể có: dữ liệu đáng lẽ lấp vào đó
+    đã bị ghi đè và TTL xoá.
+  </p>
+</section>
 
-  <div class="c-panel">
-    <p class="c-summary">
-      History starts from the day this was switched on. There was no record
-      before that. The product kept only the present, and nothing can
-      reconstruct what it forgot.
-    </p>
+{# ---- các đợt ----------------------------------------------------------- #}
+{% if episodes %}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Các đợt</h2>
+    <div class="sec-m">
+      {{ total_slowed }} lần làm chậm · {{ total_blocked }} lần chặn
+      {% if unread %}
+      · <button type="button" class="btn btn--sm"
+                hx-post="/dashboard/ui/history/mark-read" hx-swap="outerHTML">Đánh dấu {{ unread }} đã đọc</button>
+      {% endif %}
+    </div>
   </div>
-</div>
+  {% for e in episodes %}
+  <div class="src">
+    <a class="src-h" href="/dashboard/ui/history?days={{ days }}&ip={{ e.ip }}">
+      <span>
+        <span class="src-ip">{{ e.ip }}{% if e.is_new %} ·{% endif %}</span>
+        <span class="src-sub">{{ e.hour }} · kéo dài {{ e.span }} · {{ e.decisions }} quyết định</span>
+      </span>
+      <span class="src-fig">{{ e.sigma_short }}</span>
+      <span class="verdict{{ '' if e.tier >= 2 else ' open' }}"><i></i>{{ e.tier_label }}</span>
+      <span>{{ e.severity }}</span>
+      <span class="src-chev">▸ vì sao</span>
+    </a>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{# ---- vì sao, cho đợt đang chọn ---------------------------------------- #}
+{% if selected_episode and not breakdown %}
+{# An episode from before the feature vector was frozen onto the row. Saying
+   so beats inventing a breakdown from today's statistics, which would look
+   entirely plausible and describe a decision nobody made. #}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Vì sao {{ selected_episode.ip }}</h2>
+    <div class="sec-m">{{ selected_episode.hour }}</div>
+  </div>
+  <p class="one">
+    Đợt này chưa mang vector đặc trưng, nên không tách ra theo bảy đặc trưng
+    được. Chúng tôi không dựng lại nó từ số liệu hôm nay: kết quả sẽ trông
+    rất hợp lý và mô tả một quyết định không ai từng ra.
+  </p>
+</section>
+{% endif %}
+
+{% if selected_episode and breakdown %}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Vì sao {{ selected_episode.ip }}</h2>
+    <div class="sec-m">{{ selected_episode.hour }}</div>
+  </div>
+  {% if drifted %}
+  <p class="one">
+    Mô hình đã được huấn luyện lại từ sau quyết định này, nên khoảng cách bên
+    dưới đo theo bình thường <b>hiện tại</b> của bạn, không phải bình thường
+    lúc đó.
+  </p>
+  {% endif %}
+  {% for f in breakdown %}
+  <div class="why-row">
+    <span class="why-n">{{ f.label }}</span>
+    <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+      <rect width="300" height="12" rx="2" fill="var(--surface-sunken)"/>
+      <rect class="grow" width="{{ f.width }}" height="12" rx="2" fill="var(--{{ f.tint }})"/>
+    </svg>
+    <span class="why-v">{{ f.value }} <span class="c-dim">so với {{ f.normal }}</span></span>
+    <span class="why-d{{ ' drives' if f.drives }}">{{ f.display }}</span>
+  </div>
+  {% endfor %}
+  <div class="why-act">
+    <button type="button" class="btn btn--p"
+            hx-post="/dashboard/ui/allowed/{{ selected_episode.ip }}?back=history"
+            hx-target="body" hx-swap="none"
+            hx-confirm="Cho qua {{ selected_episode.ip }}?">Cho qua nguồn này</button>
+    <a class="btn" href="/dashboard/ui/history?days={{ days }}">Đóng</a>
+  </div>
+</section>
+{% endif %}
+
+{# ---- cổng chặn --------------------------------------------------------- #}
+{% if block_curve %}
+{# The BLOCK gate is set here and not on the Gate screen, because seven days
+   of evidence is what a harder decision deserves. Two controls of the same
+   shape on one screen is how an operator blocks at the line they meant to
+   slow at. #}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Cổng chặn</h2>
+    <div class="sec-m">7 ngày làm bằng chứng · bấm là dời</div>
+  </div>
+  <p class="one">
+    Cổng chặn nằm xa hơn cổng làm chậm. Đo trên traffic giữ lại:
+    <b>0,27% báo nhầm ở 4,0 sigma, và 0,00% ở 5,0</b>.
+  </p>
+  {{ gate_macro.render(block_curve, 2, "Cổng chặn nằm ở đâu") }}
+</section>
+{% endif %}
+
 {% endblock %}

@@ -2,18 +2,18 @@
 <p class="field-hint" data-live>{{ message or "" }}</p>
 
 {% if tenants %}
-<div class="c-table-scroll" tabindex="0" role="region"
-     aria-label="Registered tenants">
-  <table class="c-table">
-    <caption class="sr-only">Registered tenants</caption>
+<div class="tbl-wrap" tabindex="0" role="region"
+     aria-label="Khách hàng đã đăng ký">
+  <table class="tbl">
+    <caption class="sr-only">Khách hàng đã đăng ký</caption>
     <thead>
       <tr>
-        <th scope="col">Tenant</th>
-        <th scope="col">Status</th>
-        <th scope="col">Requests today</th>
-        <th scope="col">Last 7 days</th>
-        <th scope="col">Registered</th>
-        <th scope="col"><span class="sr-only">Actions</span></th>
+        <th scope="col">Khách hàng</th>
+        <th scope="col">Trạng thái</th>
+        <th scope="col">Request hôm nay</th>
+        <th scope="col">7 ngày qua</th>
+        <th scope="col">Đăng ký</th>
+        <th scope="col"><span class="sr-only">Thao tác</span></th>
       </tr>
     </thead>
     <tbody>
@@ -25,11 +25,11 @@
         </th>
         <td>
           {% if row.tenant.status == "suspended" %}
-          <span class="c-state c-state--blocked">Suspended</span>
+          <span class="verdict">Đã tạm ngưng</span>
           {% elif row.tenant.status == "active" %}
-          <span class="c-state c-state--clear">Active</span>
+          <span class="verdict open">Đang hoạt động</span>
           {% else %}
-          <span class="c-state c-state--slowed">{{ row.tenant.status }}</span>
+          <span class="verdict open">{{ row.tenant.status }}</span>
           {% endif %}
         </td>
         {# Per-tenant usage was already written on every accepted batch and read
@@ -48,7 +48,7 @@
           {% if row.week %}
           <svg class="c-spark" viewBox="0 0 34 10" preserveAspectRatio="none"
                focusable="false" role="img"
-               aria-label="Requests on each of the last 7 days: {% for d in row.week %}{{ d.count }}{{ ', ' if not loop.last }}{% endfor %}">
+               aria-label="Số request từng ngày trong 7 ngày qua: {% for d in row.week %}{{ d.count }}{{ ', ' if not loop.last }}{% endfor %}">
             {% for d in row.week %}
             {% if d.level %}
             <rect class="c-spark-bar" x="{{ loop.index0 * 5 }}"
@@ -57,25 +57,25 @@
             {% endfor %}
           </svg>
           {% else %}
-          <span class="c-dim">not charted</span>
+          <span class="c-dim">chưa vẽ</span>
           {% endif %}
         </td>
         <td class="d" title="{{ row.registered.exact }}">
           {{ row.registered.label }} <span class="c-dim">{{ row.registered.relative }}</span>
         </td>
-        <td class="c-row-actions">
+        <td class="ctl-b">
           {% if row.tenant.status == "suspended" %}
-          <button type="button" class="c-btn c-btn--sm"
+          <button type="button" class="btn btn--sm"
                   hx-post="/admin/ui/tenants/{{ row.tenant.tenant_id }}/reactivate"
                   hx-target="#tenants-table" hx-swap="innerHTML"
-                  hx-confirm="Reactivate {{ row.tenant.tenant_id }}? Its agent keys stay revoked, so its agents must register again before they are served."
-                  aria-label="Reactivate tenant {{ row.tenant.tenant_id }}">Reactivate</button>
+                  hx-confirm="Mở lại {{ row.tenant.tenant_id }}? Khoá agent của họ vẫn bị thu hồi, nên các agent phải đăng ký lại mới được phục vụ."
+                  aria-label="Mở lại khách hàng {{ row.tenant.tenant_id }}">Bật lại</button>
           {% else %}
-          <button type="button" class="c-btn c-btn--sm c-btn--danger"
+          <button type="button" class="btn btn--sm btn--d"
                   hx-post="/admin/ui/tenants/{{ row.tenant.tenant_id }}/suspend"
                   hx-target="#tenants-table" hx-swap="innerHTML"
-                  hx-confirm="Suspend {{ row.tenant.tenant_id }}? Its agents stop being served immediately and every one of its API keys is revoked."
-                  aria-label="Suspend tenant {{ row.tenant.tenant_id }}">Suspend</button>
+                  hx-confirm="Tạm ngưng {{ row.tenant.tenant_id }}? Các agent của họ ngưng được phục vụ ngay lập tức và mọi khoá API bị thu hồi."
+                  aria-label="Tạm ngưng khách hàng {{ row.tenant.tenant_id }}">Tạm ngưng</button>
           {% endif %}
         </td>
       </tr>
@@ -84,17 +84,16 @@
   </table>
 </div>
 {% if not_charted %}
-<p class="c-summary">
-  The last 7 days are charted for the first {{ tenants|length - not_charted }}
-  tenants. {{ not_charted }} more {{ 'are' if not_charted != 1 else 'is' }}
-  listed with today's figure only, because a week for every tenant would be
-  more keys than one batch read allows.
+<p class="one">
+  7 ngày qua chỉ được vẽ cho {{ tenants|length - not_charted }} khách hàng
+  đầu. {{ not_charted }} khách hàng còn lại chỉ có con số hôm nay, vì vẽ đủ
+  một tuần cho tất cả sẽ vượt số khoá mà một lượt đọc theo lô cho phép.
 </p>
 {% endif %}
 {% else %}
-<div class="c-empty-state">
-  <strong>No tenants yet</strong>
-  <p>A tenant appears here once it is created, or the first time one of its
-     agents registers with a valid token.</p>
+<div class="one">
+  <strong>Chưa có khách hàng nào</strong>
+  <p>Một khách hàng xuất hiện ở đây khi được tạo, hoặc lần đầu một agent của
+     họ đăng ký bằng token hợp lệ.</p>
 </div>
 {% endif %}

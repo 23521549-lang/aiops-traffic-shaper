@@ -93,7 +93,7 @@ def test_it_says_which_window_the_counts_came_from(client, dynamo_resource):
     _trained(dynamo_resource)
     _bins_across_days(dynamo_resource)
 
-    assert "7 days" in client.get("/dashboard/ui/history?days=7").text
+    assert "7 ngày" in client.get("/dashboard/ui/history?days=7").text
 
 
 def test_the_curve_counts_the_whole_seven_days(client, dynamo_resource):
@@ -103,7 +103,7 @@ def test_the_curve_counts_the_whole_seven_days(client, dynamo_resource):
     _bins_across_days(dynamo_resource)
 
     page = client.get("/dashboard/ui/history?days=7").text
-    control = page[page.index("c-gate-curve"):]
+    control = page[page.index('class="gate"'):]
     first_row = control[:control.index("</button>")]
 
     assert ">7<" in first_row
@@ -132,7 +132,7 @@ def test_the_current_block_gate_is_the_one_marked(client, dynamo_resource):
     TenantsTable(dynamo_resource).set_threshold("t-1", "tier2_z", -5.5)
 
     page = client.get("/dashboard/ui/history?days=7").text
-    control = page[page.index("c-gate-curve"):]
+    control = page[page.index('class="gate"'):]
     marked = control[control.index('aria-current="true"'):]
 
     assert "5.50" in marked[:250]

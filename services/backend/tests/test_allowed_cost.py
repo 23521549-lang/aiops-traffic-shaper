@@ -168,7 +168,7 @@ def test_the_screen_states_the_mechanism_and_not_just_a_number(client, seeded):
     page = client.get("/dashboard/ui/allowed").text.lower()
 
     assert "baseline" in page
-    assert "permanently" in page
+    assert "vĩnh viễn" in page
 
 
 def test_the_register_names_who_added_each_entry(client, seeded):
@@ -230,9 +230,9 @@ def test_a_model_trained_before_this_existed_says_so(client, seeded):
         key={"tenant_id": "t-1", "stage_version": "production"},
         update_expression="REMOVE excluded_whitelist_buckets")
 
-    page = client.get("/dashboard/ui/allowed").text.lower()
+    page = client.get("/dashboard/ui/allowed").text
 
-    assert "not been measured" in page
+    assert "Chưa được đo" in page
 
 
 def test_a_tenant_with_nothing_allowed_is_not_warned_about_a_cost_it_has_not_paid(

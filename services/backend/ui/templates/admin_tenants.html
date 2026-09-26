@@ -1,14 +1,14 @@
 {% extends "app_shell.html" %}
-{% block title %}Tenants · Traffic Shaper{% endblock %}
-{% block page_title %}Tenants{% endblock %}
+{% block title %}Khách hàng · Traffic Shaper{% endblock %}
+{% block page_title %}Khách hàng{% endblock %}
 {% block page_summary %}
-{{ tenant_count }} registered · suspending one revokes every agent key it holds
+{{ tenant_count }} đã đăng ký · tạm ngưng một khách hàng là thu hồi mọi khoá agent họ đang giữ
 {% endblock %}
 {% block page_actions %}
-<a class="c-btn c-btn--primary" href="/admin/ui/tenants/new">New tenant</a>
+<a class="btn btn--p" href="/admin/ui/tenants/new">Thêm khách hàng</a>
 {% endblock %}
 {% block page_content %}
-<div class="c-list" id="tenants-table">
+<div  id="tenants-table">
   {% include "_tenants_table.html" %}
 </div>
 

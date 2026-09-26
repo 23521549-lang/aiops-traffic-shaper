@@ -43,7 +43,7 @@ def _csrf(client):
 
 
 def test_the_agents_page_offers_a_way_to_add_one(client):
-    assert "Add an agent" in client.get("/dashboard/ui/agents").text
+    assert "Thêm một agent" in client.get("/dashboard/ui/agents").text
 
 
 def test_adding_an_agent_creates_it_for_this_tenant(client, dynamo_resource):

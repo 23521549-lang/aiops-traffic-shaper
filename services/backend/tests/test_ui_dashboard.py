@@ -43,7 +43,7 @@ def test_dashboard_empty_state(dynamo_resource, cognito_test_keys):
     client = _client(dynamo_resource, cognito_test_keys)
     resp = client.get("/dashboard/ui")
     assert resp.status_code == 200
-    assert "No agent has connected yet" in resp.text
+    assert "Chưa có agent nào kết nối" in resp.text
     assert "You’re protected" not in resp.text
 
 
@@ -54,7 +54,7 @@ def test_the_model_page_explains_the_wait_instead_of_saying_shadow_mode(
     client = _client(dynamo_resource, cognito_test_keys)
     resp = client.get("/dashboard/ui/model")
     assert resp.status_code == 200
-    assert "Learning what your normal looks like" in resp.text
+    assert "Chưa có mô hình" in resp.text
     assert "shadow mode" not in resp.text
 
 
@@ -87,7 +87,7 @@ def test_whitelist_remove_via_ui(dynamo_resource, cognito_test_keys):
     # The address still appears once, in the confirmation sentence. What must
     # be gone is the row: the Remove button that only a listed IP has.
     assert "Remove 203.0.113.4 from allowed list" not in resp.text
-    assert "Nothing allowed yet" in resp.text
+    assert "Chưa cho qua địa chỉ nào" in resp.text
     assert WhitelistTable(dynamo_resource).get(tenant_id="t-1", ip="203.0.113.4") is None
 
 
@@ -121,5 +121,5 @@ def test_the_degraded_banner_reads_as_a_sentence(dynamo_resource, cognito_test_k
     # fact rather than with an apology, and the summary line in the page
     # header carries the same age. What must not come back is the "in ...
     # ago" construction that a screenshot caught the first time.
-    assert "No telemetry since 2 days ago." in page
-    assert "in 2 days ago" not in page
+    assert "Không có phép đo nào từ 2 ngày trước." in page
+    assert "in 2 ngày trước" not in page

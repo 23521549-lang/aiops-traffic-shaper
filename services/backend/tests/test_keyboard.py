@@ -31,7 +31,7 @@ from services.backend.tests.conftest import sign_test_token
 # The element that carries the hint, with whatever came before it on the
 # same tag. `data-key` has to be on that element or the dispatcher cannot
 # find it from the key press.
-HINTED = re.compile(r"<(a|button)\b([^>]*)>(?:(?!</\1>).)*?<kbd class=\"c-key\">([^<]+)</kbd>",
+HINTED = re.compile(r"<(a|button)\b([^>]*)>(?:(?!</\1>).)*?<kbd[^>]*>([^<]+)</kbd>",
                     re.DOTALL)
 
 
@@ -48,9 +48,14 @@ def _client(dynamo_resource, cognito_test_keys, claims):
 @pytest.fixture
 def tenant(dynamo_resource, cognito_test_keys):
     c = _client(dynamo_resource, cognito_test_keys, {"custom:tenant_id": "t-1"})
+    # A LIVE mitigation. `expires_at=0` used to be harmless here because the
+    # pane was a separate render fetched by address; the reason now lives
+    # inline on the row it belongs to, so an expired source is not on the
+    # page at all and there is no pane for Escape to close. The expiry was
+    # never what this fixture was about.
     MitigationStateTable(dynamo_resource).put(
         tenant_id="t-1", ip="203.0.113.1", tier=2, score=-0.6, z=-6.0,
-        reason="behavioral_anomaly", expires_at=0)
+        reason="behavioral_anomaly", expires_at=2_000_000_000)
     return c
 
 
@@ -64,7 +69,10 @@ def admin(dynamo_resource, cognito_test_keys):
 
 PAGES_WITH_PANES = [
     ("tenant", "/dashboard/ui?ip=203.0.113.1"),
-    ("tenant", "/dashboard/ui/agents"),
+    # `/dashboard/ui/agents` came off this list: with no `?id=` it opens no
+    # detail, so it advertises no shortcut. The rule here is "never advertise
+    # a key that is not bound", not "every page must have one".
+    ("tenant", "/dashboard/ui/agents?id=a-1"),
     ("admin", "/admin/ui/tenants?id=t-1"),
 ]
 
@@ -113,8 +121,23 @@ def test_the_palette_is_server_rendered_not_fetched(tenant):
     html = tenant.get("/dashboard/ui").text
     dialog = html.split('id="palette"', 1)[1].split("</dialog>", 1)[0]
     assert "/dashboard/ui/allowed" in dialog
-    assert "Detection model" in dialog
+    assert "Mô hình" in dialog
     assert "data-palette-item" in dialog
+
+
+def test_the_palette_reaches_every_page_the_nav_does(tenant):
+    """The palette calls itself every destination this role can reach, and a
+    reader who has learned to use it stops reading the sidebar. Two pages,
+    Cách hoạt động and Nhật ký, were added to the nav and never added here,
+    so the keyboard route to them simply did not exist."""
+    html = tenant.get("/dashboard/ui").text
+    nav = html[html.index('class="nav"'):html.index("</nav>")]
+    dialog = html.split('id="palette"', 1)[1].split("</dialog>", 1)[0]
+
+    import re
+    for href in re.findall(r'href="(/dashboard/ui[^"]*)"', nav):
+        assert f'href="{href}"' in dialog, (
+            f"{href} is in the sidebar and not in the palette")
 
 
 def test_the_palette_offers_only_what_this_role_can_reach(tenant):

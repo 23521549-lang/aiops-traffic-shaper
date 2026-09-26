@@ -36,8 +36,7 @@ from services.backend.core.usage import (
 from services.backend.ml.feature_engineering import FEATURE_NAMES
 from services.backend.ml.model import TIER1_Z, TIER2_Z, ModelManager
 from services.backend.ui.charts import (
-    FEATURE_TRACK_HEIGHT, FEATURE_TRACK_WIDTH, build_axis, feature_runs,
-    feature_track, gate_curve, history_grid,
+    build_axis, gate_curve,
 )
 from services.backend.schemas.agent_register import AgentRegisterRequest
 from services.backend.schemas.whitelist import WhitelistRequest
@@ -45,7 +44,8 @@ from services.backend.ui.csrf import CSRF_COOKIE_NAME, verify_csrf
 from services.backend.ui.hx import hx_return
 from services.backend.ui.presenters import (
     absolute_expiry, agent_health, agent_state, axis_state, baseline_rows,
-    decompose,
+    capabilities, ledger_rows,
+    decompose, system_picture,
     reach, reason_label, relative_expiry, severity_detail,
     tier_css, tier_label,
     timestamp_pair,
@@ -55,7 +55,7 @@ from services.backend.ui.templates_env import templates
 router = APIRouter()
 
 
-def _rows(mitigations, now, agents=None):
+def _rows(mitigations, now, agents=None, paused=False):
     """One row per active mitigation.
 
     `agents` carries principle 1.5 onto every row: the backend decided, and
@@ -67,7 +67,7 @@ def _rows(mitigations, now, agents=None):
     return [{
         "ip": m.ip,
         "decided_at": m.decided_at,
-        "reach": reach(m.decided_at, agents, now),
+        "reach": reach(m.decided_at, agents, now, paused=paused),
         "tier": m.tier,
         "tier_label": tier_label(m.tier),
         "tier_css": tier_css(m.tier),
@@ -140,23 +140,44 @@ def _baseline_cost(resource, tenant_id: str) -> dict | None:
         # customer means by "how much of my traffic" includes the part that
         # was taken out.
         "share": round(100 * excluded / total) if total else 0,
+        # Geometry and the two labels the bar is drawn with. Here, not in the
+        # template: a template that formats thousands and multiplies a share
+        # by a pixel width is a template nothing can test.
+        "width": round(min(excluded / total, 1.0) * 520, 1) if total else 0,
+        "excluded_label": f"{excluded:,}".replace(",", "."),
+        "total_label": f"{total:,}".replace(",", "."),
     }
 
 
-def _shell(request, tenant_id, active, **extra):
+def _shell(request, tenant_id, active, resource=None, paused=None, **extra):
     """Context every tenant page needs: who this is, the nav counts that make
     the sidebar carry state instead of merely pointing at it, and the CSRF
     token rendered into an hx-headers attribute.
 
     Server-rendering the token is what lets `csrf_token` become httpOnly: it
     was readable by script only so the old helper could parse
-    document.cookie."""
+    document.cookie.
+
+    `paused` is resolved HERE rather than left to each page, because a
+    console that shows "5 agents live" on one screen while the customer's
+    servers are enforcing nothing is lying by omission, and the screen most
+    likely to be open when that matters is whichever one they happened to be
+    on. One GetItem on a page nobody polls; callers that have already read
+    the tenant pass the answer in and pay nothing.
+    """
+    if paused is None:
+        paused = bool(resource is not None and (
+            TenantsTable(resource).get(tenant_id=tenant_id) or {}
+        ).get("enforce_paused_at"))
     ctx = {"tenant_id": tenant_id, "role": "tenant", "active": active,
+           "paused": paused,
            "csrf_token": request.cookies.get(CSRF_COOKIE_NAME, ""),
-           # The console defaults to dark: it is read at 3am and it is a
-           # different place from the marketing site. The toggle still
-           # works, and both themes carry measured contrast.
-           "theme": request.cookies.get("theme") or "dark"}
+           # Light by default now. The rule that made dark the landing
+           # place was written for a palette of three saturated hues, which
+           # a dark field held apart; one hue in five steps separates on
+           # white. The toggle still works and dark is measured to the same
+           # standard.
+           "theme": request.cookies.get("theme") or "light"}
     ctx.update(extra)
     return ctx
 
@@ -182,7 +203,22 @@ def protection_status(request: Request, ip: str | None = None,
     # agent, and the page reassures the customer either way.
     agents = AgentsTable(resource).query_by_tenant(tenant_id)
     health = agent_health(agents, now)
-    rows = _rows(mitigations, now, agents)
+    # Read here rather than further down, because every row needs it: while
+    # enforcement is paused, "3 of 3 written" is false of all of them. Same
+    # GetItem the gates are read from below, moved up, not added.
+    tenant = TenantsTable(resource).get(tenant_id=tenant_id) or {}
+    paused = bool(tenant.get("enforce_paused_at"))
+    rows = _rows(mitigations, now, agents, paused=paused)
+    # Every held row carries its own reason, because the approved screen
+    # opens the reason AT the row. The statistics are already in memory for
+    # scoring, so seven subtractions per row cost no read.
+    _mgr = ModelManager()
+    _mgr.load(resource, tenant_id)
+    for r in rows:
+        r["features_breakdown"] = decompose(
+            r["features"] or [],
+            getattr(_mgr.stats, "feature_means", None),
+            getattr(_mgr.stats, "feature_stds", None))
     selected = next((r for r in rows if r["ip"] == ip), None)
     stats = None
     if selected:
@@ -208,8 +244,8 @@ def protection_status(request: Request, ip: str | None = None,
     # console reads it from there rather than taking the copy that rode in on
     # the stats, because a control whose own screen still shows the old
     # position has not visibly done anything. One small GetItem on a page
-    # that already costs a Query and a model load.
-    tenant = TenantsTable(resource).get(tenant_id=tenant_id) or {}
+    # that already costs a Query and a model load. Read above, where the
+    # pause flag on the same item is needed first.
     enforced_sigma = abs(getattr(stats, "tier1_z", TIER1_Z))
     tier1_sigma = abs(float(tenant.get("tier1_z", -enforced_sigma)))
     tier2_sigma = abs(float(tenant.get("tier2_z",
@@ -223,11 +259,26 @@ def protection_status(request: Request, ip: str | None = None,
         tenant_id, now_ts - 86_400, now_ts, fill=False)
     bins: dict[str, int] = {}
     measured = 0
+    # What the four stages of the loop actually did with 24 hours of traffic.
+    # Three numbers off rows that were already read for the shape below the
+    # gate, so the figure at the end of each lane is measured rather than
+    # asserted. `record_traffic` has written tier1 and tier2 per hour since
+    # the history table existed; nothing had ever read them back.
+    slowed = blocked = 0
     for row in series:
         measured += int(row.get("requests", 0))
+        # `tier1_decisions`, not `tier1`. The keyword `record_traffic` takes
+        # and the attribute it stores have different names, and reading the
+        # parameter name gave three lanes reading "9.270 / 0 / 0" on a screen
+        # that was holding five sources at the time. Eighth instance of a
+        # field written, declared, and dropped at the read layer.
+        slowed += int(row.get("tier1_decisions", 0))
+        blocked += int(row.get("tier2_decisions", 0))
         for key, value in row.items():
             if key.startswith("n") and key[1:].isdigit():
                 bins[key] = bins.get(key, 0) + int(value)
+    flow = {"measured": measured, "slowed": slowed, "blocked": blocked,
+            "passed": max(0, measured - slowed - blocked)}
 
     # Two keys on one table in one BatchGetItem. The global ceiling matters
     # as much as this tenant's own: ingest is refused platform-wide, so a
@@ -248,10 +299,6 @@ def protection_status(request: Request, ip: str | None = None,
     curve = gate_curve(bins, tier1_sigma,
                        len([r for r in rows if r["z"] is not None]))
 
-    # Zoom 2. Reachable only from a selected source, and only for one of the
-    # seven real names: `feature` is used to INDEX a vector, so a value that
-    # is not on the list must never reach that far.
-    zoom = _feature_zoom(resource, tenant_id, selected, feature, stats, now_ts)
     # Stored and enforced immediately: the ingest path reads the Tenants item
     # on every batch anyway, to refuse a suspended tenant, so it judges by the
     # value of record. What still lags is the COPY on the model, which the
@@ -261,86 +308,15 @@ def protection_status(request: Request, ip: str | None = None,
     pending = (state["gates_armed"]
                and abs(enforced_sigma - tier1_sigma) > 1e-9)
 
-    # What the machinery is doing, from figures this page already holds. The
-    # only rule for this block is that it may not read anything new: a vanity
-    # panel on a 14 RCU budget is how a console starts costing money.
-    lifecycle = None
-    if rows or measured or state["gates_armed"]:
-        tools = sorted({str(e) for a in agents for e in (a.get("enforcers") or [])})
-        reported = [a for a in agents if a.get("enforcers") is not None]
-        # Only decisions whose time was recorded can be asked "has the fleet
-        # collected this". Rows written before `decided_at` existed cannot,
-        # and counting them as NOT collected would accuse a healthy fleet of
-        # failing - which is the same merging of "we cannot tell" with "no"
-        # that reach() itself is careful never to do.
-        timed = [r for r in rows if r["decided_at"]]
-        lifecycle = {
-            "read": measured,
-            "agents": len(agents),
-            # The thirteen bins count READINGS below the gate, not distinct
-            # sources, and the product has never stored a distinct-source
-            # count. Labelled as what it is rather than as what would sound
-            # better.
-            "near": sum(bins.values()),
-            "acted": len(rows),
-            "blocked": sum(1 for r in rows if r["tier"] >= 2),
-            "slowed": sum(1 for r in rows if r["tier"] < 2),
-            "timed": len(timed),
-            "untimed": len(rows) - len(timed),
-            # Agents holding EVERY decision we can date. Same `reach` the
-            # table rows use, so the strip and the rows can never disagree
-            # about the same fact.
-            "holding": min((sum(1 for a in agents
-                                if reach(r["decided_at"], [a], now)["in_effect"])
-                            for r in timed), default=len(agents)),
-            "tools": ", ".join(tools) if tools else ("" if reported else "not reported"),
-        }
-
     return templates.TemplateResponse(request, "dashboard_status.html", _shell(
-        request, tenant_id, "status",
+        request, tenant_id, "status", paused=paused,
         mitigations=rows, health=health, selected=selected,
         detail_open=selected is not None,
-        axis=axis, axis_state=state, measured=measured,
+        axis=axis, axis_state=state, measured=measured, flow=flow,
         curve=curve, enforced_sigma=enforced_sigma, pending=pending,
-        lifecycle=lifecycle,
-        zoom=zoom, track_width=FEATURE_TRACK_WIDTH,
-        track_height=FEATURE_TRACK_HEIGHT,
         active_count=len(mitigations),
         outcome=_bulk_outcome(allowed, skipped),
     ))
-
-
-def _feature_zoom(resource, tenant_id: str, selected, feature, stats,
-                  now_ts: int) -> dict | None:
-    """One feature of the selected source, over the retained window.
-
-    Costs a 7-day episode Query, and pays it only when `feature` is set -
-    which is never on a default page load. The alternative, holding a track
-    for all seven on every load, would be seven times the work for a screen
-    nobody has asked for yet.
-    """
-    from services.backend.ml.feature_engineering import FEATURE_NAMES
-
-    if not (selected and feature and feature in FEATURE_NAMES):
-        return None
-    row = next((r for r in selected.get("features_breakdown") or []
-                if r["name"] == feature), None)
-    if row is None:
-        # No decomposition means the model carries no per-feature statistics,
-        # so there is no baseline to measure this dimension against and
-        # nothing honest to draw.
-        return None
-
-    index = FEATURE_NAMES.index(feature)
-    means = getattr(stats, "feature_means", None) or []
-    stds = getattr(stats, "feature_stds", None) or []
-    episodes = [e for e in list_history(since=now_ts - 7 * 86_400, until=now_ts,
-                                        tenant_id=tenant_id, resource=resource)
-                if e.ip == selected["ip"]]
-    points = feature_track(episodes, index,
-                           float(means[index]) if index < len(means) else 0.0,
-                           float(stds[index]) if index < len(stds) else 0.0)
-    return {"f": row, "runs": feature_runs(points)}
 
 
 def _bulk_outcome(allowed: str, skipped: str) -> dict | None:
@@ -389,7 +365,7 @@ def _agents_page(request, tenant_id, resource, selected_id=None,
     live = sum(1 for r in rows if r["state"] == "live")
 
     return templates.TemplateResponse(request, "dashboard_agents.html", _shell(
-        request, tenant_id, "agents",
+        request, tenant_id, "agents", resource=resource,
         agents=rows, selected=selected, detail_open=selected is not None,
         live_count=live, quiet_count=sum(1 for r in rows if r["state"] == "quiet"),
         # Reporting and protecting are two different claims, and this is the
@@ -501,7 +477,7 @@ def add_agent_ui(request: Request, label: str = "",
     if not label:
         # The only thing that will ever tell its owner which machine went
         # quiet. A blank one produces a fleet of indistinguishable rows.
-        error = "Give the machine a name you will recognise later."
+        error = "Đặt cho máy một cái tên mà sau này bạn nhận ra."
     else:
         try:
             # `claims` explicitly, never the Depends() default: this calls
@@ -511,7 +487,7 @@ def add_agent_ui(request: Request, label: str = "",
                                      tenant_id=tenant_id, claims=claims,
                                      resource=resource)
         except ValidationError:
-            error = "That name cannot be used."
+            error = "Tên đó không dùng được."
         except HTTPException as e:
             error = str(e.detail)
 
@@ -539,7 +515,7 @@ def move_gate(tier: int = 1, sigma: float = 0.0,
     """
     if tier not in (1, 2) or sigma not in TenantHistoryTable.NEAR_BINS:
         raise HTTPException(status_code=400,
-                            detail="That is not one of the available positions.")
+                            detail="Đó không phải một trong các vị trí có sẵn.")
 
     tenants = TenantsTable(resource)
     tenant = tenants.get(tenant_id=tenant_id) or {}
@@ -567,13 +543,112 @@ def move_gate(tier: int = 1, sigma: float = 0.0,
     return Response(status_code=200, headers={"HX-Redirect": "/dashboard/ui"})
 
 
+@router.post("/dashboard/ui/enforcement", response_class=HTMLResponse,
+             dependencies=[Depends(verify_csrf)])
+def set_enforcement(on: int = 1,
+                    tenant_id: str = Depends(dashboard_auth),
+                    claims: dict = Depends(dashboard_claims),
+                    resource=Depends(get_dynamo_resource)):
+    """The off switch.
+
+    Until this existed the only way to stop a customer's own servers turning
+    visitors away was to revoke every agent key - which also stops the
+    telemetry that would tell them whether stopping was the right call. At
+    3am, with real customers being refused, that is not a control, it is a
+    demolition.
+
+    Paused, the platform keeps scoring and keeps writing history, and serves
+    an empty active set. The agents already release every local rule when
+    they see one, so this works on agents that are ALREADY INSTALLED and
+    needs no new version rolled out to a single machine.
+
+    Body-less, like the gate: the value rides in the query string, so
+    CloudFront's OAC needs no payload hash (ADR-005).
+    """
+    paused = not bool(on)
+    TenantsTable(resource).set_enforcement(tenant_id, paused)
+    # Audited. Turning protection off is the single most consequential thing
+    # a tenant can do in this console, and "who switched it off, and when" is
+    # the first question the review after an incident asks.
+    _try_history(TenantHistoryTable(resource).record_setting,
+                 tenant_id, actor=actor_of(claims), what="enforcement",
+                 old="on" if paused else "off",
+                 new="off" if paused else "on", now=time.time())
+    return Response(status_code=200, headers={"HX-Redirect": "/dashboard/ui"})
+
+
+@router.get("/dashboard/ui/audit", response_class=HTMLResponse)
+def audit_page(request: Request, days: int = 30,
+               tenant_id: str = Depends(dashboard_auth),
+               resource=Depends(get_dynamo_resource)):
+    """Who changed what, and when.
+
+    The settings ledger has been written since it shipped and had no screen.
+    Every other page in this console answers "what is happening"; this is the
+    only one that answers "what did WE do", which is the first question the
+    review after an incident opens with.
+
+    One Query on the tenant's own partition, bounded by a window the reader
+    chose. No index, no scan, and the rows carry their own TTL so the window
+    can never be wider than the retention.
+    """
+    now = datetime.now(timezone.utc)
+    if days not in (7, 30):
+        days = 30
+    until = int(now.timestamp())
+    items = TenantHistoryTable(resource).query_settings(
+        tenant_id, until - days * 86_400, until)
+    rows = ledger_rows(items, now)
+    return templates.TemplateResponse(request, "dashboard_audit.html", _shell(
+        request, tenant_id, "audit", resource=resource, entries=rows, days=days,
+    ))
+
+
+@router.get("/dashboard/ui/system", response_class=HTMLResponse)
+def system_page(request: Request, tenant_id: str = Depends(dashboard_auth),
+                resource=Depends(get_dynamo_resource)):
+    """How the machinery works, drawn from the machinery.
+
+    Its own screen rather than a panel on the Gate screen. This is the
+    question somebody asks on their first day and again the first time
+    something goes wrong, and neither is a daily event - putting it above the
+    gates would push the thing people open every morning below the fold.
+
+    Two reads, both of which every other console page already makes: the
+    tenant's agents and their active mitigations.
+    """
+    now = datetime.now(timezone.utc)
+    agents = AgentsTable(resource).query_by_tenant(tenant_id)
+    rows = _rows(list_mitigations(tenant_id=tenant_id, resource=resource),
+                 now, agents)
+    tenant = TenantsTable(resource).get(tenant_id=tenant_id) or {}
+    sys = system_picture(
+        agents, rows,
+        abs(float(tenant.get("tier1_z", TIER1_Z))),
+        abs(float(tenant.get("tier2_z", TIER2_Z))), now) if agents else None
+
+    # What the customer's own share of the day looks like. Two keys on one
+    # table in one BatchGetItem, the same read the Gate screen already makes
+    # to decide whether the scale can show anything at all.
+    throttle = usage_protection_status(resource, tenant_id)
+    used = int(throttle.get("tenant_requests", 0) or 0)
+    quota = int(throttle.get("tenant_quota", 0) or 0)
+    budget = {"used": used, "quota": quota,
+              "width": round(min(used / quota, 1.0) * 520, 1) if quota else 0}
+
+    return templates.TemplateResponse(request, "dashboard_system.html", _shell(
+        request, tenant_id, "system", resource=resource, sys=sys,
+        agent_count=len(agents), caps=capabilities(), budget=budget,
+    ))
+
+
 @router.get("/dashboard/ui/allowed", response_class=HTMLResponse)
 def whitelist_page(request: Request, tenant_id: str = Depends(dashboard_auth),
                    resource=Depends(get_dynamo_resource)):
     whitelist = list_whitelist(tenant_id=tenant_id, resource=resource)
     rows = _whitelist_rows(whitelist)
     return templates.TemplateResponse(request, "dashboard_allowed.html", _shell(
-        request, tenant_id, "whitelist",
+        request, tenant_id, "whitelist", resource=resource,
         whitelist=rows,
         whitelist_count=len(whitelist.whitelisted_ips),
         # Only when something has actually been allowed. On an empty register
@@ -620,7 +695,7 @@ def model_page(request: Request, tenant_id: str = Depends(dashboard_auth),
         staged = None
 
     return templates.TemplateResponse(request, "dashboard_model.html", _shell(
-        request, tenant_id, "model", model=model, thresholds=thresholds,
+        request, tenant_id, "model", resource=resource, model=model, thresholds=thresholds,
         baseline=baseline_rows(model.features or list(FEATURE_NAMES),
                                model.feature_means, model.feature_stds),
         staged=staged,
@@ -676,7 +751,7 @@ def add_whitelist_ui(request: Request, ip: str, reason: str = "", back: str = ""
 
     if because and because not in FEATURE_NAMES:
         raise HTTPException(status_code=400,
-                            detail="That is not one of the measured features.")
+                            detail="Đó không phải một trong các đặc trưng được đo.")
 
     error = None
     message = None
@@ -711,7 +786,7 @@ def remove_whitelist_ui(request: Request, ip: str, tenant_id: str = Depends(dash
     whitelist = list_whitelist(tenant_id=tenant_id, resource=resource)
     return templates.TemplateResponse(request, "_allowed_table.html", {
         "whitelist": _whitelist_rows(whitelist),
-        "message": f"{ip} removed. It will be checked like any other IP from now on.",
+        "message": f"Đã bỏ {ip}. Từ giờ nó được chấm như mọi địa chỉ khác.",
     })
 
 
@@ -782,9 +857,6 @@ def history_page(request: Request, days: int = 1, ip: str | None = None,
     # constants would show every tenant somebody else's threshold, cutting
     # through their own history.
     tenant = TenantsTable(resource).get(tenant_id=tenant_id) or {}
-    grid = history_grid(series, episodes,
-                        abs(float(tenant.get("tier1_z", TIER1_Z))),
-                        abs(float(tenant.get("tier2_z", TIER2_Z))))
     # No feed, no reading. Principle 1.2: an instrument that has lost its
     # signal does not render a reading with a warning beside it.
     has_feed = any(p.batches for p in series) or bool(episodes)
@@ -813,10 +885,10 @@ def history_page(request: Request, days: int = 1, ip: str | None = None,
     selected, breakdown, drifted = _historic_why(resource, tenant_id, shown)         if ip else (None, [], False)
 
     return templates.TemplateResponse(request, "dashboard_history.html", _shell(
-        request, tenant_id, "history",
-        grid=grid, has_feed=has_feed, block_curve=block_curve,
+        request, tenant_id, "history", resource=resource,
+        has_feed=has_feed, block_curve=block_curve,
         empty_message=_history_empty_message(series),
-        episodes=_episode_rows(shown, now), days=days,
+        episodes=_timeline(_episode_rows(shown, now), days, now), days=days,
         filter_ip=ip, selected_episode=selected,
         breakdown=breakdown, drifted=drifted,
         unread=sum(1 for e in episodes if e.is_new),
@@ -853,10 +925,36 @@ def _historic_why(resource, tenant_id: str, shown):
     return episode, breakdown, drifted
 
 
+def _timeline(rows, days, now):
+    """Where each episode sits on the window, as a percentage.
+
+    Computed here and not in the template. A template that does arithmetic is
+    a template nothing can test, and this particular sum - an hour stamp
+    against a window whose length the reader chose - is the one that decides
+    whether a mark lands on the right day.
+
+    The mark's size carries how far out it was, on the same six-sigma ceiling
+    the axis uses, so a big dot here and a far dot there mean one thing.
+    """
+    span = max(days, 1) * 86400
+    start = int(now.timestamp()) - span
+    out = []
+    for r in rows:
+        hour = int(r.get("hour_start") or 0)
+        if not hour:
+            continue
+        left = (hour - start) / span * 100
+        sigma = abs(float(r.get("z") or 0))
+        out.append({**r,
+                    "left": round(min(max(left, 0.0), 100.0), 2),
+                    "size": round(8 + min(sigma, 6.0) / 6.0 * 10, 1)})
+    return out
+
+
 def _history_empty_message(series) -> str:
     if not any(p.batches for p in series):
-        return "No telemetry in this window."
-    return "Nothing crossed your threshold in this window."
+        return "Không có telemetry nào trong khoảng này."
+    return "Không có gì vượt cổng của bạn trong khoảng này."
 
 
 @router.post("/dashboard/ui/history/mark-read", response_class=HTMLResponse,
@@ -865,3 +963,73 @@ def mark_read_ui(request: Request, tenant_id: str = Depends(dashboard_auth),
                  resource=Depends(get_dynamo_resource)):
     mark_history_read(tenant_id=tenant_id, resource=resource)
     return HTMLResponse('<p class="field-hint" data-live>Marked as read.</p>')
+
+
+# --- taking the evidence out of the product --------------------------------
+
+# Excel and Sheets execute a cell that opens with one of these, so a value
+# that reaches a spreadsheet is a formula and not a string. No address can
+# begin with one and none of the columns below are free text today, which is
+# exactly the condition that makes this cheap to keep and expensive to add
+# back after the first column that is.
+_FORMULA_LEAD = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_cell(value) -> str:
+    text = "" if value is None else str(value)
+    if text.startswith(_FORMULA_LEAD):
+        text = "'" + text
+    if any(c in text for c in ',"\n\r'):
+        text = '"' + text.replace('"', '""') + '"'
+    return text
+
+
+@router.get("/dashboard/ui/mitigations.csv")
+def export_mitigations(request: Request,
+                       tenant_id: str = Depends(dashboard_auth),
+                       resource=Depends(get_dynamo_resource)):
+    """What is being held right now, as a file.
+
+    A decision this product makes ends up in someone else's ticket, someone
+    else's spreadsheet, or someone else's compliance pack, and until now the
+    only way out of the console was a screenshot. A screenshot loses the one
+    column that matters in a dispute - whether the customer's own servers had
+    actually applied the rule yet - because it is the column nobody thinks to
+    scroll to.
+
+    The same Query the page already runs, rendered differently. No new index,
+    no new access pattern, and no wider window: this is the active set, which
+    is bounded by the mitigation TTLs rather than by a page size.
+    """
+    now = datetime.now(timezone.utc)
+    mitigations = list_mitigations(tenant_id=tenant_id, resource=resource)
+    agents = AgentsTable(resource).query_by_tenant(tenant_id)
+    # The file is evidence, so it carries the same caveat the screen does: a
+    # row exported while enforcement is paused was never in force anywhere.
+    paused = bool((TenantsTable(resource).get(tenant_id=tenant_id) or {})
+                  .get("enforce_paused_at"))
+    rows = _rows(mitigations, now, agents, paused=paused)
+
+    lines = ["source,distance_sigma,doing,at_your_servers,ends,reason"]
+    for r in rows:
+        lines.append(",".join(_csv_cell(v) for v in (
+            r["ip"],
+            "" if r["z"] is None else "%.2f" % abs(r["z"]),
+            r["tier_label"],
+            r["reach"]["detail"],
+            r["expires_exact"] or "no expiry",
+            r["reason"],
+        )))
+
+    stamp = now.strftime("%Y%m%dT%H%M%SZ")
+    return Response(
+        "\r\n".join(lines) + "\r\n",
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="traffic-shaper-{stamp}.csv"',
+            # The active set is a moment in time and a cached copy of it is a
+            # wrong answer, not a stale one.
+            "Cache-Control": "no-store",
+        },
+    )

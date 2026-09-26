@@ -86,7 +86,7 @@ def landing(request: Request, id_token: str | None = Cookie(default=None)):
 
     chart = deviation_chart(
         _hero_points(),
-        caption="Example only. No customer traffic is published here.",
+        caption="Chỉ là ví dụ. Không có traffic của khách hàng nào được đăng ở đây.",
         label_for=_hero_label,
     )
     return templates.TemplateResponse(request, "landing.html", {

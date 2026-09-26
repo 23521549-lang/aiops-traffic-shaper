@@ -71,8 +71,8 @@ def test_the_screen_shows_the_shape_of_normal(client, dynamo_resource):
 
     page = client.get("/dashboard/ui/model").text
 
-    for label in ("Request rate", "Error ratio", "POST ratio",
-                  "User-agent spread"):
+    for label in ("Số request mỗi phút", "Tỉ lệ lỗi", "Tỉ lệ POST",
+                  "Độ tản của user agent"):
         assert label in page
 
 
@@ -151,7 +151,7 @@ def test_the_screen_says_plainly_what_it_cannot_tell_you(client, dynamo_resource
 
     page = client.get("/dashboard/ui/model").text.lower()
 
-    assert "cannot" in page or "does not report back" in page
+    assert "không nói được" in page or "does not report back" in page
 
 
 def test_the_history_summary_does_not_read_as_requests_either(client, dynamo_resource):
@@ -168,10 +168,10 @@ def test_the_history_summary_does_not_read_as_requests_either(client, dynamo_res
     page = client.get("/dashboard/ui/history").text
     # The headline specifically, not the table header below it: a column
     # called "Decisions" does not stop "412 blocked" reading as traffic.
-    at = page.index("c-page-summary")
+    at = page.index('class="sub"')
     headline = page[at:page.index("</p>", at)]
 
-    assert "decision" in headline.lower()
+    assert "đợt" in headline
 
 
 def test_the_screen_never_fetches_the_blob(client, dynamo_resource, monkeypatch):

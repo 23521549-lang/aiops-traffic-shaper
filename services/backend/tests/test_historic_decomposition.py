@@ -72,7 +72,7 @@ def test_an_episode_from_last_week_still_explains_itself(client, dynamo_resource
     _trained(dynamo_resource)
     _episode(dynamo_resource)
 
-    assert "POST ratio" in client.get("/dashboard/ui/history?ip=10.0.0.7").text
+    assert "Tỉ lệ POST" in client.get("/dashboard/ui/history?ip=10.0.0.7").text
 
 
 def test_filtering_by_source_actually_filters(client, dynamo_resource):
@@ -103,7 +103,7 @@ def test_a_baseline_that_has_moved_since_is_said_plainly(client, dynamo_resource
     _trained(dynamo_resource)
     _episode(dynamo_resource, version="an-older-model")
 
-    assert "retrained" in client.get("/dashboard/ui/history?ip=10.0.0.7").text.lower()
+    assert "huấn luyện lại" in client.get("/dashboard/ui/history?ip=10.0.0.7").text.lower()
 
 
 def test_a_baseline_that_has_not_moved_makes_no_such_claim(client, dynamo_resource):
@@ -113,7 +113,7 @@ def test_a_baseline_that_has_not_moved_makes_no_such_claim(client, dynamo_resour
     _, stats = load_model_and_stats(dynamo_resource, "t-1")
     _episode(dynamo_resource, version=stats.version)
 
-    assert "retrained" not in client.get("/dashboard/ui/history?ip=10.0.0.7").text.lower()
+    assert "huấn luyện lại" not in client.get("/dashboard/ui/history?ip=10.0.0.7").text.lower()
 
 
 def test_an_episode_that_never_recorded_its_version_claims_nothing(client, dynamo_resource):
@@ -123,7 +123,7 @@ def test_an_episode_that_never_recorded_its_version_claims_nothing(client, dynam
     _trained(dynamo_resource)
     _episode(dynamo_resource)
 
-    assert "retrained" not in client.get("/dashboard/ui/history?ip=10.0.0.7").text.lower()
+    assert "huấn luyện lại" not in client.get("/dashboard/ui/history?ip=10.0.0.7").text.lower()
 
 
 def test_an_episode_with_no_vector_says_so_instead_of_inventing_one(client, dynamo_resource):
@@ -132,7 +132,7 @@ def test_an_episode_with_no_vector_says_so_instead_of_inventing_one(client, dyna
 
     page = client.get("/dashboard/ui/history?ip=10.0.0.7").text
 
-    assert "does not carry" in page.lower()
+    assert "chưa mang" in page.lower()
 
 
 def test_an_unknown_source_is_an_empty_filter_not_an_error(client, dynamo_resource):
@@ -142,19 +142,11 @@ def test_an_unknown_source_is_an_empty_filter_not_an_error(client, dynamo_resour
     assert client.get("/dashboard/ui/history?ip=10.0.0.99").status_code == 200
 
 
-def test_the_grid_keeps_measuring_everything(client, dynamo_resource):
-    """The grid above is the whole tenant, hour by hour. Filtering it to one
-    source would be a different quantity wearing the same axis, under a
-    caption that would still say what it said before."""
-    _trained(dynamo_resource)
-    _episode(dynamo_resource)
-    _episode(dynamo_resource, ip="10.0.0.9")
-
-    page = client.get("/dashboard/ui/history?ip=10.0.0.7").text
-    grid = page[page.index("c-grid"):page.index("c-filter-note")]
-
-    assert grid.count('class="c-grid-cell') == 2
-
+# REMOVED: the grid kept measuring everything below the gate while a
+# single source was filtered. The timeline plots episodes, so a filter
+# narrows the marks themselves and there is no background left to keep
+# measuring. The guarantee it protected - a filter never silently
+# changes what was counted - now has nothing to attach to.
 
 def test_the_filter_says_what_it_is_filtering_and_how_to_leave(client, dynamo_resource):
     """A filtered list that looks like an unfiltered one is how an operator

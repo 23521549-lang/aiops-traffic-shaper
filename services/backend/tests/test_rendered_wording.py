@@ -62,25 +62,32 @@ def test_no_rule_uppercases_text_that_can_contain_sigma():
 
 
 def test_the_band_labels_say_sigma(client):
-    page = client.get("/dashboard/ui").text
-    assert "σ slowed" in page.lower() or "σ SLOWED" in page
+    """The sigma bands live on the public page now. The rule is unchanged:
+    CSS uppercases Greek, so a band reading "4σ" becomes "4Σ" - summation,
+    on a product that sells standard deviations."""
+    from fastapi.testclient import TestClient
+
+    from services.backend.main import app as _app
+
+    page = TestClient(_app).get("/").text
+    assert "σ" in page
     assert "Σ" not in page, "Σ is summation; this product measures in σ"
 
 
 # --- counting in words ---------------------------------------------------
 
 @pytest.mark.parametrize("seconds,expected", [
-    (1, "1 second ago"),
-    (5, "5 seconds ago"),
-    (60, "1 minute ago"),
-    (180, "3 minutes ago"),
-    (3600, "1 hour ago"),
-    (7200, "2 hours ago"),
-    (86400, "1 day ago"),
-    (172800, "2 days ago"),
+    (1, "1 giây trước"),
+    (5, "5 giây trước"),
+    (60, "1 phút trước"),
+    (180, "3 phút trước"),
+    (3600, "1 giờ trước"),
+    (7200, "2 giờ trước"),
+    (86400, "1 ngày trước"),
+    (172800, "2 ngày trước"),
 ])
 def test_ages_agree_with_themselves(seconds, expected):
-    """"1 minutes ago" and "1 seconds ago" shipped on the agents table, the
+    """"1 phút trước" and "1 giây trước" shipped on the agents table, the
     page header and the fleet view at once, because two of the four branches
     handled the plural and two did not."""
     assert humanise_age(seconds) == expected
@@ -98,8 +105,8 @@ def test_the_page_summary_separates_its_clauses(client, dynamo_resource):
         agent_version="1.4.0", api_key_hash="h", status="active")
 
     page = client.get("/dashboard/ui").text
-    assert "ago·" not in page
-    assert "ago ·" in page
+    assert "trước·" not in page
+    assert "trước ·" in page
 
 
 # --- no raw enums in front of a customer ---------------------------------

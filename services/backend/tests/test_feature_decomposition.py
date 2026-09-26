@@ -118,7 +118,7 @@ def test_a_feature_with_no_spread_is_not_infinite(trained):
     rows = decompose([1.2, 0.9, 3000.0, 0.15, 0.6, 1.0, 0.08], means, stds)
     flat = next(r for r in rows if r["name"] == "error_ratio")
     assert flat["sigma"] is None
-    assert flat["display"] == "not measurable"
+    assert flat["display"] == "không đo được"
 
 
 def test_missing_statistics_produce_nothing_rather_than_guesses(trained):
@@ -130,7 +130,7 @@ def test_missing_statistics_produce_nothing_rather_than_guesses(trained):
 
 
 def test_every_feature_is_named_in_words(trained):
-    """`unique_uri_ratio` is a column in a dataframe. "Distinct URLs" is
+    """`unique_uri_ratio` is a column in a dataframe. "Số đường dẫn khác nhau" is
     something a person reading an incident can act on."""
     rows = decompose([1.2, 0.03, 3000.0, 0.15, 0.6, 1.0, 0.08],
                      trained.feature_means, trained.feature_stds)

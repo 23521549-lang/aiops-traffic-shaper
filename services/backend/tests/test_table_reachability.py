@@ -26,8 +26,8 @@ _CSS = Path(__file__).resolve().parents[1] / "ui" / "static" / "console.css"
 
 # Console tables only. The landing page has its own `.table-scroll`, which
 # already does this and is tested by being on a page with no fixed height.
-_CONSOLE_TABLE = re.compile(r'<table class="c-table"')
-_SCROLLER = 'class="c-table-scroll"'
+_CONSOLE_TABLE = re.compile(r'<table class="tbl')
+_SCROLLER = 'class="tbl-wrap"'
 
 
 def _console_templates():
@@ -69,6 +69,6 @@ def test_the_scroll_container_actually_scrolls():
     """The class has to exist and has to be the thing that scrolls, or the
     markup above is decoration."""
     css = re.sub(r"/\*.*?\*/", "", _CSS.read_text(encoding="utf-8"), flags=re.S)
-    rule = re.search(r"\.c-table-scroll\s*\{([^}]*)\}", css)
-    assert rule, ".c-table-scroll is used in templates and defined nowhere"
+    rule = re.search(r"\.tbl-wrap\s*\{([^}]*)\}", css)
+    assert rule, ".tbl-wrap is used in templates and defined nowhere"
     assert "overflow-x" in rule.group(1)

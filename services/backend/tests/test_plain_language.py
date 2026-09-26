@@ -63,9 +63,9 @@ def test_the_gate_screen_says_what_sigma_means(client, dynamo_resource):
     _with_model(dynamo_resource)
 
     page = client.get("/dashboard/ui").text
-    at = page.index("c-plain")
+    at = page.index('class="plain"')
 
-    assert "how unusual" in page[at:at + 500].lower()
+    assert "mức khác thường" in page[at:at + 500].lower()
 
 
 def test_the_explanation_comes_before_the_axis(client, dynamo_resource):
@@ -75,7 +75,7 @@ def test_the_explanation_comes_before_the_axis(client, dynamo_resource):
 
     page = client.get("/dashboard/ui").text
 
-    assert page.index("c-plain") < page.index("c-axis")
+    assert page.index('class="plain"') < page.index('class="pipe"')
 
 
 def test_the_scale_is_labelled_in_words_at_both_ends(client, dynamo_resource):
@@ -83,10 +83,17 @@ def test_the_scale_is_labelled_in_words_at_both_ends(client, dynamo_resource):
     tell whether 6 is the good end."""
     _with_model(dynamo_resource)
 
-    page = client.get("/dashboard/ui").text
+    # The sigma scale lives on the public page now, and a signed-in client
+    # is redirected off it, so the words are checked with a client that has
+    # not signed in - which is also the reader the labels exist for.
+    from fastapi.testclient import TestClient
 
-    assert "like your normal day" in page
-    assert "very unlike you" in page
+    from services.backend.main import app as _app
+
+    public = TestClient(_app).get("/").text
+
+    assert "giống ngày thường của bạn" in public
+    assert "rất không giống bạn" in public
 
 
 def test_the_words_do_not_replace_the_numbers(client, dynamo_resource):
@@ -104,7 +111,7 @@ def test_the_words_do_not_replace_the_numbers(client, dynamo_resource):
 def test_a_tenant_with_no_model_is_not_taught_a_unit_it_cannot_see(client):
     """Nothing is measured yet, the scale carries no reading, and the
     explanation would be a lesson about nothing on screen."""
-    assert "c-plain" not in client.get("/dashboard/ui").text
+    assert 'class="plain"' not in client.get("/dashboard/ui").text
 
 
 def test_the_explanation_is_one_sentence_a_person_would_say(client, dynamo_resource):
@@ -113,23 +120,14 @@ def test_the_explanation_is_one_sentence_a_person_would_say(client, dynamo_resou
     _with_model(dynamo_resource)
 
     page = client.get("/dashboard/ui").text
-    at = page.index("c-plain")
+    at = page.index('class="plain"')
     block = page[at:page.index("</p>", at)]
 
     for jargon in ("standard deviation", "z-score", "gaussian", "variance"):
         assert jargon not in block.lower(), jargon
 
 
-def test_the_history_screen_labels_its_scale_too(client, dynamo_resource):
-    """Same ruler, same obligation. The rotated axis carries the same unit
-    and had the same silence."""
-    _with_model(dynamo_resource)
-    from services.backend.core.tables import TenantHistoryTable
+# REMOVED: the history screen labelling its sigma scale in words.
+# It no longer has a sigma scale. The timeline plots episodes against
+# TIME, and its axis is labelled in days, which needs no gloss.
 
-    now = int(datetime.now(timezone.utc).timestamp())
-    TenantHistoryTable(dynamo_resource).record_traffic(
-        "t-1", TenantHistoryTable.hour_of(now), requests=400, bins={"n300": 5})
-
-    page = client.get("/dashboard/ui/history").text
-
-    assert "like your normal day" in page

@@ -67,3 +67,10 @@ class TelemetryResponse(BaseModel):
     # those, each carrying a seven-float vector, is ~10KB every five seconds
     # — about 172MB/day of egress for what is a set membership test.
     active_ips: list[str] = []
+    # False while the customer has paused enforcement. An agent too old to
+    # read this field still does the right thing, because `active_ips` comes
+    # back empty and its reconcile releases every local rule - which is the
+    # whole behaviour. The flag exists so a current agent can say WHY it
+    # released them in its log, instead of reporting what looks like the
+    # backend having lost every decision.
+    enforce: bool = True

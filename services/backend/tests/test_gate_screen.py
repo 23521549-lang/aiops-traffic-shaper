@@ -57,11 +57,20 @@ def _blocked(resource, ip="203.0.113.7", tenant="t-1"):
         reason="behavioral_anomaly", expires_at=0)
 
 
-def test_the_axis_is_on_the_page(client, dynamo_resource):
-    _live_agent(dynamo_resource)
-
-    assert "c-axis" in client.get("/dashboard/ui").text
-
+# FOUR TESTS REMOVED HERE, and the reason matters more than the tests.
+#
+# They guarded the sigma field on this screen: the scatter of every measured
+# source, its density ridge, and the paired table a screen reader uses. The
+# approved Gate screen does not draw it. It draws the PATH a request takes
+# instead, which answers "what happens to my traffic" where the field
+# answered "where does every source sit".
+#
+# Those are different questions and the second one no longer has a screen.
+# The chart still exists - the landing page renders it from example data,
+# and test_axis_markup.py and test_colour_is_distance.py still hold its
+# markup - but nothing shows a CUSTOMER their own distribution any more.
+# That is a loss, it was deliberate, and it is written down here rather than
+# left to be discovered.
 
 def test_a_dead_agent_draws_no_marks_at_all(client, dynamo_resource):
     """The rule, asserted on rendered markup: no reading on screen, not a
@@ -70,15 +79,14 @@ def test_a_dead_agent_draws_no_marks_at_all(client, dynamo_resource):
 
     page = client.get("/dashboard/ui").text
 
-    assert "c-mark" not in page
     assert 'data-plot="outline"' in page
 
 
-def test_a_fed_axis_does_draw_its_marks(client, dynamo_resource):
+def test_a_fed_screen_says_it_is_live(client, dynamo_resource):
     _live_agent(dynamo_resource)
     _blocked(dynamo_resource)
 
-    assert "c-mark" in client.get("/dashboard/ui").text
+    assert 'data-plot="live"' in client.get("/dashboard/ui").text
 
 
 def test_a_dead_agent_and_a_quiet_one_do_not_look_the_same(client, dynamo_resource):
@@ -90,26 +98,6 @@ def test_a_dead_agent_and_a_quiet_one_do_not_look_the_same(client, dynamo_resour
 
     assert 'data-plot="outline"' in dead
     assert 'data-plot="live"' in quiet
-
-
-def test_the_density_below_the_gate_is_drawn(client, dynamo_resource):
-    _live_agent(dynamo_resource)
-    TenantHistoryTable(dynamo_resource).record_traffic(
-        "t-1", _hour_now(), requests=10, bins={"n300": 40, "n350": 12})
-
-    assert "c-density" in client.get("/dashboard/ui").text
-
-
-def test_the_page_costs_the_same_bytes_for_a_huge_tenant(client, dynamo_resource):
-    """Density is why. Ten thousand sources below the gate must not be ten
-    thousand elements."""
-    _live_agent(dynamo_resource)
-    TenantHistoryTable(dynamo_resource).record_traffic(
-        "t-1", _hour_now(), requests=10, bins={"n300": 10_000})
-
-    page = client.get("/dashboard/ui").text
-
-    assert page.count("c-density") <= 13
 
 
 def test_a_throttled_tenant_is_not_told_to_restart_its_agent(client, dynamo_resource):
@@ -126,19 +114,8 @@ def test_a_throttled_tenant_is_not_told_to_restart_its_agent(client, dynamo_reso
 
     page = client.get("/dashboard/ui").text
 
-    assert "will not help" in page
+    assert "không giúp gì" in page
     assert 'data-plot="frozen"' in page
-
-
-def test_the_axis_carries_a_paired_table(client, dynamo_resource):
-    """Position on an axis is unreadable to a screen reader. The table is a
-    summary, not a matrix."""
-    _live_agent(dynamo_resource)
-
-    page = client.get("/dashboard/ui").text
-
-    assert "sr-only" in page
-    assert "Region" in page
 
 
 def test_no_other_tenants_address_reaches_the_page(client, dynamo_resource):

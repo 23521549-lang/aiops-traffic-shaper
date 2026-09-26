@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% import "_brand.html" as brand %}
-{% block title %}Sign in · Traffic Shaper{% endblock %}
+{% block title %}Đăng nhập · Traffic Shaper{% endblock %}
 {% block body %}
 <div class="login-page">
   <div class="card login-card">
     {{ brand.lockup(24, stacked=true) }}
-    <h1>Sign in</h1>
+    <h1>Đăng nhập</h1>
 
     {# role="alert" AND tabindex="-1": the alert role announces it, and
        signed-post.js moves focus here afterwards. A live region inserted
@@ -28,28 +28,28 @@
                autofocus required>
       </div>
       <div class="field login-field">
-        <label for="password">Password <span class="req" aria-hidden="true">*</span></label>
+        <label for="password">Mật khẩu <span class="req" aria-hidden="true">*</span></label>
         <input type="password" id="password" name="password"
                autocomplete="current-password" required>
       </div>
-      <button type="submit" class="btn btn-primary login-submit">Sign in</button>
+      <button type="submit" class="btn btn-primary login-submit">Đăng nhập</button>
     </form>
 
     {# Kept, not featured. The agent CLI's published `register --token`
        workflow hands out an ID token, so removing this would break an
        install flow that is already documented. #}
     <details class="login-alt">
-      <summary>Sign in with an ID token instead</summary>
+      <summary>Đăng nhập bằng ID token</summary>
       <form method="post" action="/ui/login" data-signed-post>
         <div class="field login-field">
           <label for="id_token">Cognito ID token</label>
           <input type="password" id="id_token" name="id_token"
                  autocomplete="off" aria-describedby="id_token-hint">
           <span class="field-hint" id="id_token-hint">
-            For the agent CLI and for scripted access.
+            Dành cho CLI của agent và cho truy cập bằng script.
           </span>
         </div>
-        <button type="submit" class="btn login-submit">Sign in with token</button>
+        <button type="submit" class="btn login-submit">Đăng nhập bằng token</button>
       </form>
     </details>
   </div>

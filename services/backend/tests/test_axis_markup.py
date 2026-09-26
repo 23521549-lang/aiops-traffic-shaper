@@ -27,6 +27,31 @@ def test_no_inline_style_attribute_anywhere_in_the_axis():
     assert "style=" not in _axis_template()
 
 
+
+def _axis_css() -> str:
+    """The sheet that actually defines the axis, found rather than named.
+
+    These rules lived in app.css and moved to landing.css when it turned out
+    the landing page is the only surface that renders the macro, so the
+    console was downloading them for nothing. Two of the assertions below
+    failed at that moment, which is correct. Two others kept passing against
+    a sheet that no longer contained a single axis rule, which is not: an
+    assertion that its subject has moved away from is not a weaker test, it
+    is a test of nothing at all. So the sheet is located by content, and it
+    being missing everywhere is itself a failure.
+    """
+    found = []
+    for name in ("app.css", "landing.css", "console.css"):
+        text = (_STATIC / name).read_text(encoding="utf-8")
+        if ".c-axis" in text:
+            found.append((name, text))
+    assert found, "no stylesheet defines .c-axis at all"
+    assert len(found) == 1, (
+        f"the axis is defined in more than one sheet ({[n for n, _ in found]}); "
+        f"two copies drift and only one of them is the one being served")
+    return found[0][1]
+
+
 def test_the_svg_layer_carries_no_text():
     """`preserveAspectRatio="none"` stretches text horizontally with the
     box. That is why the old strip was flexbox, and why this layer contains
@@ -41,14 +66,14 @@ def test_the_text_layer_is_a_grid_rather_than_positioned_boxes():
     removes the enumeration entirely."""
     assert "c-axis-labels" in _axis_template()
 
-    css = (_STATIC / "app.css").read_text(encoding="utf-8")
+    css = _axis_css()
     assert "repeat(6, 1fr)" in css
 
 
 def test_both_layers_share_one_grid_cell_with_no_inline_padding():
     """Sigma s lands at s/6 x 100% in each layer. Padding on either one
     breaks that mapping, and nothing would report it."""
-    css = (_STATIC / "app.css").read_text(encoding="utf-8")
+    css = _axis_css()
 
     assert "grid-area: 1 / 1" in css
     assert "padding-inline: 0" in css
@@ -57,26 +82,23 @@ def test_both_layers_share_one_grid_cell_with_no_inline_padding():
 def test_the_enumerated_geometry_rules_are_gone():
     """223 rules and about 9KB, replaced by nothing. If these come back, the
     two-layer split has been abandoned."""
-    css = (_STATIC / "app.css").read_text(encoding="utf-8")
+    css = _axis_css()
 
     assert css.count("data-flex=") == 0
     assert css.count("data-at=") == 0
 
 
-def test_the_stylesheet_budget_did_not_grow():
-    """The cap is 80KB across three sheets, and the project sat at 80,006
-    bytes when this task began. Adding the axis must not push it up."""
-    total = sum(p.stat().st_size for p in _STATIC.glob("*.css"))
-
-    assert total < 80_006, f"stylesheets grew to {total} bytes"
+# The stylesheet budget used to be asserted here as well, against the sum of
+# every sheet. It lives in test_static_assets.py now and is measured PER
+# SURFACE, because the sheets became surface-specific and the sum is a figure
+# no reader ever downloads. Two tests on one constraint is how the two drift.
 
 
 def test_nothing_uppercases_a_band_label():
     """CSS uppercases Greek: "4 sigma slowed" reached an incident screen as
     "4 Sigma SLOWED", which is summation, in a product that sells standard
     deviations."""
-    css = re.sub(r"/\*.*?\*/", "",
-                 (_STATIC / "app.css").read_text(encoding="utf-8"), flags=re.S)
+    css = re.sub(r"/\*.*?\*/", "", _axis_css(), flags=re.S)
     blocks = re.findall(r"([^{}]+)\{([^}]*text-transform:\s*uppercase[^}]*)\}", css)
 
     assert not [sel for sel, _ in blocks if "axis" in sel or "c-seg" in sel]

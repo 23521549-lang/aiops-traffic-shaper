@@ -208,8 +208,8 @@ def suspend_tenant_ui(request: Request, tenant_id: str, back: str = "",
         return sent_back
     return templates.TemplateResponse(request, "_tenants_table.html", {
         **_tenants_ctx(resource),
-        "message": (f"{tenant_id} suspended. "
-                    f"{result.get('agents_revoked', 0)} agent key(s) revoked."),
+        "message": (f"Đã tạm ngưng {tenant_id}. "
+                    f"Thu hồi {result.get('agents_revoked', 0)} khoá agent."),
     })
 
 
@@ -224,8 +224,8 @@ def reactivate_tenant_ui(request: Request, tenant_id: str, back: str = "",
         return sent_back
     return templates.TemplateResponse(request, "_tenants_table.html", {
         **_tenants_ctx(resource),
-        "message": (f"{tenant_id} reactivated. Agent keys stay revoked, "
-                    f"so its agents must register again."),
+        "message": (f"Đã mở lại {tenant_id}. Khoá agent vẫn bị thu hồi, "
+                    f"nên các agent phải đăng ký lại."),
     })
 
 

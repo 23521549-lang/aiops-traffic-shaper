@@ -31,7 +31,7 @@ from services.backend.tests.conftest import sign_test_token
 #
 # This was a module-level constant, and liveness is derived by comparing
 # last_seen_at against the clock AT REQUEST TIME with a five-minute cutoff.
-# On a nine-minute suite run the agent seeded "20 seconds ago" was already
+# On a nine-minute suite run the agent seeded "20 giây trước" was already
 # nine minutes stale by the time its test executed, so it read as Quiet and
 # the assertion failed - in the full run only, never when the file was run
 # on its own.
@@ -83,8 +83,8 @@ def test_a_quiet_agent_is_named_as_quiet(client, dynamo_resource):
     _agent(dynamo_resource, "t-1", "a-2", "staging-01", timedelta(hours=9))
 
     page = client.get("/dashboard/ui/agents").text
-    assert "Reporting" in page
-    assert "Quiet" in page
+    assert "Đang báo cáo" in page
+    assert "Im lặng" in page
 
 
 def test_an_agent_is_listed_by_the_name_its_owner_gave_it(client, dynamo_resource):
@@ -141,7 +141,7 @@ def test_the_json_route_is_scoped_to_the_token(client, dynamo_resource):
 
 def test_no_agents_at_all_explains_the_next_step(client):
     page = client.get("/dashboard/ui/agents").text
-    assert "No agent has registered" in page
+    assert "Chưa có agent nào" in page
 
 
 def test_a_revoked_agent_says_why(client, dynamo_resource):
@@ -152,4 +152,4 @@ def test_a_revoked_agent_says_why(client, dynamo_resource):
            status="revoked")
 
     page = client.get("/dashboard/ui/agents").text
-    assert "Revoked" in page
+    assert "Đã thu hồi" in page

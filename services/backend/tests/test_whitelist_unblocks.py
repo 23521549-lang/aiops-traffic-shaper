@@ -82,7 +82,12 @@ def test_the_agent_stops_being_told_to_block_a_whitelisted_ip(dynamo_resource):
     add_whitelist(WhitelistRequest(ip="203.0.113.4", reason=""),
                   tenant_id="t-1", claims=CLAIMS, resource=dynamo_resource)
 
-    served = {d.ip for d in list_decisions(tenant_id="t-1", resource=dynamo_resource)}
+    # Called as a plain function, so every dependency is passed by hand.
+    # `list_decisions` takes the whole authenticated agent now, because it
+    # has to honour a paused tenant and the tenant item is already in that
+    # dict - re-reading it would add a GetItem to the agent's poll.
+    agent = {"tenant_id": "t-1", "_tenant": {"tenant_id": "t-1"}}
+    served = {d.ip for d in list_decisions(agent=agent, resource=dynamo_resource)}
     assert served == {"198.51.100.7"}
 
 
@@ -136,12 +141,12 @@ def test_the_dashboard_stops_listing_it_immediately(dynamo_resource, cognito_tes
     # precise marker for "this IP is listed as blocked". The address itself
     # is not: after whitelisting it legitimately appears several times in the
     # whitelist table (cell, hx-delete URL, hx-confirm text).
-    assert "Blocked" in client.get("/dashboard/ui").text
+    assert "Đang chặn" in client.get("/dashboard/ui").text
 
     resp = client.post("/dashboard/ui/allowed?ip=203.0.113.4",
                        headers={"X-CSRF-Token": client.cookies["csrf_token"]})
     assert resp.status_code == 200
 
     page = client.get("/dashboard/ui").text
-    assert "Blocked" not in page
+    assert "Đang chặn" not in page
     assert client.get("/dashboard/ui/allowed").text.count("203.0.113.4") >= 1

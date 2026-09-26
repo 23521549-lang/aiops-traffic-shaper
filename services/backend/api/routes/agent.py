@@ -12,7 +12,6 @@ from services.backend.api.cognito_auth import (
     actor_of, dashboard_auth, dashboard_claims,
 )
 from services.backend.api.dependencies import (
-    agent_auth,
     assert_tenant_active,
     authenticated_agent,
     enforce_tenant_quota,
@@ -159,6 +158,12 @@ def ingest_telemetry(
     tenant_record = agent.get("_tenant") or {}
     gates = {k: float(tenant_record[k])
              for k in ("tier1_z", "tier2_z") if k in tenant_record}
+    # Paused means the customer's servers enforce nothing. It does NOT mean
+    # the platform stops looking: every decision below is still written, and
+    # still reaches history, so the console can answer "what did I miss while
+    # it was off" with evidence rather than with a gap. Scoring costs nothing
+    # extra here - the batch has been paid for already.
+    paused = bool(tenant_record.get("enforce_paused_at"))
 
     decisions: list[MitigationState] = []
     # The shape below the gate, so the gate can be previewed downward.
@@ -248,18 +253,36 @@ def ingest_telemetry(
     # human has lifted, instead of holding it for up to an hour — `decisions`
     # cannot do that job, because it only covers IPs with traffic in this
     # batch and a blocked IP stops sending traffic.
-    active = MitigationStateTable(resource).query_active(tenant_id)
+    # Skipped entirely while paused: there is nothing to serve, and a Query
+    # whose result is thrown away is a read the free tier still pays for.
+    active = ([] if paused
+              else MitigationStateTable(resource).query_active(tenant_id))
 
     return TelemetryResponse(
-        received=len(batch.logs), processed_ips=len(touched_ips), decisions=decisions,
+        received=len(batch.logs), processed_ips=len(touched_ips),
+        # An empty served set with `active_ips` PRESENT is the instruction to
+        # release. Omitting the key would mean "I cannot tell you", which the
+        # agent correctly treats as "change nothing" - see runner._apply.
+        decisions=[] if paused else decisions,
         active_ips=[item["ip"] for item in active],
+        enforce=not paused,
     )
 
 
 @router.get("/agent/v1/decisions", response_model=list[MitigationState])
 def list_decisions(
-    tenant_id: str = Depends(agent_auth),
+    agent: dict = Depends(authenticated_agent),
     resource=Depends(get_dynamo_resource),
 ) -> list[MitigationState]:
-    items = MitigationStateTable(resource).query_active(tenant_id)
+    """The same answer the telemetry response carries, for an agent that has
+    nothing to report yet.
+
+    It has to honour the pause too. A second endpoint that kept serving
+    decisions the first one had stopped serving would put a paused tenant
+    back into enforcement the moment their traffic went quiet enough for the
+    agent to poll here instead.
+    """
+    if (agent.get("_tenant") or {}).get("enforce_paused_at"):
+        return []
+    items = MitigationStateTable(resource).query_active(agent["tenant_id"])
     return [MitigationState(**item) for item in items]

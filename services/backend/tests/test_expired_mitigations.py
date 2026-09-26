@@ -52,7 +52,13 @@ def test_the_agent_is_not_handed_decisions_that_already_ended(dynamo_resource):
     _put(dynamo_resource, "203.0.113.1", now - 1)
     _put(dynamo_resource, "203.0.113.2", now + 3600)
 
-    served = {d.ip for d in list_decisions(tenant_id="t-1", resource=dynamo_resource)}
+    # Called as a plain function, so dependencies are passed by hand.
+    # `list_decisions` takes the authenticated agent now: it has to honour
+    # a tenant that has paused enforcement, and the tenant item is already
+    # inside that dict, so reading it again would add a GetItem to the
+    # agent's poll.
+    agent = {"tenant_id": "t-1", "_tenant": {"tenant_id": "t-1"}}
+    served = {d.ip for d in list_decisions(agent=agent, resource=dynamo_resource)}
     assert served == {"203.0.113.2"}
 
 

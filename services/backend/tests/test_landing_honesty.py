@@ -36,7 +36,7 @@ def test_the_example_chart_says_it_is_an_example(page):
     reads nothing else still sees it."""
     art = page[page.index("lp-hero-art"):page.index("lp-section")]
 
-    assert "example" in art.lower()
+    assert "ví dụ" in art.lower()
 
 
 def test_the_caption_does_not_describe_events_that_did_not_happen(page):
@@ -73,7 +73,7 @@ def test_the_example_is_named_as_such_in_the_accessible_description_too(page):
     # <title>, not an aria-label.
     title = art[art.index("<title>"):art.index("</desc>")]
 
-    assert "example" in title.lower()
+    assert "ví dụ" in title.lower()
 
 
 # --- the two properties a rewrite would quietly drop ------------------------
@@ -83,16 +83,20 @@ def test_the_page_still_says_what_it_cannot_do(page):
     """A rewrite that drops this section turns the page into every other
     security vendor's page. It is the only thing on it a competitor would
     not print."""
-    assert "doesn’t do yet" in page or "does not do yet" in page
+    assert "chưa làm được" in page
 
 
 def test_the_limits_section_is_specific_rather_than_a_gesture(page):
     """"We are always improving" is not this section. It names things the
     product does not have."""
-    at = page.lower().index("do yet")
+    at = page.lower().index("chưa làm được")
     section = page[at:at + 2500].lower()
 
-    assert section.count("no ") + section.count("not ") >= 3
+    # "chưa" and "không" are the negations this section is written with.
+    # Counting the English ones passed trivially for years and then went
+    # to zero the day the page was translated, which is the right way
+    # round: the check is about the section still naming absences.
+    assert section.count("chưa") + section.count("không") >= 3
 
 
 def test_the_landing_route_takes_no_resource_dependency():

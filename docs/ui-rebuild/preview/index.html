@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gate &middot; Traffic Shaper</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="mock"><span>Bản dựng xem thử</span><span class="sp"></span><span class="key"><span class="key-s"></span>nét đứt = chưa có trong sản phẩm</span><span><a href="index.html">index</a> &middot; <a href="agents.html">agents</a> &middot; <a href="history.html">history</a> &middot; <a href="allowed.html">allowed</a> &middot; <a href="system.html">system</a> &middot; <a href="model.html">model</a></span></div>
+<div class="app">
+  <header class="bar">
+    <span class="brand"><span class="beacon"></span>Traffic Shaper</span>
+    <span class="sp"></span>
+    <span class="who">acme-prod</span>
+    <span class="cost">Today <b>$0.00</b></span>
+    <button class="btn">Commands<kbd>K</kbd></button>
+    <button class="btn">Sign out</button>
+  </header>
+  <div class="body">
+    <nav class="nav">
+      <div class="gp">Control</div>
+      <a href="index.html" aria-current="page"><span>Gate</span><span class="ct">2</span></a>
+      <a href="history.html"><span>History</span></a>
+      <a href="allowed.html"><span>Allowed</span><span class="ct">6</span></a>
+      <div class="gp">System</div>
+      <a href="agents.html"><span>Agents</span><span class="ct">5</span></a>
+      <a href="system.html"><span>How it works</span></a>
+      <a href="model.html"><span>Model</span></a>
+    </nav>
+    <main class="main">
+      <div class="head">
+        <div>
+          <h1 class="h1">Gate</h1>
+          <p class="sub">5 agents &middot; last seen 8 s ago &middot; <b>184,220</b> requests in 24 h</p>
+        </div>
+        <div class="head-act"><button class="btn">Watch only</button><button class="btn btn--p" data-new title="Chưa có trong sản phẩm">Collect now</button></div>
+      </div>
+      <section class="sec">
+        <div class="sec-h"><h2 class="sec-t">Where a request goes</h2><div class="sec-m">live &middot; 6 s cycle &middot; 0 requests to the server</div></div>
+        <svg class="pipe" viewBox="0 0 1080 320" role="img"
+             aria-labelledby="pp-t pp-d">
+          <title id="pp-t">Where a request goes, and what decides</title>
+          <desc id="pp-d">Requests enter from your server, are read, counted into seven
+            features, scored against your own baseline, then meet the two gates you set.
+            In the last 24 hours 183,942 passed, 246 were slowed and 32 were blocked.</desc>
+
+          <text class="pipe-z" x="14" y="112">YOUR TRAFFIC</text>
+          <text class="pipe-z" x="150" y="112">ON YOUR SERVER</text>
+          <text class="pipe-z" x="510" y="112">ON THE PLATFORM</text>
+          <text class="pipe-z" x="930" y="112">OUTCOME</text>
+
+          <path class="pipe-lane" d="M26,164 L856,164 C894,164 892,78 928,78 L1046,78"/>
+          <path class="pipe-lane pipe-lane--hot" d="M26,164 L856,164 C894,164 892,168 928,168 L1046,168"/>
+          <path class="pipe-lane pipe-lane--stop" d="M26,164 L856,164 C894,164 892,258 928,258 L1046,258"/>
+
+    <rect class="pipe-stage" x="150" y="128" width="152" height="72" rx="5"/>
+    <text class="pipe-t" x="164" y="151">1 &middot; Read</text>
+    <text class="pipe-s" x="164" y="168">tails your access log</text>
+    <rect class="pipe-stage" x="330" y="128" width="152" height="72" rx="5"/>
+    <text class="pipe-t" x="344" y="151">2 &middot; Count</text>
+    <text class="pipe-s" x="344" y="168">7 features per source</text>
+    <rect class="pipe-stage" x="510" y="128" width="152" height="72" rx="5"/>
+    <text class="pipe-t" x="524" y="151">3 &middot; Score</text>
+    <text class="pipe-s" x="524" y="168">against your baseline</text>
+    <rect class="pipe-stage pipe-stage--on" x="690" y="128" width="152" height="72" rx="5"/>
+    <text class="pipe-t" x="704" y="151">4 &middot; Gate</text>
+    <text class="pipe-s" x="704" y="168">4.00 slow &middot; 5.00 block</text>
+
+          <line class="pipe-gate" x1="856" y1="40" x2="856" y2="290"/>
+
+          <circle cx="26" cy="164" r="5" fill="#0c0e12"/>
+          <text class="pipe-s" x="14" y="190">nginx</text>
+
+          <circle cx="1046" cy="78" r="5" class="p1"/>
+          <text class="pipe-n" x="1032" y="60" text-anchor="end">183,942</text>
+          <text class="pipe-s" x="1032" y="76" text-anchor="end">passed straight through</text>
+
+          <circle cx="1046" cy="168" r="5" class="p3"/>
+          <text class="pipe-n" x="1032" y="150" text-anchor="end">246</text>
+          <text class="pipe-s" x="1032" y="166" text-anchor="end">slowed for 5 minutes</text>
+
+          <circle cx="1046" cy="258" r="5" class="pk"/>
+          <text class="pipe-n" x="1032" y="240" text-anchor="end">32</text>
+          <text class="pipe-s" x="1032" y="256" text-anchor="end">blocked for 1 hour</text>
+
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="0.00s" repeatCount="indefinite" path="M26,164 L856,164 C894,164 892,78 928,78 L1046,78"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="0.42s" repeatCount="indefinite" path="M26,164 L856,164 C894,164 892,78 928,78 L1046,78"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="0.84s" repeatCount="indefinite" path="M26,164 L856,164 C894,164 892,78 928,78 L1046,78"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="1.26s" repeatCount="indefinite" path="M26,164 L856,164 C894,164 892,78 928,78 L1046,78"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="1.68s" repeatCount="indefinite" path="M26,164 L856,164 C894,164 892,78 928,78 L1046,78"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="2.10s" repeatCount="indefinite" path="M26,164 L856,164 C894,164 892,78 928,78 L1046,78"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="2.52s" repeatCount="indefinite" path="M26,164 L856,164 C894,164 892,78 928,78 L1046,78"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="2.94s" repeatCount="indefinite" path="M26,164 L856,164 C894,164 892,78 928,78 L1046,78"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="3.36s" repeatCount="indefinite" path="M26,164 L856,164 C894,164 892,78 928,78 L1046,78"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="3.78s" repeatCount="indefinite" path="M26,164 L856,164 C894,164 892,78 928,78 L1046,78"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="4.20s" repeatCount="indefinite" path="M26,164 L856,164 C894,164 892,78 928,78 L1046,78"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="4.62s" repeatCount="indefinite" path="M26,164 L856,164 C894,164 892,78 928,78 L1046,78"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="5.04s" repeatCount="indefinite" path="M26,164 L856,164 C894,164 892,78 928,78 L1046,78"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="5.46s" repeatCount="indefinite" path="M26,164 L856,164 C894,164 892,78 928,78 L1046,78"/></circle>
+    <circle class="p3" r="3.6"><animateMotion dur="6s" begin="1.10s" repeatCount="indefinite" path="M26,164 L856,164 C894,164 892,168 928,168 L1046,168"/></circle>
+    <circle class="p3" r="3.6"><animateMotion dur="6s" begin="3.00s" repeatCount="indefinite" path="M26,164 L856,164 C894,164 892,168 928,168 L1046,168"/></circle>
+    <circle class="p3" r="3.6"><animateMotion dur="6s" begin="4.90s" repeatCount="indefinite" path="M26,164 L856,164 C894,164 892,168 928,168 L1046,168"/></circle>
+    <circle class="pk" r="4.4"><animateMotion dur="6s" begin="2.6s" repeatCount="indefinite" path="M26,164 L856,164 C894,164 892,258 928,258 L1046,258"/></circle>
+        </svg>
+
+        <div class="pipe-ctl">
+          <div><span class="label">Traffic</span>
+            <span class="pill on" id="pl-flow"><i></i>flowing</span></div>
+          <div><span class="label">Reading</span>
+            <button class="btn btn--sm" data-toggle="pl-read" aria-pressed="false"
+                    data-alt="Resume reading" data-new title="Chưa có trong sản phẩm">Pause reading</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Collect now</button></div>
+          <div><span class="label">Counting</span>
+            <span class="pill on" id="pl-read"><i></i>7 of 7</span>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Which features</button></div>
+          <div><span class="label">Scoring</span>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Retrain now</button>
+            <button class="btn btn--sm" data-new title="Chưa có trong sản phẩm">Roll back v40</button></div>
+          <div><span class="label">Enforcing</span>
+            <button class="btn btn--sm" data-toggle="pl-enf" aria-pressed="false"
+                    data-alt="Enforce again" data-new title="Chưa có trong sản phẩm">Watch only</button>
+            <span class="pill on" id="pl-enf" data-alt="watching"><i></i> enforcing</span></div>
+        </div>
+      </section>
+      <section class="sec">
+        <div class="sec-h"><h2 class="sec-t">Held right now</h2><div class="sec-m">2 &middot; click a row for why</div></div>
+        <div class="src">
+          <button class="src-h" data-why-toggle aria-expanded="false" aria-controls="w-a">
+            <span><span class="src-ip">203.0.113.44</span><span class="src-sub">44 req/s at peak &middot; held 11 min</span></span>
+            <span class="src-fig">6.41</span>
+            <span class="verdict"><i></i>blocked</span>
+            <span>3 of 3 written</span>
+            <span class="src-chev">&#9656; why</span>
+          </button>
+          <div class="src-why" id="w-a" hidden>
+            <div class="why-row">
+              <span class="why-n">Requests per minute</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="290" height="12" rx="2" fill="#2f3a90"/>
+              </svg>
+              <span class="why-v">412 <span style="color:#838794">vs 8.4</span></span>
+              <span class="why-d drives">+5.8 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Time between requests</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="245" height="12" rx="2" fill="#2f3a90"/>
+              </svg>
+              <span class="why-v">0.14 s <span style="color:#838794">vs 7.2 s</span></span>
+              <span class="why-d drives">+4.9 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Distinct paths</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="205" height="12" rx="2" fill="#2f3a90"/>
+              </svg>
+              <span class="why-v">1 <span style="color:#838794">vs 23</span></span>
+              <span class="why-d drives">+4.1 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Not found rate</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="185" height="12" rx="2" fill="#5f6cc4"/>
+              </svg>
+              <span class="why-v">0.94 <span style="color:#838794">vs 0.04</span></span>
+              <span class="why-d drives">+3.7 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Session length</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="105" height="12" rx="2" fill="#5f6cc4"/>
+              </svg>
+              <span class="why-v">11 s <span style="color:#838794">vs 4 m 20 s</span></span>
+              <span class="why-d">+2.1 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Bytes per request</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="60" height="12" rx="2" fill="#ccd1f0"/>
+              </svg>
+              <span class="why-v">2 kB <span style="color:#838794">vs 14 kB</span></span>
+              <span class="why-d">+1.2 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">User agents seen</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="20" height="12" rx="2" fill="#ccd1f0"/>
+              </svg>
+              <span class="why-v">1 <span style="color:#838794">vs 3.1</span></span>
+              <span class="why-d">+0.4 sigma</span>
+            </div>
+            <p class="why-raw">Raw score -0.412 &middot; model v41 &middot; decided 11 min ago from batch #88,204</p>
+            <div class="why-act">
+              <button class="btn btn--p">Allow this source<kbd>A</kbd></button>
+              <button class="btn">Allow, it is explainable</button>
+              <button class="btn" data-new title="Chưa có trong sản phẩm">Block for 24 h</button>
+              <button class="btn">Every episode</button>
+              <button class="btn" data-new title="Chưa có trong sản phẩm">Copy as evidence</button>
+            </div>
+          </div>
+        </div>
+        <div class="src">
+          <button class="src-h" data-why-toggle aria-expanded="false" aria-controls="w-b">
+            <span><span class="src-ip">198.51.100.7</span><span class="src-sub">one path, 71% not found &middot; held 40 s</span></span>
+            <span class="src-fig">4.28</span>
+            <span class="verdict open"><i></i>slowed</span>
+            <span>1 of 3 behind</span>
+            <span class="src-chev">&#9656; why</span>
+          </button>
+          <div class="src-why" id="w-b" hidden>
+            <div class="why-row">
+              <span class="why-n">Not found rate</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="210" height="12" rx="2" fill="#2f3a90"/>
+              </svg>
+              <span class="why-v">0.71 <span style="color:#838794">vs 0.04</span></span>
+              <span class="why-d drives">+4.2 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Distinct paths</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="195" height="12" rx="2" fill="#5f6cc4"/>
+              </svg>
+              <span class="why-v">2 <span style="color:#838794">vs 23</span></span>
+              <span class="why-d drives">+3.9 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Requests per minute</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="120" height="12" rx="2" fill="#5f6cc4"/>
+              </svg>
+              <span class="why-v">61 <span style="color:#838794">vs 8.4</span></span>
+              <span class="why-d">+2.4 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Time between requests</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="110" height="12" rx="2" fill="#5f6cc4"/>
+              </svg>
+              <span class="why-v">0.98 s <span style="color:#838794">vs 7.2 s</span></span>
+              <span class="why-d">+2.2 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">User agents seen</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="55" height="12" rx="2" fill="#ccd1f0"/>
+              </svg>
+              <span class="why-v">1 <span style="color:#838794">vs 3.1</span></span>
+              <span class="why-d">+1.1 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Bytes per request</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="35" height="12" rx="2" fill="#ccd1f0"/>
+              </svg>
+              <span class="why-v">9 kB <span style="color:#838794">vs 14 kB</span></span>
+              <span class="why-d">+0.7 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Session length</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="15" height="12" rx="2" fill="#ccd1f0"/>
+              </svg>
+              <span class="why-v">3 m 02 s <span style="color:#838794">vs 4 m 20 s</span></span>
+              <span class="why-d">+0.3 sigma</span>
+            </div>
+            <p class="why-raw">Raw score -0.208 &middot; model v41 &middot; decided 40 s ago from batch #88,207</p>
+            <div class="why-act">
+              <button class="btn btn--p">Allow this source<kbd>A</kbd></button>
+              <button class="btn">Allow, it is explainable</button>
+              <button class="btn" data-new title="Chưa có trong sản phẩm">Block for 24 h</button>
+              <button class="btn">Every episode</button>
+              <button class="btn" data-new title="Chưa có trong sản phẩm">Copy as evidence</button>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="sec">
+        <div class="sec-h"><h2 class="sec-t">Slow gate</h2><div class="sec-m">13 positions &middot; click to move</div></div>
+        <div class="gate">
+          <button class="gate-row">
+            <span>3.50 sigma</span>
+            <svg class="gate-track" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true">
+              <rect class="gate-rail" width="100" height="8" rx="1"/>
+              <rect class="gate-bar grow" width="100" height="8" rx="1"/>
+            </svg>
+            <span class="gate-n">1,482</span>
+            <span class="gate-note">more false alarms</span>
+          </button>
+          <button class="gate-row">
+            <span>3.75 sigma</span>
+            <svg class="gate-track" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true">
+              <rect class="gate-rail" width="100" height="8" rx="1"/>
+              <rect class="gate-bar grow" width="63" height="8" rx="1"/>
+            </svg>
+            <span class="gate-n">940</span>
+            <span class="gate-note">more false alarms</span>
+          </button>
+          <button class="gate-row" aria-current="true">
+            <span>4.00 sigma</span>
+            <svg class="gate-track" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true">
+              <rect class="gate-rail" width="100" height="8" rx="1"/>
+              <rect class="gate-bar grow" width="25" height="8" rx="1"/>
+            </svg>
+            <span class="gate-n">371</span>
+            <span class="gate-note">in use now</span>
+          </button>
+          <button class="gate-row">
+            <span>4.25 sigma</span>
+            <svg class="gate-track" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true">
+              <rect class="gate-rail" width="100" height="8" rx="1"/>
+              <rect class="gate-bar grow" width="11" height="8" rx="1"/>
+            </svg>
+            <span class="gate-n">164</span>
+            <span class="gate-note"></span>
+          </button>
+          <button class="gate-row">
+            <span>4.50 sigma</span>
+            <svg class="gate-track" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true">
+              <rect class="gate-rail" width="100" height="8" rx="1"/>
+              <rect class="gate-bar grow" width="4" height="8" rx="1"/>
+            </svg>
+            <span class="gate-n">61</span>
+            <span class="gate-note"></span>
+          </button>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

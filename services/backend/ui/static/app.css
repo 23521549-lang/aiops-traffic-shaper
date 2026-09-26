@@ -25,17 +25,16 @@ body {
   background: var(--bg);
   color: var(--text);
   font-size: var(--text-body);
-  line-height: 1.5;
+  line-height: 1.55;
+  /* Set once, here. The product used to get equal-width digits for free by
+   * putting every number in a second, monospaced family; there is one
+   * family now, so the property has to be asked for - and there is nowhere
+   * in this product that wants proportional figures. */
+  font-variant-numeric: tabular-nums;
 }
 
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
-
-code, .mono {
-  font-family: var(--font-mono);
-  font-size: var(--text-base);
-  font-variant-numeric: tabular-nums;
-}
 
 /* One visible focus style for everything focusable. .btn and .nav-link
  * previously had none at all, so a keyboard user could not see which
@@ -79,24 +78,12 @@ select:focus-visible,
   font-weight: 700; font-size: 15px; margin-bottom: 24px;
   display: flex; align-items: center; gap: 8px;
 }
-.nav-link {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 8px 10px; border-radius: 8px; color: var(--text);
-  font-weight: 500; margin-bottom: 2px;
-  border-left: 3px solid transparent;
-}
-.nav-link:hover { background: var(--bg); text-decoration: none; }
 /* Non-colour cue as well as colour: WCAG 1.4.1. The old .active was a
  * #eef2ff fill at 1.12:1 against white — a cue only in theory. */
 .nav-link[aria-current="page"] {
   background: var(--accent-subtle); color: var(--accent);
   border-left-color: var(--accent); font-weight: 600;
 }
-.nav-count {
-  font-size: var(--text-xs); font-variant-numeric: tabular-nums;
-  color: var(--text-muted); font-weight: 600;
-}
-.nav-count[data-tone="alarm"] { color: var(--danger); }
 .main { flex: 1; min-width: 0; }
 .topbar {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
@@ -108,9 +95,11 @@ select:focus-visible,
 /* --- cards ------------------------------------------------------------ */
 
 .card {
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 20px; margin-bottom: 20px;
-  /* Contains absolutely positioned descendants, notably `.sr-only`, which
+  padding: 0; margin-bottom: 44px;
+  /* No fill, no border, no radius: the page is one surface, and a section is
+   * its heading plus the space around it. See the note on `.console`.
+   *
+   * Contains absolutely positioned descendants, notably `.sr-only`, which
    * would otherwise anchor to the initial containing block and widen the
    * page. See test_contrast.py. */
   position: relative;
@@ -159,8 +148,8 @@ tbody tr[data-tier="1"] th[scope="row"] { border-left: 3px solid var(--tier-limi
   display: inline-block; padding: 2px 9px; border-radius: 999px;
   font-size: var(--text-sm); font-weight: 600; white-space: nowrap;
 }
-.badge-blocked { background: var(--tier-blocked-bg); color: var(--tier-blocked); }
-.badge-slowed { background: var(--tier-limited-bg); color: var(--tier-limited); }/* --- buttons ---------------------------------------------------------- */
+.badge-blocked { background: var(--tier-field); color: var(--tier-blocked); }
+.badge-slowed { background: var(--tier-field); color: var(--tier-limited); }/* --- buttons ---------------------------------------------------------- */
 
 .btn {
   display: inline-flex; align-items: center; gap: 6px;
@@ -180,16 +169,9 @@ tbody tr[data-tier="1"] th[scope="row"] { border-left: 3px solid var(--tier-limi
   :root:not([data-theme="light"]) .btn-primary { color: var(--ink); }
 }
 .btn-primary:hover { background: var(--accent-hover); }
-.btn-sm { padding: 4px 10px; font-size: var(--text-sm); }
-
-/* --- forms ------------------------------------------------------------ */
-
-.form-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
 .field { display: flex; flex-direction: column; gap: 5px; }
 .field label { font-size: var(--text-sm); font-weight: 600; color: var(--text-muted); }
-.field-hint { font-size: var(--text-sm); color: var(--text-muted); }
-.field-error { font-size: var(--text-sm); color: var(--danger); font-weight: 600; }
-.req { color: var(--danger); font-weight: 700; }
+.field-hint { font-size: var(--text-sm); color: var(--text-muted); }.req { color: var(--danger); font-weight: 700; }
 
 input[type=text], input[type=password], select {
   padding: 8px 10px; border: 1px solid var(--border-interactive); border-radius: 8px;
@@ -209,11 +191,7 @@ input[type=text], input[type=password], select {
 .alert {
   padding: 12px 16px; border-radius: 8px; margin-bottom: 18px;
   font-size: var(--text-base); font-weight: 500;
-}
-.alert-warning { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
-.alert-danger { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger-border); }
-.alert-ok { background: var(--tier-normal-bg); color: var(--tier-normal); border: 1px solid var(--tier-normal); }
-.alert:empty { display: none; }
+}.alert-danger { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger-border); }.alert:empty { display: none; }
 
 /* --- sigma legend ----------------------------------------------------- */
 
@@ -254,6 +232,14 @@ input[type=text], input[type=password], select {
   min-height: 100vh; display: flex; align-items: center; justify-content: center;
   padding: 20px;
 }
+/* The exception, and the only one. Everywhere else a card was a section of
+ * a page and the box around it drew a line the reader had to cross for
+ * nothing. Sign-in is not a section of anything: it is one task alone on an
+ * empty page, and the surface under it is what says where the task is. */
+.login-card, .err-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px;
+}
 .login-card { width: 100%; max-width: 380px; }
 .login-card .brand { margin-bottom: 18px; }
 .login-card h1 { font-size: var(--text-lg); line-height: 1.25; margin: 0 0 14px; }
@@ -265,12 +251,7 @@ input[type=text], input[type=password], select {
   height: 8px; border-radius: 999px; background: var(--bg);
   overflow: hidden; margin: 10px 0 6px;
 }
-.progress > span { display: block; height: 100%; background: var(--accent); }
-.meter { height: 8px; border-radius: 999px; background: var(--bg); overflow: hidden; }
-.meter > span { display: block; height: 100%; background: var(--tier-normal); }
-.meter[data-tone="warn"] > span { background: var(--warning); }
-
-/* Bar widths as data-attribute rules rather than inline style="width:..".
+.progress > span { display: block; height: 100%; background: var(--accent); }/* Bar widths as data-attribute rules rather than inline style="width:..".
  * CSP `style-src 'self'` blocks inline style attributes, and a width is the
  * one thing a stylesheet genuinely cannot know ahead of time. Five-percent
  * buckets are finer than the bar is readable. */
@@ -308,42 +289,6 @@ input[type=text], input[type=password], select {
 .chart-caption {
   font-size: var(--text-sm); color: var(--text-muted); margin-top: var(--s2);
 }
-.c-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
-
-.c-band { fill: var(--tier-normal-bg); }
-.c-rule { stroke: var(--border-interactive); stroke-width: 1; stroke-dasharray: 3 3; }
-.c-axis-label {
-  fill: var(--text-muted); font-size: 10px; font-family: var(--font-mono);
-}
-.c-empty { fill: var(--text-muted); font-size: 12px; font-family: var(--font-sans); }
-
-.c-bar--normal { fill: var(--tier-normal); opacity: .55; }
-.c-bar--limited { fill: var(--tier-limited); }
-.c-bar--blocked { fill: var(--tier-blocked); }
-.c-overflow { fill: var(--tier-blocked); }
-
-.c-hatch-bg { fill: var(--tier-limited-bg); }
-.c-hatch-line { stroke: var(--tier-limited); stroke-width: 2; }
-.c-cross-bg { fill: var(--tier-blocked-bg); }
-.c-cross-line { stroke: var(--tier-blocked); stroke-width: 1.5; }
-.c-seg--normal { fill: var(--tier-normal-bg); }
-.c-seg--limited { fill: var(--tier-limited-bg); }
-.c-seg--blocked { fill: var(--tier-blocked-bg); }/* --- stacked bar ------------------------------------------------------ */
-
-.c-stackbar { width: 100%; height: 10px; border-radius: var(--r-pill); overflow: hidden; }
-.c-stack--normal { fill: var(--tier-normal); }
-.c-stack--limited { fill: var(--tier-limited); }
-.c-stack--blocked { fill: var(--tier-blocked); }
-.c-legend {
-  list-style: none; padding: 0; margin: var(--s2) 0 0;
-  display: flex; gap: var(--s4); flex-wrap: wrap;
-  font-size: var(--text-sm); color: var(--text-muted);
-}
-.c-legend li { display: flex; align-items: center; gap: var(--s1); }
-.c-swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
-.c-swatch.c-stack--normal { background: var(--tier-normal); }
-.c-swatch.c-stack--limited { background: var(--tier-limited); }
-.c-swatch.c-stack--blocked { background: var(--tier-blocked); }
 
 .c-spark { width: 80px; height: 20px; }
 .c-spark-line { stroke: var(--accent); stroke-width: 1.5; }
@@ -374,220 +319,13 @@ input[type=text], input[type=password], select {
 .lockup { display: flex; align-items: center; gap: 10px; }
 .lockup-stacked { flex-direction: column; gap: 14px; text-align: center; }
 .lockup-stacked .mark { width: 44px; height: 44px; }
-
-/* --- ink field -------------------------------------------------------- */
-
-/* Where the product argues for itself: the hero, the sigma explanation, the
- * login card. The console never uses it, so the two read as different
- * places rather than one long page. */
-.on-ink {
-  background: var(--ink); color: var(--ink-fg);
-
-  /* An ink field is a dark surface, so the tier ramp on it is the dark
-   * ramp. Without this the sigma band rendered its pale light-theme
-   * backgrounds on near-black, and the marker - `background: var(--text)`,
-   * which is #111823 here - disappeared entirely along with its label.
-   *
-   * These are the values already measured for [data-theme="dark"], against
-   * --surface #131b24, and --ink is #0d1b26: darker, so every ratio below
-   * is a floor rather than an estimate. test_contrast.py measures them, and
-   * a test asserts this list and the dark block stay identical. */
-  --tier-normal: #3fd9c2;         /* 7.02:1 on its bg */
-  --tier-normal-bg: #0b201d;
-  --tier-limited: #ffc247;        /* 7.19:1 on its bg */
-  --tier-limited-bg: #241a06;
-  --tier-blocked: #ff6d8a;        /* 6.03:1 on its bg */
-  --tier-blocked-bg: #26101a;
-  --tier-blocked-edge: #c14a63;
-  --tier-limited-edge: #b8862f;
-
-  /* The marker and its reading. --text is the page's text colour and the
-   * page around this band is light. */
-  --text: var(--ink-fg);
-  --text-muted: var(--ink-muted);
-}
-.on-ink .muted { color: var(--ink-muted); }
-.on-ink a { color: var(--brand-cyan); }
-.on-ink .c-axis-label, .on-ink .c-empty { fill: var(--ink-muted); }
-.on-ink .c-rule { stroke: var(--ink-muted); }
-
-/* --- landing ---------------------------------------------------------- */
-
-/* The band spans the window; what is in it sits on the page's one rail, so
- * the wordmark lines up with every heading below it. */
-.lp-topbar {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: var(--s4); padding-block: var(--s4); flex-wrap: wrap;
-  row-gap: var(--s2);
-}
-.lp-brand { color: inherit; text-decoration: none; }
-.lp-nav { display: flex; align-items: center; gap: var(--s5); font-size: var(--text-base); }
-.lp-nav a { color: var(--ink-muted); }
-.lp-nav a:hover { color: var(--ink-fg); }
 .lp-nav .btn {
   background: transparent; color: var(--ink-fg); border-color: var(--ink-muted);
 }
-.lp-nav .btn:hover { background: rgba(255, 255, 255, .08); }
-
-/* Same rail as every section below it. The hero used to run full-bleed
- * while the body sat in a 1120px container, so the page opened on one left
- * edge and then moved to another at the first heading. It is the first
- * misalignment a reader meets and the one they cannot help noticing. */
-.lp-hero {
-  display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s7);
-  padding-block: var(--s8) var(--s9);
-  align-items: center;
-}
-
-/* The ink band reaches both window edges; its CONTENTS sit on the rail.
- *
- * Constraining the elements themselves turned the hero and the top bar into
- * floating boxes with light margins either side, while the sigma section
- * kept bleeding - one page, two answers to the same question. The padding
- * does the centring instead, so the background stays full width and the
- * text lands at the same x as every heading below it. Below 1120px the
- * max() falls back to the ordinary gutter. */
-.lp-topbar, .lp-hero {
-  padding-inline: max(var(--s5), calc((100% - 1120px) / 2 + var(--s5)));
-}
-/* The measure belongs to each block, not to the column.
- *
- * `.lp-hero-copy` used to carry `max-width: 62ch`, and ch is measured in the
- * element's OWN font: 62ch of body text is about 496px, which the headline
- * then inherited as a hard cap at three times the font size. The result was
- * four lines where two were written, ending on an orphaned "it." on a line
- * of its own. The headline gets its own measure, in its own size. */
-.lp-hero h1 {
-  font-size: var(--text-hero); line-height: 1.08; letter-spacing: -.02em;
-  margin: 0 0 var(--s5);
-  max-width: 26ch;
-}
-.lp-lead { font-size: var(--text-lg); line-height: 1.55; max-width: 62ch; }
-.lp-hero-copy > p { max-width: 62ch; }
-.lp-cta { display: flex; gap: var(--s3); flex-wrap: wrap; margin: var(--s6) 0 var(--s4); }
-.lp-fineprint { font-size: var(--text-base); max-width: 56ch; }
-.btn-ghost { background: transparent; color: inherit; border-color: currentColor; }
-
-/* One rail, one rhythm.
- *
- * The left edge used to land at three different x positions down the page:
- * 184 for an ordinary section, 364 for a narrow one, 160 for a full-bleed
- * one, because each constrained a different box. A reader notices a moving
- * left edge without being able to name it. Every section now shares the
- * container, and what varies is the measure of the text inside it.
- *
- * And 64px rather than 96px. Adjacent sections add their padding, so 96
- * meant 192px of nothing at every boundary and nine sections of that is
- * most of a screen height spent on air. The boundary is carried by tone
- * instead, which costs no height at all. */
-.lp-section { padding: var(--s8) var(--s5); max-width: 1120px; margin: 0 auto; }
-.lp-section > h2 {
-  font-size: var(--text-3xl); line-height: 1.15; letter-spacing: -.015em;
-  margin: 0 0 var(--s4); max-width: 24ch;
-}
-.lp-section > h3 { font-size: var(--text-xl); margin: var(--s6) 0 var(--s3); }
-.lp-section p { max-width: 68ch; }
-/* Narrow is about the text, not about the column it sits in. */
-.lp-narrow > * { max-width: 760px; }
-
-/* A section with its own background has to bleed to the window edge, so the
- * container moves inside it. Same numbers as an ordinary section, so the
- * left edge does not move. */
-.on-ink.lp-section, .lp-section--panel { max-width: none; }
-/* Both selectors carry two classes deliberately. `.lp-section > h2` sets
- * `margin: 0 0 24px`, and that shorthand also sets margin-inline to 0, so a
- * single-class rule here loses and every heading in a panel jumped to the
- * window edge while the plain sections stayed on the rail. */
-.on-ink.lp-section > *, .lp-section--panel.lp-section > * {
-  max-width: 1120px; margin-inline: auto;
-  padding-inline: var(--s5); box-sizing: border-box;
-}
-.lp-section--panel { background: var(--surface-sunken); }
-
-.lp-kicker {
-  font-family: var(--font-mono); font-size: var(--text-xs);
-  text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted);
-  display: block; margin-bottom: var(--s2);
-}
-.lp-grid-3 { display: grid; gap: var(--s5); margin-top: var(--s7); }
-.lp-col { border-top: 1px solid var(--border-interactive); padding-top: var(--s3); }
-.lp-col p { font-size: var(--text-base); color: var(--text-muted); }
-
-.lp-steps { list-style: none; padding: 0; display: grid; gap: var(--s5); margin: var(--s6) 0; }
-.lp-steps li { border-top: 1px solid var(--border-interactive); padding-top: var(--s3); }
-
-.lp-flow { margin-top: var(--s7); }
-.c-enclosure { fill: none; stroke: var(--border-interactive); stroke-dasharray: 4 4; }
-.c-enclosure-label {
-  fill: var(--text-muted); font-size: 10px; font-family: var(--font-mono);
-}
-.c-node { fill: var(--surface); stroke: var(--border-interactive); stroke-width: 1.5; }
-.c-node--ours { fill: var(--accent-subtle); stroke: var(--accent); }
-.c-node-label { fill: var(--text); font-size: 12px; font-family: var(--font-sans); }
-.c-arrow { stroke: var(--accent); stroke-width: 1.5; }
-.c-arrow-label {
-  fill: var(--text-muted); font-size: 10px; font-family: var(--font-mono);
-}
-
-.lp-row-chosen th, .lp-row-chosen td { font-weight: 700; }
-
-.lp-gaps { list-style: none; padding: 0; display: grid; gap: var(--s4); }
-.lp-gaps li { max-width: 68ch; }
-
-.lp-price { max-width: 560px; }
-.lp-features { list-style: none; padding: 0; margin: 0 0 var(--s4); display: grid; gap: var(--s1); }
-.lp-features li { color: var(--text-muted); font-size: var(--text-base); }
-
-.lp-code {
-  background: var(--surface-sunken); border: 1px solid var(--border);
-  border-radius: var(--r3); padding: var(--s4); overflow-x: auto;
-  font-family: var(--font-mono); font-size: var(--text-base); line-height: 1.7;
-}
-
-.lp-section details {
-  border-top: 1px solid var(--border); padding: var(--s3) 0;
-}
-.lp-section summary {
-  cursor: pointer; font-weight: 600; padding: var(--s1) 0;
-}
-.lp-section summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-.lp-section details p { margin: var(--s2) 0 0; color: var(--text-muted); }
-
-.lp-footer {
-  background: var(--surface); border-top: 1px solid var(--border);
-  padding: var(--s7) var(--s5) var(--s5);
-}
-.lp-footer-grid { display: grid; gap: var(--s5); max-width: 1120px; margin: 0 auto; }
-.lp-footer h4 {
-  font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .06em;
-  color: var(--text-muted); margin: 0 0 var(--s2);
-}
-.lp-footer-grid a {
-  display: block; font-size: var(--text-base); padding: 3px 0; color: var(--text);
-}
-.lp-footer-rule {
-  max-width: 1120px; margin: var(--s6) auto 0; padding-top: var(--s4);
-  border-top: 1px solid var(--border); font-size: var(--text-base);
-  display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap;
-}
-.glyph-sigma { vertical-align: middle; }
-
-@media (min-width: 860px) {
-  .lp-hero { grid-template-columns: 1.05fr .95fr; }
-  .lp-grid-3 { grid-template-columns: repeat(3, 1fr); }
-  .lp-steps { grid-template-columns: repeat(3, 1fr); }
-  .lp-footer-grid { grid-template-columns: 1.4fr 1fr 1fr 1fr; }
-}
+.lp-nav .btn:hover { background: rgba(255, 255, 255, .08); }.glyph-sigma { vertical-align: middle; }
 
 /* 320px: the hero headline is the one thing that must not wrap into a wall.
  * Everything else stacks from the single-column defaults above. */
-@media (max-width: 600px) {
-  .lp-hero h1 { font-size: var(--text-2xl); }
-  .lp-section > h2 { font-size: var(--text-xl); }
-  .lp-hero, .lp-section { padding-left: var(--s4); padding-right: var(--s4); }
-  .lp-section { padding-top: var(--s7); padding-bottom: var(--s7); }
-  .lp-nav { gap: var(--s3); }
-}
 .login-alt { margin-top: var(--s5); border-top: 1px solid var(--border); padding-top: var(--s3); }
 .login-alt summary {
   cursor: pointer; font-size: var(--text-base); color: var(--text-muted);
@@ -601,7 +339,7 @@ input[type=text], input[type=password], select {
 
 .err-card { text-align: center; max-width: 420px; }
 .err-code {
-  font-family: var(--font-mono); font-size: var(--text-3xl); font-weight: 700;
+  font-size: var(--text-3xl); font-weight: 700;
   color: var(--text-muted); margin: 0; line-height: 1;
 }
 .err-card h1 { font-size: var(--text-xl); margin: var(--s3) 0 var(--s2); }
@@ -623,7 +361,6 @@ input[type=text], input[type=password], select {
  * viewport produces page-level horizontal scroll. Block layout cannot. */
 @media (max-width: 720px) {.sidebar, .main, .content, .card, .table-scroll { min-width: 0; max-width: 100%; }
 }
-@media (max-width: 520px) {}
 
 /* The cards barely existed: --border was 1.29:1 against --surface, so a card
  * read as a floating rectangle rather than a bounded region. Still
@@ -655,314 +392,3 @@ input[type=text], input[type=password], input[type=email], select {
   height: 38px; padding: 0 12px; min-width: 0;
 }
 .field { min-width: 220px; }
-.field-label {
-  font-size: var(--text-sm); font-weight: 600; color: var(--text-muted);
-}
-.field-static {
-  font-family: var(--font-mono); font-size: var(--text-base);
-  background: var(--surface-sunken); border: 1px solid var(--border);
-  border-radius: var(--r2); padding: 8px 10px; display: inline-block;
-}
-
-/* --- theme toggle ----------------------------------------------------- */
-
-/* A complete, measured, tested dark theme shipped with no way to turn it
- * on: the route existed, the tests passed, and zero templates referenced
- * it. Three buttons in one form, no script, no inline style. */
-.theme-toggle {
-  display: flex; gap: 2px; padding: 2px; border-radius: var(--r2);
-  background: var(--surface-sunken); border: 1px solid var(--border);
-}
-.theme-toggle form { flex: 1; display: flex; }
-.theme-opt {
-  flex: 1; border: 0; background: transparent; color: var(--text-muted);
-  font-family: var(--font-sans); font-size: var(--text-sm); font-weight: 600;
-  padding: 6px 4px; border-radius: var(--r1); cursor: pointer;
-}
-.theme-opt[aria-pressed="true"] { background: var(--surface); color: var(--text); }
-.theme-opt:hover { color: var(--text); }
-
-/* --- the sigma axis ---------------------------------------------------- */
-
-/* Both layers occupy the same grid cell and both are full width with zero
- * inline padding, so sigma s lands at s/6 x 100% in each of them. Padding on
- * either one breaks that mapping and nothing would report it.
- *
- * This is what replaced 202 enumerated rules - 101 for a flex ratio and 101
- * for a marker position, about 9KB, rounding real percentages to the nearest
- * 5. Arbitrary positions moved into SVG presentation attributes, which CSP
- * does not govern and which cost no stylesheet at all; the labels moved to
- * integer sigma, where a grid column is the whole answer. */
-.c-axis { display: grid; grid-template-columns: 1fr; }
-.c-axis > * { grid-area: 1 / 1; inline-size: 100%; padding-inline: 0; }
-.c-axis-plot { block-size: 48px; display: block; }
-
-.c-axis-labels,
-.c-axis-ticks {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  pointer-events: none;
-}
-.c-axis-ticks { align-self: end; color: var(--text-muted); }
-.c-axis-band-label { padding: 0 6px; align-self: center; color: var(--text); }
-
-/* Written in the case they are read in. No rule here may uppercase them:
- * CSS uppercases Greek, and "4 sigma slowed" reached an incident screen as
- * summation. */
-.c-axis-short { display: none; }
-@media (max-width: 860px) {
-  .c-axis-long { display: none; }
-  .c-axis-short { display: inline; }
-}
-
-.c-density { fill: var(--text-muted); opacity: .45; }
-.c-gate { stroke: var(--text); stroke-width: 2; }
-.c-gate--2 { stroke-dasharray: 4 3; }
-.c-mark { stroke-width: 2; }
-.c-mark--normal { stroke: var(--tier-normal); }
-.c-mark--limited { stroke: var(--tier-limited); }
-.c-mark--blocked { stroke: var(--tier-blocked); }
-
-/* No feed, no reading. The bands drop to hairlines and the macro emits no
- * mark at all, so there is nothing on screen to misread. */
-.c-axis[data-plot="outline"] .c-seg { fill: none; stroke: var(--border); stroke-width: 1; }
-.c-axis[data-plot="frozen"] .c-seg { opacity: .55; }
-
-.c-axis-caption {
-  font-family: var(--font-mono); font-size: var(--text-xs);
-  color: var(--text-muted); margin: 6px 0 0;
-}
-
-/* --- the gate control -------------------------------------------------- */
-/* Thirteen rows in the same panel as the axis they move. A slider would show
- * one outcome at a time and hide the other twelve behind a gesture. */
-
-.c-gate { margin-top: var(--space-5); }
-.c-gate-curve { display: grid; gap: 1px; margin-top: var(--space-3); }
-.c-gate-row {
-  display: grid; grid-template-columns: 6rem 1fr 4rem; align-items: center;
-  gap: var(--space-3); width: 100%; padding: 4px var(--space-2);
-  background: none; border: 0; border-radius: var(--radius-sm);
-  text-align: left; cursor: pointer;
-  font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text);
-}
-.c-gate-row:hover { background: var(--surface-sunken); }
-.c-gate-row:focus-visible {
-  outline: 2px solid var(--focus); outline-offset: -2px;
-}
-/* Marked by a rule and a weight, never by colour alone - the same rule the
- * tier ramp follows, and the reason it survives a screenshot in a ticket. */
-.c-gate-row[aria-current="true"] {
-  font-weight: 700; box-shadow: inset 3px 0 0 var(--accent);
-  background: var(--surface-sunken);
-}
-.c-gate-bar { display: block; height: 8px; background: var(--text-muted); opacity: .45; }
-.c-gate-row[aria-current="true"] .c-gate-bar { background: var(--accent); opacity: 1; }
-.c-gate-count { text-align: right; font-variant-numeric: tabular-nums; }
-.c-gate-note {
-  grid-column: 2 / -1; font-family: var(--font-sans); color: var(--tier-limited);
-}
-
-/* Bucketed, not measured: 21 steps of 5%. An enumerated rule is the right
- * answer for a bucket and the wrong one for a measurement, which is why the
- * axis is SVG and this is not. */
-.c-gate-bar { inline-size: 0; }
-[data-bar="1"] .c-gate-bar { inline-size: 5%; }
-[data-bar="2"] .c-gate-bar { inline-size: 10%; }
-[data-bar="3"] .c-gate-bar { inline-size: 15%; }
-[data-bar="4"] .c-gate-bar { inline-size: 20%; }
-[data-bar="5"] .c-gate-bar { inline-size: 25%; }
-[data-bar="6"] .c-gate-bar { inline-size: 30%; }
-[data-bar="7"] .c-gate-bar { inline-size: 35%; }
-[data-bar="8"] .c-gate-bar { inline-size: 40%; }
-[data-bar="9"] .c-gate-bar { inline-size: 45%; }
-[data-bar="10"] .c-gate-bar { inline-size: 50%; }
-[data-bar="11"] .c-gate-bar { inline-size: 55%; }
-[data-bar="12"] .c-gate-bar { inline-size: 60%; }
-[data-bar="13"] .c-gate-bar { inline-size: 65%; }
-[data-bar="14"] .c-gate-bar { inline-size: 70%; }
-[data-bar="15"] .c-gate-bar { inline-size: 75%; }
-[data-bar="16"] .c-gate-bar { inline-size: 80%; }
-[data-bar="17"] .c-gate-bar { inline-size: 85%; }
-[data-bar="18"] .c-gate-bar { inline-size: 90%; }
-[data-bar="19"] .c-gate-bar { inline-size: 95%; }
-[data-bar="20"] .c-gate-bar { inline-size: 100%; }
-
-@media (max-width: 30rem) {
-  /* The count sits under the sigma rather than off the right edge: at 390px
-   * three columns put the number where a thumb covers it. */
-  .c-gate-row { grid-template-columns: 6rem 1fr; }
-  .c-gate-count { grid-column: 2; text-align: left; }
-}
-
-/* The source the operator opened. Drawn as a thicker rule rather than a
- * different colour: the mark already carries its tier in colour, and a second
- * meaning on the same channel is unreadable in a greyscale screenshot. */
-.c-mark--on { stroke-width: 4; }
-
-/* The verb on the evidence line. Right-aligned and quiet: it is offered on
- * every driver row, so loud buttons would read as the point of the table
- * rather than as a response to it. */
-.c-why-act { text-align: right; white-space: nowrap; }
-.c-why-act .c-btn { font-size: var(--text-xs); padding: 2px var(--space-2); }
-
-/* --- zoom 2, one feature ----------------------------------------------- */
-/* No distribution curve, deliberately. The stored statistics are a mean and a
- * standard deviation, which locate a point and say nothing about shape. */
-
-.c-feature-head {
-  display: flex; align-items: baseline; justify-content: space-between;
-  gap: var(--space-3); margin-bottom: var(--space-3);
-}
-.c-feature-track {
-  width: 100%; height: 120px; margin-top: var(--space-4);
-  background: var(--surface-sunken); border-radius: var(--radius-sm);
-}
-.c-feature-line { fill: none; stroke: var(--accent); stroke-width: 2; }
-.c-feature-dot { fill: var(--accent); }
-
-/* The filter says what it is showing and offers the way out on the same
- * line. A filtered list that looks unfiltered is how an operator concludes a
- * source has no other episodes. */
-.c-filter-note {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: var(--space-3); flex-wrap: wrap;
-}
-
-/* --- history: the same axis, rotated ----------------------------------- */
-/* One row per hour, sigma along the row, the two gates running straight down
- * through every hour. Only populated cells are emitted, which is a
- * requirement and not an optimisation. */
-
-.c-grid { margin-top: var(--space-3); }
-.c-grid-plot { display: block; width: 100%; height: 260px; }
-.c-grid-ticks {
-  display: grid; grid-template-columns: repeat(7, 1fr);
-  font-family: var(--font-mono); font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-.c-grid-dead { fill: var(--surface-sunken); }
-/* Bucketed, not measured: four steps. Opacity rather than four fills,
- * because the bands underneath already carry meaning in colour and a second
- * meaning on the same channel is unreadable. */
-.c-grid-cell { fill: var(--text); }
-.c-grid-cell[data-level="1"] { fill-opacity: .3; }
-.c-grid-cell[data-level="2"] { fill-opacity: .55; }
-.c-grid-cell[data-level="3"] { fill-opacity: .8; }
-.c-grid-cell[data-level="4"] { fill-opacity: 1; }
-.c-grid-cell--id { fill: var(--tier-blocked); fill-opacity: 1; }
-.c-grid-gate { stroke: var(--accent); stroke-width: 2; }
-.c-grid-gate--2 { stroke-dasharray: 5 3; }
-
-/* Decided and in effect are two states, permanently: the agent is
- * asynchronous by architecture. Never colour alone. This chip in particular
- * has to survive a screenshot pasted into a ticket, because the question it
- * answers is the one a dispute starts from. */
-.c-reach {
-  display: inline-block; font-size: var(--text-xs);
-  padding: 1px var(--space-2); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); color: var(--text-muted);
-  white-space: nowrap;
-}
-.c-reach--on { border-color: var(--tier-normal); color: var(--text); }
-
-/* Reporting is not protecting. An agent with no enforcement backend is green
- * everywhere else in the product and is applying nothing. Border and text,
- * never fill alone: this one gets screenshotted into support threads. */
-.c-enforce {
-  display: inline-block; font-size: var(--text-xs);
-  padding: 1px var(--space-2); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); color: var(--text-muted); white-space: nowrap;
-}
-.c-enforce--yes { border-color: var(--tier-normal); color: var(--text); }
-.c-enforce--no { border-color: var(--tier-blocked); color: var(--tier-blocked); }
-
-/* An illustration has to be labelled where a reader who reads nothing else
- * still sees it, which is on the chart and not under it. */
-.lp-example-tag {
-  font-family: var(--font-mono); font-size: var(--text-xs);
-  letter-spacing: .04em; color: var(--text-muted); margin-bottom: var(--space-2);
-}
-
-/* The unit, said in words. A Greek letter carries the whole argument of this
- * product and no screen had ever defined it; a reader who has to translate
- * before they can act is a reader who stops. */
-.c-plain {
-  font-size: var(--text-sm); color: var(--text-muted); line-height: 1.6;
-  margin: 0 0 var(--s4); padding: var(--s3) var(--s4);
-  border-left: 2px solid var(--accent); border-radius: 0 var(--r2) var(--r2) 0;
-  background: var(--accent-subtle); max-width: 62ch;
-}
-.c-plain b { color: var(--text); font-weight: 600; }
-
-/* Which end of the scale is the good one. The ticks are numbers and numbers
- * do not answer that. */
-.c-axis-ends {
-  display: flex; justify-content: space-between;
-  font-size: var(--text-xs); color: var(--text-muted); margin-top: 2px;
-}
-
-/* --- what your agent is doing ------------------------------------------ */
-/* Four steps, read left to right, above the axis. The pulse is CSS and runs
- * once per cycle in the browser: nothing here costs a request, because a
- * console that polls eats the budget telemetry needs and one tab at five
- * seconds is 52% of the whole account's daily ceiling. */
-
-.c-lifecycle {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
-  background: var(--border); border: 1px solid var(--border);
-  border-radius: var(--r2); overflow: hidden;
-  margin: 0 0 var(--s5); padding: 0; list-style: none;
-}
-.c-lifecycle-step {
-  background: var(--surface); padding: var(--s3) var(--s4);
-  position: relative; overflow: hidden; display: block;
-}
-/* The flow, staggered so it reads left to right as one movement rather than
- * four things blinking. Five seconds is the agent's real flush interval. */
-.c-lifecycle-step::after {
-  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
-  background: linear-gradient(90deg, transparent, var(--tier-normal), transparent);
-  transform: translateX(-100%); animation: c-flow 5s linear infinite;
-}
-.c-lifecycle-step:nth-child(2)::after { animation-delay: .5s; }
-.c-lifecycle-step:nth-child(3)::after { animation-delay: 1s; }
-.c-lifecycle-step:nth-child(4)::after {
-  animation-delay: 1.5s;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
-}
-@keyframes c-flow {
-  0%   { transform: translateX(-100%); }
-  45%  { transform: translateX(100%); }
-  100% { transform: translateX(100%); }
-}
-.c-lifecycle-k {
-  display: block; font-size: var(--text-xs); letter-spacing: .1em;
-  text-transform: uppercase; color: var(--text-muted);
-}
-.c-lifecycle-v {
-  display: block; font-size: var(--text-2xl); font-weight: 600;
-  letter-spacing: -.02em; margin: var(--s2) 0 2px;
-  font-variant-numeric: tabular-nums;
-}
-.c-lifecycle-of {
-  font-size: var(--text-sm); font-weight: 400; color: var(--text-muted);
-  margin-left: 5px;
-}
-.c-lifecycle-s {
-  display: block; font-size: var(--text-xs); color: var(--text-muted);
-}
-/* Never colour alone: each step is numbered and named in its own label, so
- * the warning tone is the second channel and not the only one. */
-.c-lifecycle-s.is-warn { color: var(--warning); }
-
-@media (max-width: 52rem) {
-  .c-lifecycle { grid-template-columns: repeat(2, 1fr); }
-}
-
-/* "We cannot tell" is not a number, and rendering it in the size reserved
- * for one would make an absence look like a measurement. */
-.c-lifecycle-unknown { font-size: var(--text-base); font-weight: 400;
-                       color: var(--text-muted); }

@@ -1,547 +1,640 @@
-/* The console, as an instrument.
+/* THE CONSOLE, as approved.
  *
- * Loaded only by app_shell.html, after app.css. The public pages never see
- * it, which is what lets the two surfaces be genuinely different places
- * rather than one theme stretched over both.
+ * This file IS the stylesheet that was signed off, ported whole. It is not
+ * the previous console.css with new colours in it: that was tried, and a
+ * comparison of the two class vocabularies found ONE name in common out of a
+ * hundred and ten, which is a fair measure of how little a repaint changes.
  *
- * The rules this file follows, and the reason for each:
+ * Three mechanical changes and nothing else: its own tokens came out because
+ * tokens.css owns them, its local colour names were mapped onto this
+ * product's tokens, and every top-level selector was scoped under `.console`
+ * because only the console loads this file.
  *
- *   Monospace for every piece of DATA. An IP address, a sigma figure, a
- *   count, a duration and a timestamp are all things the eye scans down a
- *   column looking for a difference. Proportional type makes two adjacent
- *   figures different widths, which is the one thing that job cannot
- *   tolerate. Prose and labels stay in the sans stack.
- *
- *   Rules, not cards. A card is a box that says "these things belong
- *   together", and on a page where everything belongs together it is 20px
- *   of padding and a shadow buying nothing. A 1px rule says the same thing
- *   and gives the space back to the data.
- *
- *   Split pane. Reading one row should not cost a page navigation. The list
- *   stays where it was, with the selection visible, and the detail arrives
- *   beside it. This is the whole answer to "no room to operate".
- *
- *   No shadows, radii of 3px at most. Depth is a metaphor for physical
- *   objects. There are no physical objects here.
+ *   ONE FAMILY      Golos Text for the words and the numbers both.
+ *   ONE HUE         five steps; depth is the only thing that says HOW FAR.
+ *                   A verdict is never a hue - it is an ink mark plus a word,
+ *                   filled for blocked and hollow for slowed.
+ *   ONE PLANE       no boxes inside boxes. A rule is drawn where something
+ *                   divides, and nowhere else.
+ *   TEXT LAST       explain with movement and a label first. No paragraph
+ *                   longer than a line.
+ *   EVERY CONTROL   sits beside the thing it controls.
  */
 
-/* --- the shell -------------------------------------------------------- */
+/* ══════════════════════════════════════════════════════════════════════
+   BẢN DỰNG XEM THỬ v2 - control platform, không phải dashboard
 
-.console {
-  --nav-w: 232px;
-  --detail-w: 460px;
-  --row-h: 30px;
-  display: grid;
-  grid-template-columns: var(--nav-w) minmax(0, 1fr);
-  height: 100vh;
-  overflow: hidden;
-  background: var(--bg);
+   Bản trước hỏng ở chỗ: nó GIẢI THÍCH bằng đoạn văn, và không có nút nào
+   để làm gì cả. Một trang đọc xong thì hiểu nhưng không điều khiển được
+   thì là bài giảng, không phải bàn điều khiển.
+
+   Ba luật của bản này:
+
+   1. CHỮ LÀ PHƯƠNG ÁN CUỐI. Giải thích bằng chuyển động và nhãn trước.
+      Không đoạn văn nào quá một dòng. Nếu một câu dài hơn thế thì nó là
+      dấu hiệu cái hình chưa nói đủ.
+   2. MỌI THỨ NHÌN THẤY ĐỀU TRA ĐƯỢC. Một quyết định luôn mở ra được lý do
+      của nó, tới tận từng đặc trưng và con số thô.
+   3. MỌI THỨ ĐIỀU KHIỂN ĐƯỢC ĐỀU CÓ NÚT, ngay cạnh thứ nó điều khiển,
+      không nằm ở trang cài đặt nào khác.
+
+   Giữ nguyên từ bản trước: Golos Text một họ, và luật màu MỘT SẮC NĂM MỨC
+   (sắc nói độ lớn; phán quyết nói bằng dấu mực đặc cộng một chữ).
+   ══════════════════════════════════════════════════════════════════════ */
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: Golos, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: var(--text-body); line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
 }
+.console h1, .console h2, .console h3, .console p, .console ul, .console ol, .console dl, .console figure { margin: 0; }
+.console h1, .console h2, .console h3 { font-weight: 600; letter-spacing: -.015em; }
+.console button { font-family: inherit; }
 
-/* --- navigation ------------------------------------------------------- */
 
-.c-nav {
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  border-right: 1px solid var(--border);
-  background: var(--surface);
-  min-width: 0;
-  overflow-y: auto;
+/* ── khung ───────────────────────────────────────────────────────────── */
+/* `.console.app`, compound and not descendant: the shell carries both
+ * classes on the SAME element, so `.console .app` matched nothing and the
+ * shell had no grid at all. */
+.console.app { min-height: 100vh; display: grid; grid-template-rows: auto 1fr; }
+.console .bar {
+  display: flex; align-items: center; gap: var(--s4); flex-wrap: wrap;
+  padding: var(--s3) var(--s5); border-bottom: 1px solid var(--border);
 }
-
-.c-brand {
-  display: flex; align-items: center; gap: 8px;
-  padding: 14px 16px; border-bottom: 1px solid var(--border);
-  font-weight: 600; font-size: var(--text-base);
-  letter-spacing: .04em; text-transform: uppercase;
-  color: var(--text); text-decoration: none;
+.console .brand { font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
+.console .beacon {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--t5);
+  display: inline-block; margin-right: var(--s2); animation: beat 5s ease-out infinite;
 }
-.c-brand:hover { text-decoration: none; }
-
-.c-nav-group { padding: 12px 8px 4px; }
-.c-nav-label {
-  font-family: var(--font-mono); font-size: 10px;
-  text-transform: uppercase; letter-spacing: .1em;
-  color: var(--text-muted); padding: 0 8px 6px;
+@keyframes beat {
+  0% { box-shadow: 0 0 0 0 rgb(47 58 144 / .5); }
+  70%, 100% { box-shadow: 0 0 0 9px rgb(47 58 144 / 0); }
 }
+.console .bar .sp { flex: 1; }
+.console .bar .who, .console .bar .cost { font-size: var(--text-base); color: var(--text-muted); }
+.console .bar .cost b { color: var(--text); font-weight: 600; }
 
-/* The selected item is marked by a left bar and a background, never by
- * colour alone, and the bar is what survives greyscale. */
-.c-nav-link {
+.console .body { display: grid; grid-template-columns: 158px 1fr; min-height: 0; }
+.console .nav { border-right: 1px solid var(--border); padding: var(--s4) 0; }
+.console .nav .gp {
+  font-size: var(--text-xs); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--text-muted); padding: var(--s4) var(--s5) var(--s2);
+}
+.console .nav a {
   display: flex; align-items: center; justify-content: space-between;
-  gap: 8px; padding: 6px 8px 6px 9px;
-  border-left: 3px solid transparent;
-  color: var(--text-muted); font-size: var(--text-base);
-  text-decoration: none; line-height: 1.4;
+  padding: 6px var(--s5); color: var(--text-muted); text-decoration: none; font-size: 13.5px;
 }
-.c-nav-link:hover { background: var(--surface-sunken); color: var(--text); text-decoration: none; }
-.c-nav-link[aria-current="page"] {
-  border-left-color: var(--accent); background: var(--surface-sunken);
-  color: var(--text); font-weight: 600;
+.console .nav a:hover { color: var(--text); }
+.console .nav a[aria-current] { color: var(--text); font-weight: 600; box-shadow: inset 3px 0 0 var(--t5); }
+.console .nav .ct {
+  font-size: var(--text-xs); color: var(--text-muted); background: var(--t1);
+  border-radius: 9px; padding: 1px 7px; min-width: 20px; text-align: center;
 }
-.c-nav-count {
-  font-family: var(--font-mono); font-size: var(--text-xs);
-  color: var(--text-muted); font-variant-numeric: tabular-nums;
-}
-.c-nav-count[data-tone="alarm"] { color: var(--tier-blocked); font-weight: 700; }
+.console .main { padding: var(--s5) var(--s6) var(--s8); min-width: 0; max-width: 1120px; }
 
-.c-nav-foot {
-  padding: 10px 12px; border-top: 1px solid var(--border);
-  display: grid; gap: 8px;
+/* ── đầu trang: tiêu đề ngắn, một dòng trạng thái, NÚT ngay cạnh ─────── */
+.console .head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--s4); flex-wrap: wrap; margin-bottom: var(--s5);
 }
-.c-tenant {
-  font-family: var(--font-mono); font-size: var(--text-xs);
-  color: var(--text-muted); overflow: hidden; text-overflow: ellipsis;
+.console .h1 { font-size: var(--text-2xl); line-height: 1.1; font-weight: 600; }
+.console .sub { color: var(--text-muted); font-size: 13.5px; margin-top: 4px; }
+.console .sub b { color: var(--text); font-weight: 600; }
+.console .head-act { display: flex; gap: var(--s2); flex-wrap: wrap; }
+
+.console .sec { margin-bottom: var(--s6); }
+.console .sec:last-child { margin-bottom: 0; }
+.console .sec-h {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s3); flex-wrap: wrap;
+  padding-bottom: var(--s2); border-bottom: 1px solid var(--border); margin-bottom: var(--s4);
 }
+.console .sec-t { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.console .sec-m { font-size: var(--text-sm); color: var(--text-muted);
+         display: flex; align-items: center; gap: var(--s2); }
+.console .label { font-size: var(--text-xs); letter-spacing: .14em;
+         text-transform: uppercase; color: var(--text-muted); }
+/* Một dòng. Nếu cần hai thì cái hình bên cạnh chưa nói đủ. */
+.console .one { color: var(--text-muted); font-size: 13.5px; margin-bottom: var(--s3); }
+.console .one b { color: var(--text); font-weight: 600; }
 
-/* --- the page --------------------------------------------------------- */
-
-.c-main { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; }
-
-.c-header {
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-  padding: 12px 20px 0;
-  display: grid; gap: 10px;
+/* ── nút ─────────────────────────────────────────────────────────────── */
+.console .btn {
+  font-size: var(--text-base); font-weight: 500; padding: 5px 13px;
+  cursor: pointer; white-space: nowrap;
+  background: transparent; color: var(--text);
+  border: 1px solid var(--border-interactive); border-radius: 16px;
+  transition: border-color .12s, color .12s, background .12s;
 }
-.c-header-top {
-  display: flex; align-items: baseline; justify-content: space-between;
-  gap: 16px; flex-wrap: wrap;
-}
-.c-title { font-size: var(--text-lg); margin: 0; font-weight: 600; letter-spacing: -.01em; }
-/* The subtitle is a live summary, not a restatement of the nav item that is
- * already highlighted three inches to the left. */
-.c-summary {
-  font-family: var(--font-mono); font-size: var(--text-xs);
-  color: var(--text-muted); margin: 2px 0 0;
-}
-.c-header-actions { display: flex; gap: 6px; align-items: center; }
-
-.c-tabs { display: flex; gap: 0; margin: 0; }
-.c-tab {
-  padding: 7px 12px; font-size: var(--text-base); color: var(--text-muted);
-  text-decoration: none; border-bottom: 2px solid transparent;
-  display: flex; align-items: center; gap: 6px;
-}
-.c-tab:hover { color: var(--text); text-decoration: none; }
-.c-tab[aria-current="true"] {
-  color: var(--text); border-bottom-color: var(--accent); font-weight: 600;
-}/* --- the workbench ---------------------------------------------------- */
-
-.c-work { display: grid; grid-template-columns: minmax(0, 1fr); overflow: hidden; }
-.c-work[data-detail] { grid-template-columns: minmax(0, 1fr) var(--detail-w); }
-
-.c-list { overflow-y: auto; min-width: 0; }
-.c-detail {
-  overflow-y: auto; border-left: 1px solid var(--border);
-  background: var(--surface); min-width: 0;
-  display: grid; grid-template-rows: auto 1fr auto;
+.console .btn:hover { border-color: var(--t5); color: var(--t5); }
+/* The foreground is the PAGE, not white. `--t5` is the deepest step of the
+ * ramp in light and the brightest in dark, so a hardcoded white label was
+ * white on a pale lavender at 1.9:1 the moment anyone switched theme. */
+.console .btn--p { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.console .btn--p:hover { background: var(--text); border-color: var(--text); color: var(--bg); }
+.console .btn--d { border-color: var(--border-interactive); color: var(--text); }
+.console .btn--d:hover { background: var(--text); border-color: var(--text); color: var(--bg); }
+.console .btn--sm { font-size: var(--text-xs); padding: 3px 10px; letter-spacing: .04em; }
+.console .btn[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: #fff; }
+.console .btn kbd {
+  font: inherit; font-size: 10px; opacity: .65; margin-left: 6px;
+  border: 1px solid currentColor; border-radius: 3px; padding: 0 3px;
 }
 
-/* --- tables, as instruments ------------------------------------------- */
-
-.c-table { width: 100%; border-collapse: collapse; }
-.c-table thead th {
-  position: sticky; top: 0; z-index: 1;
-  background: var(--surface); border-bottom: 1px solid var(--border);
-  font-family: var(--font-mono); font-size: 10px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted);
-  text-align: left; padding: 8px 12px; white-space: nowrap;
-}
-.c-table td, .c-table th[scope="row"] {
-  padding: 0 12px; height: var(--row-h);
-  font-size: var(--text-base); vertical-align: middle;
-  text-align: left; font-weight: 400;
-}
-/* The rule belongs on the ROW, not the cell. On the cell it stops wherever
- * the last cell stops, and the last cell holds actions that are invisible
- * until hover, so every rule ended short of the right edge. */
-.c-table tbody tr { border-bottom: 1px solid var(--border); }
-/* The actions column takes the slack so the data columns stay tight
- * against each other and the row still reaches the edge. */
-.c-table .c-row-actions { width: 100%; }
-/* Data is monospace and tabular. A column of figures that do not line up is
- * a column you have to read rather than scan. */
-.c-table th[scope="row"], .c-table .d {
-  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
-  color: var(--text); white-space: nowrap;
-}
-.c-table tbody tr:hover { background: var(--surface-sunken); }
-.c-table tbody tr[aria-selected="true"] { background: var(--accent-subtle); }
-.c-table tbody tr[aria-selected="true"] th[scope="row"] { box-shadow: inset 3px 0 0 var(--accent); }
-
-/* Tier as a left bar, the third redundant channel after the word and the
- * sigma figure. Survives greyscale and a screenshot in a ticket. */
-.c-table tr[data-tier="2"] th[scope="row"] { box-shadow: inset 3px 0 0 var(--tier-blocked); }
-.c-table tr[data-tier="1"] th[scope="row"] { box-shadow: inset 3px 0 0 var(--tier-limited); }
-
-.c-state {
-  font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 700;
-  text-transform: uppercase; letter-spacing: .06em; white-space: nowrap;
-}
-.c-state--blocked { color: var(--tier-blocked); }
-.c-state--slowed { color: var(--tier-limited); }
-.c-state--clear { color: var(--tier-normal); }
-
-/* Agent liveness reuses the tier palette, and like the tiers it is never
- * colour alone: the word is the signal, the colour only agrees with it. */
-.c-state--live { color: var(--tier-normal); }
-.c-state--quiet { color: var(--tier-limited); }
-.c-state--revoked { color: var(--tier-blocked); }
-
-/* --- row actions ------------------------------------------------------ */
-
-/* Hidden until hover on a pointer device, always visible on touch. An
- * opacity-0 control on a phone is an invisible control, which is how the
- * Allow button went missing on mobile in the first place. */
-.c-row-actions { display: flex; gap: 4px; justify-content: flex-end; opacity: 0; }
-tr:hover .c-row-actions, tr:focus-within .c-row-actions { opacity: 1; }
-@media (hover: none) { .c-row-actions { opacity: 1; } }
-
-/* --- the detail pane -------------------------------------------------- */
-
-.c-detail-head {
-  padding: 14px 16px; border-bottom: 1px solid var(--border);
-  display: grid; gap: 4px;
-}
-.c-detail-id {
-  font-family: var(--font-mono); font-size: var(--text-lg);
-  font-weight: 600; color: var(--text); word-break: break-all;
-}
-.c-detail-body { padding: 16px; display: grid; gap: 20px; align-content: start; }
-.c-section-label {
-  font-family: var(--font-mono); font-size: 10px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: .1em; color: var(--text-muted);
-  padding-bottom: 6px; border-bottom: 1px solid var(--border); margin-bottom: 8px;
-}
-
-/* The per-feature decomposition: the answer to "why this IP". */
-.c-why { width: 100%; border-collapse: collapse; font-size: var(--text-base); }
-.c-why thead th {
-  font-family: var(--font-mono); font-size: 9px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted);
-  text-align: right; padding: 0 0 6px; border-bottom: 1px solid var(--border);
-}
-.c-why thead th:first-child { text-align: left; }
-.c-why tbody th {
-  text-align: left; font-weight: 400; color: var(--text-muted);
-  padding: 5px 0; white-space: nowrap; font-size: var(--text-base);
-}
-.c-why td {
-  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
-  text-align: right; padding: 4px 0 4px 12px; white-space: nowrap;
-}
-.c-why .drives { color: var(--tier-blocked); font-weight: 700; }
-
-.c-kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; font-size: var(--text-base); }
-.c-kv dt { color: var(--text-muted); }
-.c-kv dd {
-  margin: 0; font-family: var(--font-mono); font-variant-numeric: tabular-nums;
-  text-align: right; word-break: break-all;
-}
-
-/* The action bar sits at the bottom of the pane and stays there, so the
- * verbs for the selected object are always in the same place. */
-.c-actions {
-  border-top: 1px solid var(--border); padding: 12px 16px;
-  display: flex; gap: 8px; flex-wrap: wrap; background: var(--surface);
-}
-
-/* --- keys ------------------------------------------------------------- */
-
-/* Shortcuts printed next to the thing they do, not hidden behind a help
- * modal. That is how they teach themselves. */
-kbd {
-  font-family: var(--font-mono); font-size: 10px; line-height: 1;
-  padding: 3px 5px; border: 1px solid var(--border-interactive);
-  border-radius: 3px; color: var(--text-muted); background: var(--surface-sunken);
-}
-.c-key { margin-left: auto; }
-
-/* --- buttons, flattened ----------------------------------------------- */
-
-.c-btn {
+/* ── viên trạng thái ─────────────────────────────────────────────────── */
+.console .pill {
   display: inline-flex; align-items: center; gap: 6px;
-  border: 1px solid var(--border-interactive); background: var(--surface);
-  color: var(--text); padding: 5px 10px; border-radius: 3px;
-  font-family: var(--font-sans); font-size: var(--text-base); font-weight: 500;
-  cursor: pointer; text-decoration: none; white-space: nowrap;
+  font-size: var(--text-xs); letter-spacing: .1em; text-transform: uppercase;
+  border: 1px solid var(--border-interactive); border-radius: 12px; padding: 2px 9px;
 }
-.c-btn:hover { background: var(--surface-sunken); text-decoration: none; }
-.c-btn--primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
-.c-btn--primary:hover { background: var(--accent-hover); }
-.c-btn--danger { color: var(--tier-blocked); border-color: var(--tier-blocked-edge); }
-.c-btn--sm { padding: 2px 7px; font-size: var(--text-xs); }
+.console .pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--text); flex: none; }
+.console .pill.on { border-color: var(--t5); color: var(--t5); }
+.console .pill.on i { background: var(--t5); animation: beat 5s ease-out infinite; }
+.console .pill.off i { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text); }
 
-/* --- empty states ----------------------------------------------------- */
+/* ══ ĐƯỜNG ĐI CỦA TRAFFIC ═════════════════════════════════════════════
+   Trung tâm của màn Gate. Hạt chạy thật trên dây thật, và mỗi tầng có
+   nút của riêng nó ngay bên dưới. Đây là chỗ thay cho ba đoạn văn cũ. */
+.console .pipe { display: block; width: 100%; height: auto; }
+.console .pipe-lane { fill: none; stroke: var(--border); stroke-width: 1.2; }
+.console .pipe-lane--hot { stroke: var(--t3); }
+.console .pipe-lane--stop { stroke: var(--text); stroke-dasharray: 5 3; }
+.console .pipe-stage { fill: var(--bg); stroke: var(--border-interactive); stroke-width: 1.2; }
+.console .pipe-stage--on { fill: var(--t1); stroke: var(--t4); }
+.console .pipe-t { font-size: 11.5px; font-weight: 600; fill: var(--text); }
+.console .pipe-s { font-size: 10px; fill: var(--text-muted); }
+.console .pipe-z { font-size: 9.5px; font-weight: 600; fill: var(--text-muted); letter-spacing: 1.3px; }
+.console .pipe-n { font-size: 17px; font-weight: 700; fill: var(--text); }
+.console .pipe-gate { stroke: var(--text); stroke-width: 1; stroke-dasharray: 3 4; opacity: .5; }
+.console .p1 { fill: var(--t2); } .p3 { fill: var(--t4); } .p5 { fill: var(--t5); }
+.console .pk { fill: var(--text); }
 
-.c-empty-state {
-  padding: 48px 24px; text-align: center; color: var(--text-muted);
-  font-size: var(--text-base);
+/* Hàng nút nằm ngay dưới sơ đồ, mỗi nút thẳng cột với tầng nó điều khiển. */
+.console .pipe-ctl {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--s2);
+  margin-top: var(--s3);
 }
-.c-empty-state strong { display: block; color: var(--text); font-size: var(--text-lg); margin-bottom: 6px; }
-.c-empty-state p { max-width: 48ch; margin: 0 auto; }
+.console .pipe-ctl > div { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
+.console .pipe-ctl .label { font-size: 9.5px; }
 
-.c-panel { padding: 16px 20px; border-bottom: 1px solid var(--border); }
-.c-panel:last-child { border-bottom: 0; }
+/* ── bảng điều khiển ─────────────────────────────────────────────────── */
+.console .ctl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr));
+            gap: var(--s5) var(--s6); }
+.console .ctl { }
+.console .ctl-h { display: flex; align-items: center; justify-content: space-between;
+         gap: var(--s2); margin-bottom: 3px; }
+.console .ctl-n { font-size: 14px; font-weight: 600; }
+.console .ctl-d { font-size: var(--text-sm); color: var(--text-muted); min-height: 30px; }
+.console .ctl-b { display: flex; gap: 6px; flex-wrap: wrap; margin-top: var(--s2); }
 
-.c-figures { display: flex; gap: 32px; flex-wrap: wrap; }
-.c-figure { display: grid; gap: 2px; }
-.c-figure-value {
-  font-family: var(--font-mono); font-size: 22px; font-weight: 600;
-  font-variant-numeric: tabular-nums; line-height: 1.1; color: var(--text);
+/* ── nguồn đang bị giữ: bấm là mở ra lý do ───────────────────────────── */
+.console .src { border-bottom: 1px solid var(--border); }
+.console .src-h {
+  display: grid; grid-template-columns: 1fr 76px 118px 128px auto;
+  align-items: center; gap: var(--s4); width: 100%;
+  padding: var(--s3) 0; background: none; border: 0; text-align: left;
+  cursor: pointer; color: var(--text); font-size: var(--text-base);
 }
-.c-figure-label {
-  font-family: var(--font-mono); font-size: 10px; text-transform: uppercase;
-  letter-spacing: .08em; color: var(--text-muted);
+.console .src-h:hover { background: var(--surface-sunken); }
+.console .src-ip { font-size: 14.5px; font-weight: 600; }
+.console .src-sub { font-size: var(--text-sm); color: var(--text-muted); }
+.console .src-fig { font-size: var(--text-xl); font-weight: 600; letter-spacing: -.01em; }
+.console .src-chev { color: var(--text-muted); transition: transform .15s; font-size: 11px; }
+.console .src[open] .src-chev { transform: rotate(90deg); }
+.console .src-why { padding: var(--s2) 0 var(--s5); }
+.console .src-why[hidden] { display: none; }
+
+/* Lý do, tra được tới từng đặc trưng. Thanh là khoảng cách của RIÊNG
+ * đặc trưng đó; đặc trưng nào thật sự đẩy quyết định thì mang dấu mực. */
+.console .why-row {
+  display: grid; grid-template-columns: 156px 1fr 92px 108px;
+  align-items: center; gap: var(--s4); padding: 6px 0;
+  font-size: var(--text-base); border-bottom: 1px solid var(--border);
+}
+.console .why-row:last-of-type { border-bottom: 0; }
+.console .why-n { font-size: 13px; }
+.console .why-n b { font-weight: 600; }
+.console .why-bar { display: block; width: 100%; height: 12px; }
+.console .why-v { text-align: right; color: var(--text-muted); }
+.console .why-d { text-align: right; font-weight: 600; }
+.console .why-d.drives::after {
+  content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--text); margin-left: 7px; vertical-align: 1px;
+}
+.console .why-act { display: flex; gap: 6px; flex-wrap: wrap; margin-top: var(--s4);
+           padding-top: var(--s3); border-top: 1px solid var(--border); }
+.console .why-raw { font-size: var(--text-sm); color: var(--text-muted); margin-top: var(--s2); }
+
+/* ── bảng ────────────────────────────────────────────────────────────── */
+.console .tbl { width: 100%; border-collapse: collapse; font-size: var(--text-base); }
+.console .tbl th {
+  text-align: left; font-size: var(--text-xs); letter-spacing: .14em;
+  text-transform: uppercase; color: var(--text-muted); font-weight: 500;
+  padding: 0 var(--s4) var(--s2) 0; border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+.console .tbl td { padding: var(--s3) var(--s4) var(--s3) 0; border-bottom: 1px solid var(--border);
+          vertical-align: middle; }
+.console .tbl th:last-child, .console .tbl td:last-child { padding-right: 0; text-align: right; }
+.console .tbl tr:hover td { background: var(--surface-sunken); }
+.console .tbl .ip { font-size: 13.5px; font-weight: 600; }
+.console .tbl .fig { font-size: var(--text-xl); font-weight: 600; letter-spacing: -.01em; }
+.console .tbl .sub { font-size: var(--text-sm); color: var(--text-muted); }
+
+.console .verdict { display: inline-flex; align-items: center; gap: 7px;
+           font-size: var(--text-xs); letter-spacing: .1em; text-transform: uppercase; }
+.console .verdict i { width: 9px; height: 9px; border-radius: 50%; display: inline-block;
+             background: var(--text); flex: none; }
+.console .verdict.open i { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text); }
+
+/* ── thẻ số ──────────────────────────────────────────────────────────── */
+.console .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s4) var(--s6); }
+.console .stat .v { font-size: var(--text-stat); font-weight: 600; line-height: 1; letter-spacing: -.02em; }
+.console .stat .v small { font-size: 16px; font-weight: 500; }
+.console .stat .k { font-size: var(--text-xs); letter-spacing: .14em; text-transform: uppercase;
+           color: var(--text-muted); margin-top: 5px; }
+
+/* ── hàng cổng ───────────────────────────────────────────────────────── */
+.console .gate { display: grid; gap: 1px; }
+.console .gate-row {
+  display: grid; grid-template-columns: 64px 1fr 52px 96px; align-items: center;
+  gap: var(--s4); width: 100%; padding: 5px 0; cursor: pointer; text-align: left;
+  background: none; border: 0; border-bottom: 1px solid var(--border);
+  font-size: var(--text-base); color: var(--text);
+}
+.console .gate-row:hover { background: var(--surface-sunken); }
+.console .gate-row[aria-current] { font-weight: 600; }
+.console .gate-track { display: block; width: 100%; height: 8px; }
+.console .gate-rail { fill: var(--t1); }
+.console .gate-bar { fill: var(--t3); }
+.console .gate-row[aria-current] .gate-bar { fill: var(--t5); }
+.console .gate-n { text-align: right; }
+.console .gate-note { font-size: var(--text-sm); color: var(--text-muted); }
+.console .gate-row[aria-current] .gate-note { color: var(--t5); }
+
+/* ── biểu đồ chung ───────────────────────────────────────────────────── */
+.console .plot { display: block; width: 100%; height: auto; }
+.console .scale { display: flex; justify-content: space-between; font-size: var(--text-sm);
+         color: var(--text-muted); margin-top: var(--s1); }
+.console .legend { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); margin-top: var(--s3);
+          list-style: none; padding: 0; font-size: var(--text-sm); color: var(--text-muted); }
+.console .legend li { display: flex; align-items: center; gap: 7px; }
+.console .legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex: none; }
+
+.console .dots { animation: settle 1s cubic-bezier(.16,1,.3,1) both; }
+@keyframes settle { from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: none; } }
+.console .ridge { animation: rise .9s cubic-bezier(.16,1,.3,1) both; transform-origin: bottom; }
+@keyframes rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.console .grow { animation: grow .8s cubic-bezier(.2,.8,.2,1) both; transform-origin: left; }
+@keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* ── sơ đồ hệ thống ──────────────────────────────────────────────────── */
+.console .sys-box { fill: var(--bg); stroke: var(--border-interactive); stroke-width: 1.2; }
+.console .sys-box--on { fill: var(--t1); stroke: var(--t4); }
+.console .sys-zone { fill: var(--surface-sunken); }
+.console .sys-edge { fill: none; stroke: var(--border-interactive); stroke-width: 1; stroke-dasharray: 4 4; }
+.console .sys-wire { fill: none; stroke: var(--t3); stroke-width: 1.4; }
+.console .sys-wire--back { stroke: var(--text); stroke-dasharray: 5 4; opacity: .55; }
+.console .sys-t { font-size: 11.5px; font-weight: 600; fill: var(--text); }
+.console .sys-s { font-size: 10px; fill: var(--text-muted); }
+.console .sys-z { font-size: 9.5px; font-weight: 600; fill: var(--text-muted); letter-spacing: 1.3px; }
+.console .sys-n { font-size: 13px; font-weight: 700; fill: var(--text); }
+
+/* ── dòng thời gian đợt, thay cho lưới ô vuông ───────────────────────── */
+/* Lưới 7x24 bị bỏ: 168 ô để trả lời "có gì xảy ra không", mà câu trả lời
+ * gần như luôn là không. Một trục thời gian có mấy dấu ở đúng chỗ nói cùng
+ * điều đó trong một phần mười chiều cao, và bấm được vào từng dấu. */
+
+/* ── mã ──────────────────────────────────────────────────────────────── */
+.console .code {
+  background: var(--surface-sunken); border-radius: 5px; padding: var(--s3) var(--s4);
+  font-size: var(--text-base); line-height: 1.7; overflow-x: auto; white-space: pre;
+}
+.console .kv { display: grid; grid-template-columns: auto 1fr; gap: 5px var(--s4); font-size: 13px; }
+.console .kv dt { color: var(--text-muted); font-size: var(--text-sm); }
+.console .kv dd { margin: 0; }
+
+.console .two { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s6); }
+.console .wide-two { display: grid; grid-template-columns: 1.5fr 1fr; gap: var(--s6); }
+
+.console .feat { display: grid; grid-template-columns: 158px 1fr 92px 86px; gap: var(--s4);
+        align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.console .feat .nm { font-size: 13px; }
+.console .feat .val { text-align: right; font-size: var(--text-base); color: var(--text-muted); }
+
+/* Every selector below is scoped under `.console`, and that is load-bearing
+ * rather than tidiness. The base rules are `.console .body` and so on, so a
+ * bare `.body` override here loses on specificity (0,1,0 against 0,2,0) and
+ * does nothing at all. Both of these blocks were written before the sheet
+ * was scoped and both were silently dead: the console kept its 158px sidebar
+ * at 390px, pushing the page off the right edge, and a reader who had asked
+ * the operating system for reduced motion still got every animation. */
+@media (prefers-reduced-motion: reduce) {
+  .console .dots, .console .ridge, .console .grow, .console .beacon,
+  .console .pill.on i { animation: none; }
+  /* Not `circle animateMotion`: the particle is revealed by a <set>, which
+     is not a motion element, so stopping the motion alone would leave it
+     parked at the origin of the diagram. The moving particles carry `pm`;
+     the three endpoint dots share their colour classes and must stay. */
+  .console .pm { display: none; }
 }
 
-/* --- narrow ----------------------------------------------------------- */
 
-/* A split pane cannot exist at 390px. The nav becomes a bar, the detail
- * becomes a sheet over the list, and the page scrolls normally. */
-@media (max-width: 1080px) {
-  .console { --detail-w: 380px; }
+/* ── bảng năng lực ───────────────────────────────────────────────────
+ * Cái bảng nói thẳng: điều khiển nào đã có route, điều khiển nào xây
+ * được, và điều khiển nào BỊ TỪ CHỐI vì nó phá luật chi phí bằng 0.
+ * Cột cuối là phần đáng đọc nhất, vì một nền tảng miễn phí được định
+ * nghĩa bằng thứ nó từ chối làm nhiều hơn thứ nó làm. */
+.console .cap { width: 100%; border-collapse: collapse; font-size: var(--text-base); }
+.console .cap th { text-align: left; font-size: var(--text-xs); letter-spacing: .14em;
+          text-transform: uppercase; color: var(--text-muted); font-weight: 500;
+          padding: 0 var(--s4) var(--s2) 0; border-bottom: 1px solid var(--border); }
+.console .cap td { padding: var(--s3) var(--s4) var(--s3) 0;
+          border-bottom: 1px solid var(--border); vertical-align: top; }
+.console .cap td:first-child { font-weight: 600; white-space: nowrap; }
+.console .cap .why { color: var(--text-muted); }
+.console .tagx { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+        font-size: var(--text-xs); letter-spacing: .08em; text-transform: uppercase; }
+.console .tagx i { width: 8px; height: 8px; border-radius: 50%; background: var(--text); flex: none; }
+.console .tagx.soon i { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text); }
+.console .tagx.no i { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-muted); }
+.console .tagx.no { color: var(--text-muted); }
+
+/* ── nhật ký thay đổi ────────────────────────────────────────────────
+ * Sản phẩm đã GHI sổ này từ lâu, ở record_setting, và chưa bao giờ cho
+ * ai xem. "Ai đổi, đổi lúc nào, từ gì sang gì" là câu hỏi đầu tiên của
+ * mọi buổi rà soát sau sự cố. */
+.console .log-row { display: grid; grid-template-columns: 116px 1fr 148px;
+           gap: var(--s4); align-items: baseline; padding: var(--s3) 0;
+           border-bottom: 1px solid var(--border); font-size: var(--text-base); }
+.console .log-when { color: var(--text-muted); }
+.console .log-what b { font-weight: 600; }
+.console .log-who { color: var(--text-muted); text-align: right; }
+.console .log-move { display: inline-flex; align-items: center; gap: 8px; }
+.console .log-move s { text-decoration: line-through; color: var(--text-muted); }
+
+/* ── sửa sau khi NHÌN bản chụp ───────────────────────────────────────
+ * Bốn lỗi này không lộ ra khi đọc HTML. Chúng chỉ lộ ra khi chụp trang
+ * và nhìn, và đó là lý do bước đó phải nằm trong quy trình chứ không
+ * phải làm khi nhớ ra. */
+
+/* Địa chỉ và ghi chú dính liền nhau thành một chuỗi không đọc được. */
+.console .src-ip, .console .src-sub { display: block; }
+.console .src-ip { margin-bottom: 2px; }
+
+/* "3,50 sigma" vỡ làm hai dòng trong cột 64px, nên mười ba hàng cổng
+ * trông như hai mươi sáu. */
+.console .gate-row { grid-template-columns: 82px 1fr 56px 132px; }
+.console .gate-row > span:first-child, .console .gate-n { white-space: nowrap; }
+.console .gate-note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Hàng nguồn: cột cuối bị dồn sát nhau. */
+.console .src-h { grid-template-columns: 1fr 84px 150px 140px auto; }
+
+
+/* ══ carried over ═══════════════════════
+ * A mockup has no CSRF, no bulk selection and no command palette, so
+ * it never had to draw these. Their markup is unchanged, so their
+ * rules come across unchanged. Everything else on a page comes from
+ * the approved file above. */
+
+/* ── theme toggle ───────────────────────────────────────────────────── */
+
+/* Three body-less POSTs, each to a URL carrying its own value. One form with
+ * named buttons would send a form-encoded BODY, and a body behind
+ * CloudFront's OAC needs a payload hash only signed-post.js can compute. */
+.theme-toggle {
+  display: inline-flex; border: 1px solid var(--border); border-radius: var(--r-pill);
+  overflow: hidden;
 }
-@media (max-width: 860px) {
-  .console { display: block; height: auto; overflow: visible; }
-  .c-nav {
-    position: sticky; top: 0; z-index: 20; height: auto;
-    grid-template-rows: none; display: flex; align-items: center;
-    justify-content: space-between; gap: 8px;
-    border-right: 0; border-bottom: 1px solid var(--border); overflow: visible;
-  }
-  /* min-width: 0 is the load-bearing half. A flex item defaults to
-   * min-width: auto and so never shrinks below its own content, which meant
-   * the overflow-x below never engaged: measured at 390px, Allowed IPs
-   * ended at x=410 and Detection model at x=488, both past the screen with
-   * no way to scroll to them. Allowed IPs is where a customer lifts a block
-   * on a real visitor. */
-  .c-nav-group { display: flex; gap: 2px; overflow-x: auto; padding: 6px; min-width: 0; }
-  .c-nav-label { display: none; }
-
-  /* Not display: none. Sign out lives here, and hiding the whole footer
-   * left a phone with no way to end a session. The bulky parts go instead:
-   * a theme toggle and a keyboard-shortcut button are conveniences, and a
-   * phone has no keyboard to shortcut. */
-  .c-nav-foot {
-    display: flex; align-items: center; gap: 6px;
-    padding: 6px 12px 6px 0; border-top: 0; flex: 0 0 auto;
-  }
-  .c-nav-foot .theme-toggle,
-  .c-nav-foot .c-tenant,
-  .c-nav-foot [data-palette-open] { display: none; }
-  .c-nav-link { border-left: 0; border-bottom: 2px solid transparent; padding: 6px 10px; }
-  .c-nav-link[aria-current="page"] { border-left: 0; border-bottom-color: var(--accent); }
-  .c-brand { border-bottom: 0; padding: 10px 12px; }
-  .c-main { display: block; }
-  .c-header { padding: 12px 16px 0; }
-  .c-work, .c-work[data-detail] { display: block; }
-  .c-list { overflow: visible; }
-  .c-detail { border-left: 0; border-top: 1px solid var(--border); display: block; }
-  .c-table thead { position: static; }
+.theme-toggle form { display: contents; }
+.theme-opt {
+  font-family: var(--font-sans); font-size: var(--text-xs); font-weight: 500;
+  padding: 3px var(--s3); border: 0; background: transparent;
+  color: var(--text-muted); cursor: pointer;
 }
+.theme-opt:hover { color: var(--text); }
+.theme-opt[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
 
+/* ── forms ──────────────────────────────────────────────────────────── */
 
-/* --- forms, panels, small text ---------------------------------------- */
-
-.c-dim { color: var(--text-muted); font-weight: 400; }
-.c-form { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
-.c-form-stack { display: grid; gap: 16px; max-width: 460px; }
-.c-form-actions { display: flex; gap: 8px; }
-.c-form .field, .c-form-stack .field { display: grid; gap: 4px; min-width: 200px; }
+.c-form, .c-form-row { display: flex; gap: var(--s4); align-items: flex-end; flex-wrap: wrap; }
+.c-form-stack { display: grid; gap: var(--s4); max-width: 30rem; }
+.c-form-actions { display: flex; gap: var(--s2); }
+.c-form .field, .c-form-stack .field, .c-form-row .field {
+  display: grid; gap: 5px; min-width: 12rem;
+}
 .c-form label, .c-form-stack label, .field-label {
-  font-family: var(--font-mono); font-size: 10px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted);
+  font-size: var(--text-xs); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--text-muted);
 }
-.c-form input, .c-form-stack input {
-  height: 32px; padding: 0 10px; border-radius: 3px;
-  border: 1px solid var(--border-interactive);
-  background: var(--bg); color: var(--text);
-  font-family: var(--font-mono); font-size: var(--text-base);
+.c-form input, .c-form-stack input, .c-form-row input {
+  font-size: var(--text-body);
+  padding: var(--s2) var(--s3);
+  background: var(--surface-sunken); color: var(--text);
+  border: 1px solid var(--border-interactive); border-radius: var(--r2);
 }
-.field-hint { font-size: var(--text-xs); color: var(--text-muted); }
-.field-error { font-size: var(--text-xs); color: var(--tier-blocked); font-weight: 600; }
+.c-form input:focus-visible, .c-form-stack input:focus-visible,
+.c-form-row input:focus-visible {
+  outline: 2px solid var(--focus-ring); outline-offset: 1px;
+}
+.field-hint, .c-form-row .field-hint { font-size: var(--text-xs); color: var(--text-muted); }
+.field-error { font-size: var(--text-xs); color: var(--danger); }
 .field-error:empty, .field-hint:empty { display: none; }
-.field-static {
-  font-family: var(--font-mono); font-size: var(--text-base);
-  background: var(--surface-sunken); border: 1px solid var(--border);
-  border-radius: 3px; padding: 7px 10px; color: var(--text);
+.field-static { font-size: var(--text-body); }
+
+/* Inset rather than outlined. A code block and an input are places
+ * something goes INTO, and a recessed surface is the one thing a fill says
+ * well - so these keep theirs while the boxes around them go. */
+.c-code {
+  font-size: var(--text-xs); line-height: 1.7;
+  background: var(--surface-sunken); border-radius: var(--r2);
+  padding: var(--s3) var(--s4); overflow-x: auto; white-space: pre;
 }
 
-/* The status banner is axis B: always a full-width band, never a pill. */
+/* ── alerts ─────────────────────────────────────────────────────────── */
+
+/* A tint and a coloured bar already say "read this". The box round them
+ * was a third statement of it, and the only one that made an alert look
+ * like a component rather than a sentence. */
 .console .alert {
-  padding: 10px 14px; border-radius: 3px; font-size: var(--text-base);
-  border-left: 3px solid;
+  border-left: 3px solid var(--border);
+  border-radius: 0 var(--r2) var(--r2) 0;
+  padding: var(--s3) var(--s4); font-size: var(--text-body); line-height: 1.6;
 }
-.console .alert-warning {
-  background: var(--tier-limited-bg); color: var(--tier-limited);
-  border-color: var(--tier-limited); border-width: 0 0 0 3px;
-}
-.console .alert-danger {
-  background: var(--tier-blocked-bg); color: var(--tier-blocked);
-  border-color: var(--tier-blocked); border-width: 0 0 0 3px;
-}
-.console .alert-ok {
-  background: var(--tier-normal-bg); color: var(--tier-normal);
-  border-color: var(--tier-normal); border-width: 0 0 0 3px;
-}
-.console #ui-status { margin: 12px 20px 0; }
+.console .alert-warning { border-left-color: var(--warning); background: var(--warning-bg); color: var(--warning); }
+.console .alert-danger  { border-left-color: var(--danger);  background: var(--danger-bg);  color: var(--danger); }
+.console .alert-ok      { border-left-color: var(--success); background: var(--success-bg); color: var(--success); }
+
+/* The failure surface. Transport and HTTP errors used to reach console.error
+ * only, so an operator could suspend a tenant, have it 403, and never know. */
+.console #ui-status { margin: var(--s4) var(--s6) 0; }
 .console #ui-status[hidden] { display: none; }
 
-.console .meter { height: 6px; border-radius: 3px; background: var(--surface-sunken); overflow: hidden; }
-.console .meter > span { display: block; height: 100%; background: var(--tier-normal); }
-.console .meter[data-tone="warn"] > span { background: var(--tier-limited); }
-.console .stack-sm { margin-top: 10px; }
+/* ── meter ──────────────────────────────────────────────────────────── */
 
-/* Charts inside the console lose the marketing spacing. */
-.console .chart-caption { font-family: var(--font-mono); font-size: 10px; margin-top: 6px; }
-
-
-/* --- bulk selection ---------------------------------------------------- */
-
-/* The column is 28px and never wider: a checkbox that shifts the address
- * column sideways costs more than it saves, and the addresses are the thing
- * being read. */
-.c-check { width: 28px; padding-right: 0; }
-.c-check input { margin: 0; accent-color: var(--accent); }
-
-/* The bar sits on the list, not in the page flow, so selecting a row near
- * the bottom of a long table does not push the row out from under the
- * pointer that just selected it. */
-.c-bulkbar {
-  position: sticky; bottom: 0; z-index: 2;
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 20px;
-  background: var(--surface-raised);
-  border-top: 1px solid var(--border-interactive);
-}
-/* Hidden until something is selected. `hidden` alone loses to the flex
- * display above, which is how an empty action bar ends up permanently on
- * screen. */
-.c-bulkbar[hidden] { display: none; }
-.c-bulkbar-count {
-  font-family: var(--font-mono); font-size: var(--text-sm); color: var(--text);
-}
-/* Always the ratio, never a bare count: "3 selected" cannot tell the
- * operator whether they got the whole incident or a third of it. */
-.c-bulkbar-count .c-dim { color: var(--text-muted); }
-
-/* --- command palette --------------------------------------------------- */
-
-/* A real <dialog> opened with showModal(): focus trapping, the backdrop and
- * Escape all come from the element. A hand-rolled overlay spends fifty
- * lines getting those three wrong. */
-.c-palette {
-  border: none; background: none; padding: 0;
-  max-width: 100%; max-height: 100%; width: 100%; height: 100%;
-}
-.c-palette::backdrop { background: rgba(4, 10, 16, .62); }
-
-/* Near the top rather than centred: the list grows downwards as it filters,
- * so a centred box moves the first result under the cursor every keystroke. */
-.c-palette-box {
-  width: min(560px, calc(100vw - 32px));
-  margin: 12vh auto 0;
-  background: var(--surface-raised);
-  border: 1px solid var(--border-interactive);
-  border-radius: 4px;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, .38);
+.console .meter {
+  height: 6px; border-radius: var(--r-pill); background: var(--surface-sunken);
   overflow: hidden;
 }
+.console .meter > span { display: block; height: 100%; background: var(--accent); }
+.console .meter[data-tone="warn"] > span { background: var(--warning); }
+.console .stack-sm { margin-top: var(--s3); }
+.console .chart-caption { font-size: var(--text-xs); color: var(--text-muted); margin-top: var(--s2); }
 
-.c-palette-input {
-  width: 100%; box-sizing: border-box;
-  padding: 13px 16px;
-  font-family: var(--font-mono); font-size: var(--text-base);
-  color: var(--text); background: var(--surface);
-  border: 0; border-bottom: 1px solid var(--border);
-  outline-offset: -2px;
-}
-
-.c-palette-list { list-style: none; margin: 0; padding: 4px 0; max-height: 52vh; overflow-y: auto; }
-.c-palette-list li[hidden] { display: none; }
-.c-palette-list a {
-  display: flex; align-items: baseline; gap: 10px;
-  padding: 8px 16px;
-  color: var(--text); text-decoration: none;
-  font-size: var(--text-base);
-}
-/* :focus and :hover land on the same row style. Arrowing down and hovering
- * are the same act of pointing at a row, so they read the same. */
-.c-palette-list a:hover,
-.c-palette-list a:focus {
-  background: var(--surface-sunken); outline: none;
-  box-shadow: inset 2px 0 0 var(--accent);
-}
-.c-palette-list a .c-dim { color: var(--text-muted); font-size: var(--text-sm); }
-
-.c-palette-empty { margin: 0; padding: 12px 16px; color: var(--text-muted); font-size: var(--text-sm); }
-.c-palette-empty[hidden] { display: none; }
-
-/* --- tables that are wider than the screen ----------------------------- */
-
-/* Measured at 390px: the mitigation table is 519px wide and the Allow
- * button sits from x=463 to x=507. The console shell is `height: 100vh;
- * overflow: hidden`, so without this there is nothing to scroll and the
- * button is simply gone - the second time that button has left the screen,
- * by a completely different route from the first.
- *
- * focusable (tabindex="0" in the markup) because a region only a pointer
- * can enter is unreachable by keyboard, which is the same bug in different
- * clothes. */
-.c-table-scroll { overflow-x: auto; }
-
-/* The sticky header inside a scroll container sticks to that container, so
- * it keeps working. overflow-x alone would make the browser treat the
- * vertical axis as auto too and break it. */
-.c-table-scroll { overflow-y: visible; }
-
-.c-table-scroll:focus-visible {
-  outline: 2px solid var(--focus-ring); outline-offset: -2px;
-}
-
-/* --- the credential block and short forms ------------------------------ */
-
-/* The one place the product shows a secret. Monospace, selectable, and
- * allowed to scroll rather than wrap: a wrapped key pasted out of a browser
- * carries a newline into a shell. */
-.c-code {
-  margin: 10px 0 0;
-  padding: 12px 14px;
-  background: var(--surface-sunken);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  font-family: var(--font-mono); font-size: var(--text-base);
-  color: var(--text);
-  overflow-x: auto;
-  white-space: pre;
-}
-
-/* A machine name is short. The input used to stretch the full width of the
- * page, which reads as an invitation to type a paragraph into a field that
- * wants "web-01". */
-.c-form-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
-.c-form-row .field { display: grid; gap: 4px; }
-.c-form-row input { width: 260px; max-width: 100%; }
-
-/* Band labels that survive a phone.
- *
- * At 390px the outer two bands are about 70px wide and the word was being
- * sliced mid-letter: "4σ SLOWE", "5σ BLOCK". A cut word reads as a broken
- * page. The figure alone reads as a scale, which is what the band is for.
- * Both labels are in the markup and CSS picks one, so the band is never
- * blank waiting for script. */
-@media (max-width: 860px) {
-  /* Nav items scroll rather than wrap. Two-line items make the strip as
-   * tall as the page header for no gain. */
-  .c-nav-link { white-space: nowrap; }
-}
-/* The hint sits after the button in source order and belongs under both. */
-.c-form-row .field-hint { flex-basis: 100%; margin: 0; }
-
-/* A tenant week, relative to that tenant's own busiest day. Bucketed into
- * five heights and drawn as SVG geometry, which is not CSS and so needs no
- * style attribute under style-src 'self'. */
+/* A tenant's week, relative to that tenant's own busiest day. Bucketed into
+ * five heights as SVG geometry, which is not CSS and needs no style
+ * attribute under style-src 'self'. */
 .console .c-spark { display: block; width: 68px; height: 20px; }
 .console .c-spark-bar { fill: var(--text-muted); }
+
+/* ── bulk selection ─────────────────────────────────────────────────── */
+
+.c-check { width: 1%; white-space: nowrap; }
+.c-check input { width: 16px; height: 16px; accent-color: var(--accent); }
+/* Sticky, so selecting a row near the bottom of a long list does not push
+ * that row out from under the pointer that just selected it. */
+.c-bulkbar {
+  position: sticky; bottom: 0; display: flex; align-items: center; gap: var(--s4);
+  padding: var(--s3) var(--s4); margin-top: var(--s3);
+  border: 1px solid var(--accent); border-radius: var(--r2);
+  background: var(--surface);
+}
+.c-bulkbar[hidden] { display: none; }
+.c-bulkbar-count { font-size: var(--text-body); font-weight: 500; }
+.c-bulkbar-count .c-dim { font-weight: 400; }
+
+/* ── command palette ────────────────────────────────────────────────── */
+
+.c-palette {
+  border: 1px solid var(--border); border-radius: var(--r3);
+  background: var(--surface-raised); color: var(--text);
+  padding: 0; width: min(34rem, 92vw); margin-top: 12vh;
+}
+.c-palette::backdrop { background: rgb(0 0 0 / .45); }
+.c-palette-box { padding: var(--s3); }
+.c-palette-input {
+  width: 100%; font-family: var(--font-sans); font-size: var(--text-lg);
+  padding: var(--s3); background: var(--bg); color: var(--text);
+  border: 1px solid var(--border-interactive); border-radius: var(--r2);
+}
+.c-palette-list { list-style: none; margin: var(--s3) 0 0; padding: 0; max-height: 46vh; overflow-y: auto; }
+.c-palette-list li[hidden] { display: none; }
+.c-palette-list a {
+  display: flex; justify-content: space-between; gap: var(--s4);
+  padding: var(--s2) var(--s3); border-radius: var(--r2);
+  color: var(--text); text-decoration: none; font-size: var(--text-body);
+}
+.c-palette-list a:hover, .c-palette-list a:focus { background: var(--surface-sunken); outline: none; }
+.c-palette-list a .c-dim { font-size: var(--text-xs); }
+.c-palette-empty { color: var(--text-muted); font-size: var(--text-body); padding: var(--s3); }
+.c-palette-empty[hidden] { display: none; }
+
+/* Sơ đồ kiến trúc dùng chung bộ lớp `sys-*` của bản đã duyệt. Hai cái này
+ * là phần bản dựng không có dịp vẽ: khung ảnh, và đường kẻ ngang chia
+ * phần đội máy ở đáy. */
+.console .sys-plot { display: block; width: 100%; height: auto; }
+.console .sys-rule { stroke: var(--border); stroke-width: 1; }
+
+/* Cột ghi chú là văn xuôi, không phải con số. Luật chung căn phải ô cuối
+ * vì ô cuối thường là một figure hoặc một nút; ở bảng năng lực thì không. */
+.console .tbl--notes td:last-child,
+.console .tbl--notes th:last-child { text-align: left; }
+
+/* ── nhật ký thay đổi ────────────────────────────────────────────────
+ * Sản phẩm đã ghi sổ này từ lâu ở record_setting và chưa từng cho ai
+ * xem. Ba cột: khi nào, cái gì đổi thành cái gì, và ai. */
+.console .log-row {
+  display: grid; grid-template-columns: 116px 1fr 168px;
+  gap: var(--s4); align-items: baseline; padding: var(--s3) 0;
+  border-bottom: 1px solid var(--border); font-size: var(--text-base);
+}
+.console .log-when { color: var(--text-muted); }
+.console .log-what b { font-weight: 600; }
+.console .log-who { color: var(--text-muted); text-align: right; }
+.console .log-move { display: inline-flex; align-items: center; gap: 8px; }
+.console .log-move s { text-decoration: line-through; color: var(--text-muted); }
+
+/* Ba chỗ từng dùng thuộc tính `style`. `style-src 'self'` chặn thuộc tính
+ * chứ không chỉ chặn khối <style>, nên chúng không có tác dụng gì - và tệ
+ * hơn là chúng trông như có. */
+.console .one--gap { margin-top: var(--s4); }
+.console .sys-wire--dashed { stroke-dasharray: 4 4; }
+
+/* Trục thời gian, dựng bằng SVG vì cùng lý do trên. */
+.console .tl { display: block; width: 100%; height: 64px; }
+.console .tl-axis { stroke: var(--border-interactive); stroke-width: 1; }
+.console .tl-day { stroke: var(--border); stroke-width: 1; }
+.console .tl-ep { fill: var(--text); cursor: pointer; }
+.console .tl-ep:hover { fill: var(--t5); }
+.console a:focus-visible .tl-ep { outline: 2px solid var(--focus-ring); }
+
+/* Đơn vị, nói bằng lời. Một chữ Hy Lạp mang toàn bộ lập luận của sản phẩm
+ * và chưa màn nào định nghĩa nó; người đọc phải dịch trước khi hành động
+ * là người đọc bỏ cuộc. */
+.console .plain {
+  background: var(--t1); border-left: 3px solid var(--t5);
+  border-radius: 0 var(--r2) var(--r2) 0;
+  padding: var(--s3) var(--s4); font-size: 13.5px; color: var(--text-muted);
+  max-width: 66ch; line-height: 1.6; margin-bottom: var(--s5);
+}
+.console .plain b { color: var(--text); font-weight: 600; }
+
+/* ── phần bảng điều hành của nhà phát hành ────────────────────────────
+ * Ba lớp còn lại của nó: khối mã định danh, chữ mờ, và sparkline. Chúng
+ * không có trong bản dựng vì bản dựng chỉ vẽ phía khách hàng. */
+.console .c-dim { color: var(--text-muted); }
+.console .c-spark { display: block; width: 68px; height: 20px; }
+.console .c-spark-bar { fill: var(--t3); }
+.console .c-form-stack { display: grid; gap: 6px; max-width: 30rem; }
+.console .c-form-stack label { font-size: var(--text-xs); letter-spacing: .12em;
+  text-transform: uppercase; color: var(--text-muted); }
+.console .c-form-actions { display: flex; gap: var(--s2); margin-top: var(--s3); }
+.console .tbl-wrap { overflow-x: auto; position: relative; }
+.console .tbl-wrap:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+/* A nav label that wraps reads as two entries. */
+.console .nav a > span:first-child { white-space: nowrap; }
+
+/* The appeal sits in the row it belongs to, so the reason and the verb are
+ * one object. A single button at the end of the block belongs to no line. */
+.console .why-row { grid-template-columns: 148px 1fr 92px 96px 124px; }
+.console .why-act-cell { text-align: right; }
+
+/* --- the narrow console -------------------------------------------------
+ *
+ * LAST IN THE FILE, and that placement is the rule rather than a habit.
+ * These selectors have the same specificity as the ones they override, so
+ * whichever is written later wins. The block used to sit a third of the way
+ * up the sheet, above the base rules for `.src-h`, `.why-row`, `.gate-row`
+ * and the rest, and every one of those overrides lost to a rule further
+ * down. A phone got the desktop grid, and the console clipped it.
+ *
+ * 1000px and not 640: the sidebar plus a five-column mitigation row stops
+ * fitting long before a phone, and a tablet held in portrait is the size
+ * this product is actually read at during an incident.
+ */
+@media (max-width: 1000px) {
+  /* auto 1fr, not two auto rows: a grid stretches its rows to fill the
+     space it was given, so the navigation strip grew to 230px of empty
+     paper with the links floating in the middle of it. */
+  .console .body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .console .nav { border-right: 0; border-bottom: 1px solid var(--border); display: flex;
+         overflow-x: auto; padding: var(--s2) 0; min-width: 0; }
+  .console .nav .gp { display: none; }
+  .console .nav a { white-space: nowrap; }
+  .console .main { padding: var(--s4) var(--s4) var(--s7); }
+  .console .stats { grid-template-columns: repeat(2, 1fr); }
+  .console .two, .console .wide-two { grid-template-columns: 1fr; }
+  .console .pipe-ctl { grid-template-columns: repeat(2, 1fr); }
+  .console .src-h { grid-template-columns: 1fr auto; row-gap: 6px; }
+  .console .why-row { grid-template-columns: 1fr 1fr; }
+  .console .gate-row { grid-template-columns: 60px 1fr 46px; }
+  .console .gate-note { grid-column: 2 / -1; }
+  .console .why-act-cell { grid-column: 1 / -1; text-align: left; }
+  .console .log-row { grid-template-columns: 1fr; gap: 2px; }
+  .console .log-who { text-align: left; }
+}

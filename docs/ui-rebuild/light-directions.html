@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ba hướng sáng: chữ khác, màu khác, luật màu khác</title>
+<style>
+/* ══════════════════════════════════════════════════════════════════════
+   BA HƯỚNG SÁNG
+
+   Khác với bộ trước ở chỗ: bộ trước giữ nguyên chữ và màu để chỉ so dáng.
+   Bộ này đổi CẢ BA LỚP cùng lúc, vì ba thứ đó không độc lập nhau. Một
+   bảng màu giấy đòi một kiểu chữ có chân khác hẳn một bảng màu bản vẽ.
+
+   Quan trọng nhất: mỗi hướng có một LUẬT MÀU khác nhau. Sản phẩm hiện
+   đang chạy luật "màu là khoảng cách". Cả ba hướng dưới đây bỏ luật đó và
+   thay bằng một luật khác, có hệ quả khác.
+
+   Font tải một lần về repo, giấy phép OFL. Không có request nào lúc xem.
+   ══════════════════════════════════════════════════════════════════════ */
+
+@font-face { font-family: Fraunces;   src: url("fonts/fraunces.woff2") format("woff2");
+             font-weight: 300 700; font-display: swap; }
+@font-face { font-family: PublicSans; src: url("fonts/publicsans.woff2") format("woff2");
+             font-weight: 300 700; font-display: swap; }
+@font-face { font-family: DMMono;     src: url("fonts/dmmono.woff2") format("woff2");
+             font-weight: 400; font-display: swap; }
+@font-face { font-family: Archivo;    src: url("fonts/archivo.woff2") format("woff2");
+             font-weight: 400 700; font-display: swap; }
+@font-face { font-family: SpaceMono;  src: url("fonts/spacemono.woff2") format("woff2");
+             font-weight: 400; font-display: swap; }
+@font-face { font-family: InstrSerif; src: url("fonts/instrumentserif.woff2") format("woff2");
+             font-weight: 400; font-display: swap; }
+@font-face { font-family: InstrSerif; src: url("fonts/instrumentserif-italic.woff2") format("woff2");
+             font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: Schibsted;  src: url("fonts/schibsted.woff2") format("woff2");
+             font-weight: 400 700; font-display: swap; }
+@font-face { font-family: JBMono;     src: url("fonts/jetbrainsmono.woff2") format("woff2");
+             font-weight: 400 600; font-display: swap; }
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: #ffffff; color: #1a1a1f;
+  font-family: PublicSans, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4 { margin: 0; font-weight: 600; }
+.doc { max-width: 1180px; margin: 0 auto; padding: 0 28px 130px; }
+
+.doc-top {
+  position: sticky; top: 0; z-index: 20;
+  padding: 13px 28px; border-bottom: 1px solid #e6e4de;
+  background: rgb(255 255 255 / .9); backdrop-filter: blur(10px);
+  font-family: DMMono, monospace; font-size: 11.5px; color: #77767f;
+  letter-spacing: .04em;
+}
+
+.lede { padding: 56px 0 4px; max-width: 76ch; }
+.lede h1 { font-family: Fraunces, Georgia, serif; font-size: 40px; line-height: 1.1;
+           font-weight: 500; letter-spacing: -.015em; margin-bottom: 16px; }
+.lede p { color: #55545e; margin: 0 0 13px; font-size: 15px; }
+.lede b { color: #1a1a1f; font-weight: 600; }
+
+.now {
+  margin: 26px 0 0; padding: 15px 20px; max-width: 76ch;
+  background: #f5f4f0; border-left: 3px solid #1a1a1f; border-radius: 0 5px 5px 0;
+}
+.now p { margin: 0; font-size: 13.5px; color: #55545e; }
+.now b { color: #1a1a1f; }
+
+/* ── đầu mỗi hướng ──────────────────────────────────────────────────── */
+.dir { padding-top: 92px; }
+.dir-head { max-width: 76ch; margin-bottom: 24px; }
+.eyebrow { font-family: DMMono, monospace; font-size: 11px; letter-spacing: .18em;
+           text-transform: uppercase; color: #9b9aa3; margin: 0 0 12px; }
+.dir-head h2 { font-family: Fraunces, Georgia, serif; font-size: 28px; font-weight: 500;
+               line-height: 1.2; letter-spacing: -.01em; margin-bottom: 12px; }
+.dir-head p { color: #55545e; margin: 0 0 11px; }
+.dir-head b { color: #1a1a1f; font-weight: 600; }
+
+.rule-box {
+  margin: 20px 0; padding: 0; border-top: 2px solid #1a1a1f;
+  display: grid; grid-template-columns: 116px 1fr; gap: 0 22px;
+}
+.rule-box > dt {
+  font-family: DMMono, monospace; font-size: 10.5px; letter-spacing: .14em;
+  text-transform: uppercase; color: #9b9aa3; padding: 11px 0 11px;
+}
+.rule-box > dd { margin: 0; padding: 11px 0; border-bottom: 1px solid #e6e4de; font-size: 13.5px; }
+.rule-box > dt + dd { border-top: 0; }
+.rule-box > dt { border-bottom: 1px solid #e6e4de; }
+.rule-box .hi { font-weight: 600; color: #1a1a1f; }
+.rule-box code { font-family: DMMono, monospace; font-size: 12px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 4px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: DMMono, monospace; font-size: 10.5px; color: #55545e;
+  border: 1px solid #e0ded7; border-radius: 3px; padding: 3px 9px;
+}
+.chip i { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
+
+.demo {
+  border: 1px solid #e0ded7; border-radius: 3px; overflow: hidden;
+  box-shadow: 0 28px 64px -44px rgb(0 0 0 / .4);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   E. MỰC TRÊN GIẤY
+   Luật màu: màu CHỈ xuất hiện ở chỗ đang bị hành động. Mọi thứ khác là
+   mực. Khoảng cách mã hoá bằng KÍCH THƯỚC và ĐỘ ĐẬM của dấu, không bằng
+   sắc màu. Hệ quả: một màn hình khoẻ mạnh không có lấy một điểm màu nào.
+   ══════════════════════════════════════════════════════════════════════ */
+.E {
+  --paper: #f7f4ec; --ink: #16150f; --dim: #5d594c; --faint: #8b8676;
+  --rule: #ddd7c6; --rule2: #c6bfa9; --alarm: #b32d0e;
+  background: var(--paper); color: var(--ink);
+  font-family: PublicSans, sans-serif;
+}
+.E-sheet { padding: 34px 48px 30px; max-width: 980px; margin: 0 auto; }
+.E-mast {
+  display: flex; align-items: baseline; justify-content: space-between;
+  border-bottom: 2px solid var(--ink); padding-bottom: 7px; margin-bottom: 4px;
+}
+.E-mast h3 { font-family: Fraunces, Georgia, serif; font-size: 27px; font-weight: 500;
+             letter-spacing: -.02em; }
+.E-mast .id { font-family: DMMono, monospace; font-size: 11px; letter-spacing: .1em;
+              text-transform: uppercase; color: var(--faint); }
+.E-folio {
+  display: flex; justify-content: space-between; border-bottom: 1px solid var(--rule);
+  padding: 5px 0 6px; font-family: DMMono, monospace; font-size: 11px; color: var(--dim);
+}
+.E-grid { display: grid; grid-template-columns: 132px 1fr; gap: 0 30px; }
+.E-marg {
+  font-family: DMMono, monospace; font-size: 10.5px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--faint); text-align: right;
+  padding-top: 24px; line-height: 1.9;
+}
+.E-marg b { display: block; color: var(--ink); font-size: 13px; font-weight: 400;
+            letter-spacing: .02em; text-transform: none; }
+.E-col { padding: 22px 0 0; min-width: 0; }
+.E-drop { font-size: 16px; line-height: 1.7; color: var(--dim); margin: 0 0 18px; max-width: 62ch; }
+.E-drop b { color: var(--ink); font-weight: 600; }
+.E-lab {
+  font-family: DMMono, monospace; font-size: 10px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--faint);
+  border-bottom: 1px solid var(--rule); padding-bottom: 5px; margin: 26px 0 12px;
+  display: flex; justify-content: space-between;
+}
+.E-ends { display: flex; justify-content: space-between; font-family: DMMono, monospace;
+          font-size: 10.5px; color: var(--faint); margin-top: 3px; }
+.E-row {
+  display: grid; grid-template-columns: 66px 1fr 54px 128px; gap: 16px; align-items: center;
+  padding: 6px 0; border-bottom: 1px solid var(--rule);
+  font-family: DMMono, monospace; font-size: 12.5px; cursor: pointer;
+}
+.E-row:hover { background: #efebdf; }
+.E-bar { height: 2px; background: var(--rule2); }
+.E-bar i { display: block; height: 100%; background: var(--ink); }
+.E-n { text-align: right; }
+.E-note { font-family: PublicSans, sans-serif; font-size: 11.5px; color: var(--faint); }
+.E-row[aria-current] { font-weight: 600; }
+.E-row[aria-current] .E-note { color: var(--ink); }
+.E-hold { margin-top: 26px; }
+.E-h {
+  display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center;
+  padding: 13px 0 13px 14px; border-bottom: 1px solid var(--rule);
+  border-left: 3px solid var(--alarm);
+}
+.E-ip { font-family: DMMono, monospace; font-size: 16px; }
+.E-meta { font-size: 12.5px; color: var(--dim); margin-top: 3px; }
+.E-meta .verb { color: var(--alarm); font-weight: 600; }
+.E-btn {
+  font-family: PublicSans, sans-serif; font-size: 12.5px; padding: 5px 15px; cursor: pointer;
+  background: transparent; color: var(--ink); border: 1px solid var(--rule2); border-radius: 2px;
+}
+.E-btn:hover { border-color: var(--ink); }
+.E-quiet { font-size: 12.5px; color: var(--faint); margin-top: 14px; font-style: italic;
+           font-family: Fraunces, Georgia, serif; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   F. BẢN VẼ KỸ THUẬT
+   Luật màu: màu là AI QUYẾT ĐỊNH, không phải mức nghiêm trọng. Mức nghiêm
+   trọng nằm hết ở vị trí trên trục. Hệ quả: điều trung thực nhất của sản
+   phẩm (đã quyết KHÁC đã áp) trở thành thứ to tiếng nhất trên màn.
+   ══════════════════════════════════════════════════════════════════════ */
+.F {
+  --paper: #eef1f3; --panel: #f7f9fa; --ink: #0f1a22; --dim: #4a5a66;
+  --faint: #7d8d99; --grid: #dbe2e7; --rule: #c3ced6;
+  --plat: #1f5c8b; --live: #17663f; --wait: #8a5600; --you: #0f1a22;
+  background: var(--paper); color: var(--ink);
+  font-family: Archivo, sans-serif;
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px),
+                    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.F-bar {
+  display: flex; align-items: center; gap: 16px; padding: 8px 18px;
+  border-bottom: 1px solid var(--rule); background: var(--panel);
+  font-family: SpaceMono, monospace; font-size: 11px; color: var(--dim);
+}
+.F-bar .t { font-family: Archivo, sans-serif; font-weight: 700; font-size: 13px;
+            letter-spacing: -.01em; color: var(--ink); }
+.F-bar .sp { flex: 1; }
+.F-body { display: grid; grid-template-columns: 158px 1fr; }
+.F-nav { border-right: 1px solid var(--rule); background: var(--panel); padding: 10px 0; }
+.F-nav a {
+  display: flex; justify-content: space-between; padding: 5px 16px;
+  font-family: SpaceMono, monospace; font-size: 11px; color: var(--faint);
+  text-decoration: none;
+}
+.F-nav a.on { color: var(--ink); background: #e7edf1; box-shadow: inset 3px 0 0 var(--plat); }
+.F-nav .gp { font-family: SpaceMono, monospace; font-size: 9.5px; letter-spacing: .12em;
+             color: var(--rule); padding: 12px 16px 4px; }
+.F-main { padding: 20px 26px 22px; min-width: 0; }
+.F-title { display: flex; align-items: baseline; gap: 12px; margin-bottom: 3px; }
+.F-title h3 { font-size: 20px; font-weight: 700; letter-spacing: -.02em; }
+.F-no { font-family: SpaceMono, monospace; font-size: 11px; color: var(--plat);
+        border: 1px solid var(--plat); padding: 1px 7px; }
+.F-sub { font-family: SpaceMono, monospace; font-size: 11px; color: var(--faint); margin: 0 0 20px; }
+.F-sheet { background: var(--panel); border: 1px solid var(--rule); padding: 14px 16px 10px; }
+.F-cap { font-family: SpaceMono, monospace; font-size: 10px; letter-spacing: .12em;
+         text-transform: uppercase; color: var(--faint); margin-bottom: 8px; }
+.F-scale { display: flex; justify-content: space-between; font-family: SpaceMono, monospace;
+           font-size: 10px; color: var(--faint); margin-top: 2px; }
+.F-split { display: grid; grid-template-columns: 1fr 336px; gap: 22px; margin-top: 20px; }
+.F-row {
+  display: grid; grid-template-columns: 62px 1fr 48px; gap: 12px; align-items: center;
+  padding: 5px 0; font-family: SpaceMono, monospace; font-size: 11.5px; cursor: pointer;
+  border-bottom: 1px solid var(--grid);
+}
+.F-bar2 { height: 9px; border: 1px solid var(--rule); background: transparent; }
+.F-bar2 i { display: block; height: 100%; background: repeating-linear-gradient(
+    45deg, var(--plat) 0 2px, transparent 2px 5px); }
+.F-row[aria-current] { background: #e7edf1; font-weight: 700; }
+.F-row[aria-current] .F-bar2 i { background: var(--plat); }
+.F-n { text-align: right; }
+.F-call { border: 1px solid var(--rule); background: var(--panel); padding: 12px 14px; }
+.F-call + .F-call { margin-top: 12px; }
+.F-call .ip { font-family: SpaceMono, monospace; font-size: 14px; }
+.F-kv { display: grid; grid-template-columns: 94px 1fr; gap: 4px 10px; margin-top: 9px;
+        font-family: SpaceMono, monospace; font-size: 11px; }
+.F-kv dt { color: var(--faint); }
+.F-kv dd { margin: 0; }
+.F-pin { display: inline-flex; align-items: center; gap: 6px; }
+.F-pin i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.F-btn {
+  margin-top: 11px; width: 100%; font-family: SpaceMono, monospace; font-size: 11px;
+  padding: 6px; cursor: pointer; background: transparent; color: var(--ink);
+  border: 1px solid var(--rule); border-radius: 0;
+}
+.F-btn:hover { border-color: var(--plat); color: var(--plat); }
+
+/* ══════════════════════════════════════════════════════════════════════
+   G. THANG MỘT SẮC
+   Luật màu: màu là ĐỘ SÂU, không phải nguy hiểm. Một sắc duy nhất, năm
+   mức. Nguy hiểm không bao giờ là một sắc màu: nó là dấu đặc màu mực cộng
+   với một CHỮ. Hệ quả: bản in trắng đen và người mù màu không mất gì.
+   ══════════════════════════════════════════════════════════════════════ */
+.G {
+  --paper: #ffffff; --ink: #0c0e12; --dim: #585c66; --faint: #9195a0;
+  --rule: #e8e9ed;
+  --t1: #eceefa; --t2: #ccd1f0; --t3: #9aa3e0; --t4: #5f6cc4; --t5: #2f3a90;
+  background: var(--paper); color: var(--ink); font-family: Schibsted, sans-serif;
+}
+.G-top {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 16px 34px 12px; border-bottom: 1px solid var(--rule);
+}
+.G-top .b { font-family: InstrSerif, Georgia, serif; font-size: 21px; letter-spacing: -.01em; }
+.G-top .m { font-family: JBMono, monospace; font-size: 11px; color: var(--faint); }
+.G-body { display: grid; grid-template-columns: 150px 1fr; }
+.G-nav { border-right: 1px solid var(--rule); padding: 20px 0; }
+.G-nav a { display: block; padding: 6px 22px; font-size: 13.5px; color: var(--dim);
+           text-decoration: none; }
+.G-nav a.on { color: var(--ink); font-weight: 600; box-shadow: inset 3px 0 0 var(--t5); }
+.G-nav .gp { font-family: JBMono, monospace; font-size: 9.5px; letter-spacing: .14em;
+             text-transform: uppercase; color: var(--faint); padding: 16px 22px 5px; }
+.G-main { padding: 30px 34px 30px; min-width: 0; }
+.G-h1 { font-family: InstrSerif, Georgia, serif; font-size: 42px; line-height: 1.05;
+        letter-spacing: -.02em; font-weight: 400; margin-bottom: 6px; }
+.G-lead { color: var(--dim); font-size: 14.5px; margin: 0 0 30px; max-width: 58ch; }
+.G-lead b { color: var(--ink); font-weight: 600; }
+.G-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 30px; margin-bottom: 34px; }
+.G-stat .v { font-family: InstrSerif, Georgia, serif; font-size: 33px; line-height: 1;
+             letter-spacing: -.02em; }
+.G-stat .k { font-family: JBMono, monospace; font-size: 9.5px; letter-spacing: .14em;
+             text-transform: uppercase; color: var(--faint); margin-top: 6px; }
+.G-lab {
+  font-family: JBMono, monospace; font-size: 9.5px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--faint);
+  border-bottom: 1px solid var(--rule); padding-bottom: 6px; margin-bottom: 14px;
+  display: flex; justify-content: space-between;
+}
+.G-scale { display: flex; justify-content: space-between; font-family: JBMono, monospace;
+           font-size: 10px; color: var(--faint); margin-top: 3px; }
+.G-split { display: grid; grid-template-columns: 1fr 1fr; gap: 42px; margin-top: 34px; }
+.G-row {
+  display: grid; grid-template-columns: 60px 1fr 46px; gap: 14px; align-items: center;
+  padding: 7px 0; font-family: JBMono, monospace; font-size: 12px; cursor: pointer;
+  border-bottom: 1px solid var(--rule);
+}
+.G-bar { height: 7px; border-radius: 4px; background: var(--t1); }
+.G-bar i { display: block; height: 100%; border-radius: 4px; }
+.G-row[aria-current] { font-weight: 600; }
+.G-row[aria-current] .G-n { color: var(--t5); }
+.G-n { text-align: right; }
+.G-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.G-tbl th { text-align: left; font-family: JBMono, monospace; font-size: 9.5px;
+            letter-spacing: .14em; text-transform: uppercase; color: var(--faint);
+            font-weight: 400; padding: 0 0 8px; border-bottom: 1px solid var(--rule); }
+.G-tbl td { padding: 12px 0; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+.G-tbl td:last-child { text-align: right; }
+.G-ip { font-family: JBMono, monospace; font-size: 13px; }
+.G-fig { font-family: InstrSerif, Georgia, serif; font-size: 22px; letter-spacing: -.01em; }
+.G-mark {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: JBMono, monospace; font-size: 10px; letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.G-mark i { width: 9px; height: 9px; border-radius: 50%; display: inline-block;
+            background: var(--ink); }
+.G-mark.open i { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink); }
+.G-btn {
+  font-family: Schibsted, sans-serif; font-size: 12.5px; padding: 5px 14px; cursor: pointer;
+  background: transparent; color: var(--ink); border: 1px solid var(--rule); border-radius: 20px;
+}
+.G-btn:hover { border-color: var(--t5); color: var(--t5); }
+
+/* ── chung ──────────────────────────────────────────────────────────── */
+.plot { display: block; width: 100%; height: auto; }
+.dot { animation: settle 1s cubic-bezier(.16,1,.3,1) both; }
+@keyframes settle { from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: none; } }
+.pulse { animation: pulse 4s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: .18; } 50% { opacity: .6; } }
+.ridge { animation: rise .9s cubic-bezier(.16,1,.3,1) both; transform-origin: bottom; }
+@keyframes rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .dot, .pulse, .ridge { animation: none; } }
+
+.cmp { width: 100%; border-collapse: collapse; margin-top: 24px; font-size: 13px; }
+.cmp th, .cmp td { text-align: left; padding: 12px 16px 12px 0; border-bottom: 1px solid #e6e4de;
+                   vertical-align: top; }
+.cmp thead th { font-family: DMMono, monospace; font-size: 10px; letter-spacing: .14em;
+                text-transform: uppercase; color: #9b9aa3; font-weight: 400; }
+.cmp tbody th { font-weight: 600; white-space: nowrap; }
+.cmp td { color: #55545e; }
+
+@media (max-width: 920px) {
+  .F-body, .G-body, .E-grid, .F-split, .G-split { grid-template-columns: 1fr; }
+  .G-stats { grid-template-columns: repeat(2, 1fr); }
+  .E-sheet { padding: 24px 20px; }
+  .doc { padding: 0 16px 80px; }
+}
+</style>
+</head>
+<body>
+
+<div class="doc-top">aiops-traffic-shaper &middot; ba hướng sáng &middot; chữ khác, màu khác, luật màu khác &middot; 2026-09-25</div>
+
+<div class="doc">
+
+<div class="lede">
+  <h1>Ba hướng sáng, và ba luật màu khác nhau</h1>
+  <p>
+    Bộ trước giữ nguyên chữ và màu để bạn chỉ so dáng. Bộ này đổi <b>cả ba
+    lớp cùng lúc</b>, vì chúng không độc lập: một bảng màu giấy đòi một kiểu
+    chữ khác hẳn một bảng màu bản vẽ.
+  </p>
+  <p>
+    Thứ đáng chú ý nhất không phải màu nào, mà là <b>luật màu</b>. Ba hướng
+    dưới đây bỏ luật hiện tại và mỗi hướng thay bằng một luật riêng, kéo theo
+    hệ quả riêng.
+  </p>
+  <div class="now">
+    <p>
+      <b>Luật đang chạy:</b> màu là khoảng cách khỏi bình thường. Xanh lam là
+      giống bạn, hổ phách là gần cổng, hồng là đã qua cổng. Nó đọc tốt, nhưng
+      có một giá: <b>mọi màn hình đều có màu</b>, kể cả màn không có việc gì
+      xảy ra. Khi màu lúc nào cũng có mặt thì màu không còn báo được điều gì.
+    </p>
+  </div>
+</div>
+
+<!-- ══════════════ E ══════════════ -->
+<section class="dir">
+  <p class="eyebrow">Hướng E</p>
+  <div class="dir-head">
+    <h2>Mực trên giấy</h2>
+    <p>
+      Giấy ấm, mực gần đen, và <b>đúng một sắc đỏ</b>. Khoảng cách không mã
+      hoá bằng màu mà bằng <b>kích thước và độ đậm của dấu</b>: một nguồn ở
+      6σ là một chấm to và đặc, một nguồn ở 2σ là một chấm nhỏ và nhạt.
+    </p>
+    <p>
+      Sắc đỏ chỉ xuất hiện ở <b>thứ đang thực sự bị hành động</b>. Không ở
+      nhãn, không ở tiêu đề, không ở dải nền.
+    </p>
+    <dl class="rule-box">
+      <dt>Luật màu</dt>
+      <dd><span class="hi">Màu chỉ dành cho việc đang xảy ra.</span> Mọi thứ khác là mực ở các độ đậm khác nhau.</dd>
+      <dt>Hệ quả</dt>
+      <dd>Một hệ thống khoẻ mạnh cho ra một màn hình <span class="hi">không có lấy một điểm màu nào</span>. Nên một chấm đỏ là thứ không thể bỏ lỡ. Đây là luật hợp nhất với sản phẩm mà trạng thái khoẻ mạnh là không có gì xảy ra.</dd>
+      <dt>Giá phải trả</dt>
+      <dd>Mất khả năng liếc một cái là biết mức nghiêm trọng theo màu. Phải đọc kích thước dấu, hoặc đọc con số.</dd>
+      <dt>Kiểu chữ</dt>
+      <dd><code>Fraunces</code> tiêu đề &middot; <code>Public Sans</code> thân &middot; <code>DM Mono</code> số. Cả ba OFL.</dd>
+      <dt>Bảng màu</dt>
+      <dd><div class="chips">
+        <span class="chip"><i style="background:#f7f4ec;box-shadow:inset 0 0 0 1px #ddd7c6"></i>giấy #f7f4ec</span>
+        <span class="chip"><i style="background:#16150f"></i>mực #16150f</span>
+        <span class="chip"><i style="background:#5d594c"></i>mờ #5d594c</span>
+        <span class="chip"><i style="background:#b32d0e"></i>báo động #b32d0e</span>
+      </div></dd>
+    </dl>
+  </div>
+
+  <div class="demo E">
+    <div class="E-sheet">
+      <div class="E-mast">
+        <h3>Cổng</h3>
+        <span class="id">acme-prod</span>
+      </div>
+      <div class="E-folio">
+        <span>5 agent đang báo cáo &middot; lần gần nhất 8 giây trước</span>
+        <span>184,220 request / 24h</span>
+      </div>
+
+      <div class="E-grid">
+        <div class="E-marg">
+          <b>2</b>đang bị giữ
+          <b style="margin-top:14px">4.00σ</b>cổng làm chậm
+          <b style="margin-top:14px">5.00σ</b>cổng chặn
+          <b style="margin-top:14px">$0.00</b>chi phí hôm nay
+        </div>
+        <div class="E-col">
+          <p class="E-drop">
+            Sigma là <b>khoảng cách khỏi ngày thường của chính bạn</b>. Số 0
+            là giống hệt bạn. Càng lớn càng lạ. Chấm càng to và càng đậm thì
+            càng xa khoảng bình thường; màu đỏ chỉ đánh dấu thứ đang bị giữ.
+          </p>
+
+          <div class="E-lab"><span>Phân bố nguồn theo khoảng cách</span><span>24 giờ</span></div>
+          <svg class="plot" viewBox="0 0 860 150" role="img" aria-label="Phân bố nguồn theo khoảng cách sigma">
+            <g class="ridge">
+              <path d="M0,128 L57,124 L133,113 L210,88 L287,58 L363,45 L430,58 L497,84 L554,106 L611,119 L688,125 L784,127 L860,128 L860,128 L0,128 Z"
+                    fill="#16150f" opacity=".07"/>
+            </g>
+            <path d="M0,128 L57,124 L133,113 L210,88 L287,58 L363,45 L430,58 L497,84 L554,106 L611,119 L688,125 L784,127 L860,128"
+                  fill="none" stroke="#16150f" stroke-width="1" opacity=".38"/>
+            <g class="dot" fill="#16150f">
+              <circle cx="178" cy="104" r="2" opacity=".3"/>
+              <circle cx="233" cy="94" r="2.3" opacity=".36"/>
+              <circle cx="290" cy="80" r="2.7" opacity=".44"/>
+              <circle cx="341" cy="92" r="3" opacity=".5"/>
+              <circle cx="387" cy="72" r="3.4" opacity=".58"/>
+              <circle cx="448" cy="86" r="3.8" opacity=".66"/>
+              <circle cx="490" cy="96" r="4.3" opacity=".74"/>
+              <circle cx="524" cy="76" r="4.8" opacity=".82"/>
+              <circle cx="551" cy="92" r="5.2" opacity=".88"/>
+            </g>
+            <g class="dot">
+              <circle class="pulse" cx="614" cy="62" r="13" fill="#b32d0e"/>
+              <circle cx="614" cy="62" r="6.4" fill="#b32d0e"/>
+              <circle class="pulse" cx="799" cy="48" r="15" fill="#b32d0e"/>
+              <circle cx="799" cy="48" r="7.4" fill="#b32d0e"/>
+            </g>
+            <line x1="573" y1="6" x2="573" y2="128" stroke="#16150f" stroke-width="1" stroke-dasharray="4 4" opacity=".55"/>
+            <line x1="717" y1="6" x2="717" y2="128" stroke="#16150f" stroke-width="1" stroke-dasharray="4 4" opacity=".55"/>
+            <text x="579" y="15" fill="#16150f" font-size="10.5" font-family="DMMono, monospace" opacity=".7">4.00 làm chậm</text>
+            <text x="723" y="15" fill="#16150f" font-size="10.5" font-family="DMMono, monospace" opacity=".7">5.00 chặn</text>
+            <line x1="0" y1="128" x2="860" y2="128" stroke="#16150f" stroke-width="1"/>
+          </svg>
+          <div class="E-ends"><span>0σ &middot; giống ngày thường của bạn</span><span>rất khác bạn &middot; 6σ</span></div>
+
+          <div class="E-lab"><span>Kéo cổng làm chậm</span><span>13 vị trí, bấm là đổi</span></div>
+          <div class="E-row"><span>3.50σ</span><span class="E-bar"><i style="width:100%"></i></span><span class="E-n">1,482</span><span class="E-note">nhiều báo nhầm hơn</span></div>
+          <div class="E-row"><span>3.75σ</span><span class="E-bar"><i style="width:63%"></i></span><span class="E-n">940</span><span class="E-note">nhiều báo nhầm hơn</span></div>
+          <div class="E-row" aria-current="true"><span>4.00σ</span><span class="E-bar"><i style="width:25%"></i></span><span class="E-n">371</span><span class="E-note">đang dùng</span></div>
+          <div class="E-row"><span>4.25σ</span><span class="E-bar"><i style="width:11%"></i></span><span class="E-n">164</span><span class="E-note"></span></div>
+          <div class="E-row"><span>4.50σ</span><span class="E-bar"><i style="width:4%"></i></span><span class="E-n">61</span><span class="E-note"></span></div>
+
+          <div class="E-lab"><span>Đang bị hành động</span><span>2 nguồn</span></div>
+          <div class="E-hold">
+            <div class="E-h">
+              <div>
+                <div class="E-ip">203.0.113.44</div>
+                <div class="E-meta">6.41σ &middot; <span class="verb">đang chặn</span> &middot; luật đã ghi trên cả 3 máy chủ của bạn</div>
+              </div>
+              <button class="E-btn">Cho qua</button>
+            </div>
+            <div class="E-h">
+              <div>
+                <div class="E-ip">198.51.100.7</div>
+                <div class="E-meta">4.28σ &middot; <span class="verb">đang làm chậm</span> &middot; 1 trong 3 máy chủ chưa nhận</div>
+              </div>
+              <button class="E-btn">Cho qua</button>
+            </div>
+            <p class="E-quiet">Khi không còn nguồn nào bị giữ, trang này không có lấy một điểm màu.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ F ══════════════ -->
+<section class="dir">
+  <p class="eyebrow">Hướng F</p>
+  <div class="dir-head">
+    <h2>Bản vẽ kỹ thuật</h2>
+    <p>
+      Giấy can lạnh, lưới 22px lộ ra, mọi thứ có số hiệu. Nhưng thay đổi thật
+      nằm ở chỗ khác: <b>màu không còn nói mức nghiêm trọng</b>. Mức nghiêm
+      trọng nằm hết ở vị trí trên trục, chỗ nó vốn thuộc về.
+    </p>
+    <p>
+      Màu chuyển sang trả lời câu hỏi mà console này chưa bao giờ trả lời rõ:
+      <b>ai đã quyết, và máy chủ của tôi đã áp chưa</b>.
+    </p>
+    <dl class="rule-box">
+      <dt>Luật màu</dt>
+      <dd><span class="hi">Màu là ai quyết định.</span> Lam là nền tảng đã quyết. Lục là máy chủ của bạn đã ghi luật. Hổ phách là chưa nhận. Mực là bạn đã can thiệp.</dd>
+      <dt>Hệ quả</dt>
+      <dd>Điều trung thực nhất của sản phẩm trở thành thứ <span class="hi">to tiếng nhất trên màn</span>: đã quyết và đã áp là hai chuyện, và khách hàng nhìn thấy khoảng cách giữa chúng mọi lúc. Đây cũng là cột mà mọi tranh cãi bắt đầu từ đó.</dd>
+      <dt>Giá phải trả</dt>
+      <dd>Nguy hiểm không còn có màu. Một nguồn 6σ và một nguồn 4σ cùng màu lam nếu cùng trạng thái. Phải đọc vị trí.</dd>
+      <dt>Kiểu chữ</dt>
+      <dd><code>Archivo</code> toàn bộ &middot; <code>Space Mono</code> số và nhãn. Cả hai OFL.</dd>
+      <dt>Bảng màu</dt>
+      <dd><div class="chips">
+        <span class="chip"><i style="background:#eef1f3;box-shadow:inset 0 0 0 1px #c3ced6"></i>giấy can #eef1f3</span>
+        <span class="chip"><i style="background:#1f5c8b"></i>nền tảng đã quyết</span>
+        <span class="chip"><i style="background:#17663f"></i>máy chủ đã áp</span>
+        <span class="chip"><i style="background:#8a5600"></i>chưa nhận</span>
+        <span class="chip"><i style="background:#0f1a22"></i>bạn can thiệp</span>
+      </div></dd>
+    </dl>
+  </div>
+
+  <div class="demo F">
+    <div class="F-bar">
+      <span class="t">TRAFFIC SHAPER</span>
+      <span>acme-prod</span>
+      <span class="sp"></span>
+      <span>5 AGENTS &middot; 8s &middot; 184,220 REQ/24H &middot; $0.00</span>
+    </div>
+    <div class="F-body">
+      <nav class="F-nav">
+        <div class="gp">CONTROL</div>
+        <a href="#" class="on"><span>GATE</span><span>2</span></a>
+        <a href="#"><span>HISTORY</span></a>
+        <a href="#"><span>ALLOWED</span></a>
+        <div class="gp">SYSTEM</div>
+        <a href="#"><span>AGENTS</span><span>5</span></a>
+        <a href="#"><span>MODEL</span></a>
+      </nav>
+      <div class="F-main">
+        <div class="F-title"><h3>Gate</h3><span class="F-no">DWG TS-01</span></div>
+        <p class="F-sub">SCALE 0..6 SIGMA &middot; REV 2026-09-25 &middot; SOURCE: YOUR OWN BASELINE</p>
+
+        <div class="F-sheet">
+          <div class="F-cap">Fig 1 &middot; measured sources, plotted by distance</div>
+          <svg class="plot" viewBox="0 0 880 158" role="img" aria-label="Phân bố nguồn, màu theo ai quyết định">
+            <defs>
+              <marker id="tick" markerWidth="6" markerHeight="8" refX="3" refY="4" orient="auto">
+                <line x1="3" y1="0" x2="3" y2="8" stroke="#1f5c8b" stroke-width="1.2"/>
+              </marker>
+            </defs>
+            <g class="ridge">
+              <path d="M0,124 L59,120 L137,110 L215,86 L293,56 L372,44 L440,56 L508,82 L567,104 L625,116 L704,122 L802,124 L880,124 L880,124 L0,124 Z"
+                    fill="#1f5c8b" opacity=".08"/>
+            </g>
+            <path d="M0,124 L59,120 L137,110 L215,86 L293,56 L372,44 L440,56 L508,82 L567,104 L625,116 L704,122 L802,124 L880,124"
+                  fill="none" stroke="#1f5c8b" stroke-width="1.2" opacity=".55"/>
+            <g class="dot" fill="none" stroke="#1f5c8b" stroke-width="1.4">
+              <circle cx="182" cy="100" r="3"/>
+              <circle cx="239" cy="90" r="3"/>
+              <circle cx="297" cy="76" r="3"/>
+              <circle cx="349" cy="88" r="3"/>
+              <circle cx="396" cy="68" r="3"/>
+              <circle cx="459" cy="82" r="3"/>
+              <circle cx="502" cy="92" r="3"/>
+              <circle cx="537" cy="72" r="3"/>
+              <circle cx="565" cy="88" r="3"/>
+            </g>
+            <!-- 203.0.113.44: nền tảng đã quyết VÀ máy chủ đã áp -->
+            <circle cx="629" cy="58" r="6" fill="#17663f"/>
+            <line x1="629" y1="52" x2="629" y2="26" stroke="#17663f" stroke-width="1"/>
+            <line x1="629" y1="26" x2="676" y2="26" stroke="#17663f" stroke-width="1"/>
+            <text x="681" y="30" fill="#17663f" font-size="10" font-family="SpaceMono, monospace">3/3 ĐÃ ÁP</text>
+            <!-- 198.51.100.7: đã quyết, MỘT máy chủ chưa nhận -->
+            <circle cx="818" cy="46" r="6" fill="#8a5600"/>
+            <line x1="818" y1="52" x2="818" y2="80" stroke="#8a5600" stroke-width="1"/>
+            <line x1="818" y1="80" x2="762" y2="80" stroke="#8a5600" stroke-width="1"/>
+            <text x="757" y="84" fill="#8a5600" font-size="10" font-family="SpaceMono, monospace" text-anchor="end">1/3 CHƯA NHẬN</text>
+            <!-- cổng vẽ như đường kích thước -->
+            <line x1="587" y1="8" x2="587" y2="124" stroke="#1f5c8b" stroke-width="1" stroke-dasharray="6 3" marker-start="url(#tick)"/>
+            <line x1="733" y1="8" x2="733" y2="124" stroke="#1f5c8b" stroke-width="1" stroke-dasharray="6 3" marker-start="url(#tick)"/>
+            <text x="592" y="17" fill="#1f5c8b" font-size="10" font-family="SpaceMono, monospace">4.00 SLOW</text>
+            <text x="738" y="17" fill="#1f5c8b" font-size="10" font-family="SpaceMono, monospace">5.00 BLOCK</text>
+            <line x1="0" y1="124" x2="880" y2="124" stroke="#0f1a22" stroke-width="1.2"/>
+            <g font-family="SpaceMono, monospace" font-size="9.5" fill="#7d8d99">
+              <text x="0" y="138">0.0</text><text x="146" y="138">1.0</text>
+              <text x="293" y="138">2.0</text><text x="440" y="138">3.0</text>
+              <text x="587" y="138">4.0</text><text x="733" y="138">5.0</text>
+              <text x="858" y="138">6.0</text>
+            </g>
+          </svg>
+        </div>
+
+        <div class="F-split">
+          <div>
+            <div class="F-cap" style="margin-top:14px">Fig 2 &middot; slow gate, 13 positions</div>
+            <div class="F-row"><span>3.50</span><span class="F-bar2"><i style="width:100%"></i></span><span class="F-n">1482</span></div>
+            <div class="F-row"><span>3.75</span><span class="F-bar2"><i style="width:63%"></i></span><span class="F-n">940</span></div>
+            <div class="F-row" aria-current="true"><span>4.00</span><span class="F-bar2"><i style="width:25%"></i></span><span class="F-n">371</span></div>
+            <div class="F-row"><span>4.25</span><span class="F-bar2"><i style="width:11%"></i></span><span class="F-n">164</span></div>
+            <div class="F-row"><span>4.50</span><span class="F-bar2"><i style="width:4%"></i></span><span class="F-n">61</span></div>
+          </div>
+          <div>
+            <div class="F-cap" style="margin-top:14px">Detail A &middot; being acted on</div>
+            <div class="F-call">
+              <div class="ip">203.0.113.44</div>
+              <dl class="F-kv">
+                <dt>DISTANCE</dt><dd>6.41 sigma</dd>
+                <dt>DECIDED</dt><dd><span class="F-pin"><i style="background:#1f5c8b"></i>nền tảng, 10 phút trước</span></dd>
+                <dt>IN EFFECT</dt><dd><span class="F-pin"><i style="background:#17663f"></i>3 / 3 máy chủ</span></dd>
+              </dl>
+              <button class="F-btn">CHO QUA</button>
+            </div>
+            <div class="F-call">
+              <div class="ip">198.51.100.7</div>
+              <dl class="F-kv">
+                <dt>DISTANCE</dt><dd>4.28 sigma</dd>
+                <dt>DECIDED</dt><dd><span class="F-pin"><i style="background:#1f5c8b"></i>nền tảng, 40 giây trước</span></dd>
+                <dt>IN EFFECT</dt><dd><span class="F-pin"><i style="background:#8a5600"></i>1 / 3 chưa nhận</span></dd>
+              </dl>
+              <button class="F-btn">CHO QUA</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ G ══════════════ -->
+<section class="dir">
+  <p class="eyebrow">Hướng G</p>
+  <div class="dir-head">
+    <h2>Thang một sắc</h2>
+    <p>
+      Trắng thật, rất nhiều khoảng trống, chữ có chân cho con số lớn. Một sắc
+      duy nhất, <b>năm mức đậm nhạt</b>, và đó là toàn bộ bảng màu.
+    </p>
+    <p>
+      Nguy hiểm không bao giờ là một sắc màu ở đây. Nó là <b>dấu tròn đặc màu
+      mực cộng với một chữ</b>. Nghĩa là thang màu nói độ lớn, còn phán quyết
+      thì nói bằng chữ.
+    </p>
+    <dl class="rule-box">
+      <dt>Luật màu</dt>
+      <dd><span class="hi">Màu là độ sâu, không phải nguy hiểm.</span> Một sắc, năm mức. Phán quyết nói bằng dấu đặc và bằng chữ.</dd>
+      <dt>Hệ quả</dt>
+      <dd>Bản in trắng đen và người mù màu <span class="hi">không mất bất cứ thông tin nào</span>, vì không có thông tin nào chỉ nằm trong sắc màu. Cũng là hướng dễ giữ tương phản WCAG nhất, vì chỉ phải kiểm một thang.</dd>
+      <dt>Giá phải trả</dt>
+      <dd>Trầm hơn. Một màn có sự cố trông không khác mấy một màn yên tĩnh, nếu người đọc không để ý dấu đặc.</dd>
+      <dt>Kiểu chữ</dt>
+      <dd><code>Instrument Serif</code> tiêu đề và số lớn &middot; <code>Schibsted Grotesk</code> thân &middot; <code>JetBrains Mono</code> nhãn. Cả ba OFL.</dd>
+      <dt>Bảng màu</dt>
+      <dd><div class="chips">
+        <span class="chip"><i style="background:#ffffff;box-shadow:inset 0 0 0 1px #e8e9ed"></i>trắng</span>
+        <span class="chip"><i style="background:#eceefa"></i>mức 1</span>
+        <span class="chip"><i style="background:#ccd1f0"></i>mức 2</span>
+        <span class="chip"><i style="background:#9aa3e0"></i>mức 3</span>
+        <span class="chip"><i style="background:#5f6cc4"></i>mức 4</span>
+        <span class="chip"><i style="background:#2f3a90"></i>mức 5</span>
+        <span class="chip"><i style="background:#0c0e12"></i>mực, dành cho phán quyết</span>
+      </div></dd>
+    </dl>
+  </div>
+
+  <div class="demo G">
+    <div class="G-top">
+      <span class="b">Traffic Shaper</span>
+      <span class="m">acme-prod &middot; owner@acme.example</span>
+    </div>
+    <div class="G-body">
+      <nav class="G-nav">
+        <div class="gp">Control</div>
+        <a href="#" class="on">Gate</a>
+        <a href="#">History</a>
+        <a href="#">Allowed</a>
+        <div class="gp">System</div>
+        <a href="#">Agents</a>
+        <a href="#">Model</a>
+      </nav>
+      <div class="G-main">
+        <h1 class="G-h1">Hai nguồn đang bị giữ.</h1>
+        <p class="G-lead">
+          Đo được <b>184,220</b> request trong 24 giờ qua, từ 5 agent, lần báo
+          gần nhất 8 giây trước. Thang bên dưới là khoảng cách khỏi bình
+          thường của chính bạn.
+        </p>
+
+        <div class="G-stats">
+          <div class="G-stat"><div class="v">5</div><div class="k">agents reporting</div></div>
+          <div class="G-stat"><div class="v">184,220</div><div class="k">requests / 24h</div></div>
+          <div class="G-stat"><div class="v">4.00<span style="font-size:19px">σ</span></div><div class="k">slow gate</div></div>
+          <div class="G-stat"><div class="v">$0.00</div><div class="k">cost today</div></div>
+        </div>
+
+        <div class="G-lab"><span>Distribution by distance</span><span>24 hours</span></div>
+        <svg class="plot" viewBox="0 0 880 152" role="img" aria-label="Phân bố nguồn, thang một sắc">
+          <defs>
+            <linearGradient id="gtint" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0"   stop-color="#eceefa"/>
+              <stop offset=".33" stop-color="#ccd1f0"/>
+              <stop offset=".58" stop-color="#9aa3e0"/>
+              <stop offset=".80" stop-color="#5f6cc4"/>
+              <stop offset="1"   stop-color="#2f3a90"/>
+            </linearGradient>
+          </defs>
+          <g class="ridge">
+            <path d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122 L880,122 L0,122 Z"
+                  fill="url(#gtint)" opacity=".55"/>
+          </g>
+          <path d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122"
+                fill="none" stroke="#2f3a90" stroke-width="1.1" opacity=".4"/>
+          <g class="dot">
+            <circle cx="182" cy="98" r="3.4" fill="#ccd1f0"/>
+            <circle cx="239" cy="88" r="3.4" fill="#ccd1f0"/>
+            <circle cx="297" cy="74" r="3.4" fill="#9aa3e0"/>
+            <circle cx="349" cy="86" r="3.4" fill="#9aa3e0"/>
+            <circle cx="396" cy="66" r="3.4" fill="#9aa3e0"/>
+            <circle cx="459" cy="80" r="3.4" fill="#5f6cc4"/>
+            <circle cx="502" cy="90" r="3.4" fill="#5f6cc4"/>
+            <circle cx="537" cy="70" r="3.4" fill="#5f6cc4"/>
+            <circle cx="565" cy="86" r="3.4" fill="#2f3a90"/>
+          </g>
+          <!-- phán quyết: dấu đặc màu mực, kèm chữ. Không phải một sắc màu. -->
+          <g class="dot">
+            <circle cx="629" cy="56" r="6.5" fill="#0c0e12"/>
+            <text x="629" y="40" fill="#0c0e12" font-size="10" font-family="JBMono, monospace" text-anchor="middle">SLOWED</text>
+            <circle cx="818" cy="44" r="6.5" fill="#0c0e12"/>
+            <text x="818" y="28" fill="#0c0e12" font-size="10" font-family="JBMono, monospace" text-anchor="middle">BLOCKED</text>
+          </g>
+          <line x1="587" y1="6" x2="587" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+          <line x1="733" y1="6" x2="733" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+          <line x1="0" y1="122" x2="880" y2="122" stroke="#0c0e12" stroke-width="1"/>
+        </svg>
+        <div class="G-scale"><span>0σ</span><span>1σ</span><span>2σ</span><span>3σ</span><span>4σ slow</span><span>5σ block</span><span>6σ</span></div>
+
+        <div class="G-split">
+          <div>
+            <div class="G-lab"><span>Where you slow</span><span>13 positions</span></div>
+            <div class="G-row"><span>3.50σ</span><span class="G-bar"><i style="width:100%;background:#2f3a90"></i></span><span class="G-n">1482</span></div>
+            <div class="G-row"><span>3.75σ</span><span class="G-bar"><i style="width:63%;background:#5f6cc4"></i></span><span class="G-n">940</span></div>
+            <div class="G-row" aria-current="true"><span>4.00σ</span><span class="G-bar"><i style="width:25%;background:#9aa3e0"></i></span><span class="G-n">371</span></div>
+            <div class="G-row"><span>4.25σ</span><span class="G-bar"><i style="width:11%;background:#ccd1f0"></i></span><span class="G-n">164</span></div>
+            <div class="G-row"><span>4.50σ</span><span class="G-bar"><i style="width:4%;background:#eceefa"></i></span><span class="G-n">61</span></div>
+          </div>
+          <div>
+            <div class="G-lab"><span>Being acted on</span><span>2</span></div>
+            <table class="G-tbl">
+              <thead><tr><th>Source</th><th>Distance</th><th>At your servers</th><th></th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><span class="G-ip">203.0.113.44</span><br><span class="G-mark"><i></i>blocked</span></td>
+                  <td><span class="G-fig">6.41</span></td>
+                  <td style="text-align:left;font-size:12.5px;color:#585c66">3 / 3 written</td>
+                  <td><button class="G-btn">Allow</button></td>
+                </tr>
+                <tr>
+                  <td><span class="G-ip">198.51.100.7</span><br><span class="G-mark open"><i></i>slowed</span></td>
+                  <td><span class="G-fig">4.28</span></td>
+                  <td style="text-align:left;font-size:12.5px;color:#585c66">1 / 3 behind</td>
+                  <td><button class="G-btn">Allow</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ so sánh ══════════════ -->
+<section class="dir">
+  <p class="eyebrow">Chọn thế nào</p>
+  <div class="dir-head">
+    <h2>Ba luật màu cạnh nhau</h2>
+    <p>
+      Đây không phải ba bảng màu, mà là ba câu trả lời cho câu hỏi
+      <b>màu dùng để nói điều gì</b>. Chọn luật trước, hoà sắc sau, vì luật
+      quyết định bảng màu chứ không ngược lại.
+    </p>
+  </div>
+  <table class="cmp">
+    <thead>
+      <tr><th></th><th>Màu nói điều gì</th><th>Mức nghiêm trọng đọc ở đâu</th><th>Mạnh nhất khi</th><th>Yếu nhất khi</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <th>E. Mực trên giấy</th>
+        <td>Có việc đang xảy ra</td>
+        <td>Kích thước và độ đậm của dấu</td>
+        <td>Hệ thống im lặng phần lớn thời gian, và bạn muốn một chấm đỏ là không thể bỏ lỡ</td>
+        <td>Cần phân biệt nhanh nhiều mức nghiêm trọng cùng lúc</td>
+      </tr>
+      <tr>
+        <th>F. Bản vẽ</th>
+        <td>Ai đã quyết, máy chủ đã áp chưa</td>
+        <td>Vị trí trên trục</td>
+        <td>Khách hàng hay tranh cãi chuyện luật đã tới máy chủ của họ hay chưa</td>
+        <td>Người đọc chỉ muốn biết cái gì nguy hiểm nhất, ngay</td>
+      </tr>
+      <tr>
+        <th>G. Một sắc</th>
+        <td>Độ lớn, năm mức</td>
+        <td>Độ đậm của sắc, cộng một chữ</td>
+        <td>Cần in ra, chụp màn dán ticket, hoặc phải qua kiểm định tiếp cận nghiêm</td>
+        <td>Muốn màn hình có sự cố trông khác hẳn màn yên tĩnh</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="now" style="margin-top:34px;max-width:none">
+    <p>
+      <b>Một điều đáng cân nhắc:</b> luật của <b>E</b> và luật của <b>F</b>
+      ghép được. Mực trên giấy cho toàn bộ giao diện, sắc đỏ dành riêng cho
+      việc đang xảy ra, và ba sắc của F chỉ xuất hiện ở đúng một cột
+      &middot; cột "tại máy chủ của bạn". Như vậy màn hình vẫn im lặng khi
+      không có việc, mà vẫn trả lời được câu hỏi hay gây tranh cãi nhất.
+      Nói một tiếng là tôi dựng bản ghép đó.
+    </p>
+  </div>
+</section>
+
+</div>
+</body>
+</html>
