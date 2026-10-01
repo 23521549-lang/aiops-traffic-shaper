@@ -7,7 +7,7 @@ scikit-learn==1.5.0
 numpy==1.26.4
 click==8.3.3
 # PyJWT, not python-jose - see docs/adr/003-jwt-library.md
-PyJWT==2.13.0
+PyJWT==2.15.1
 cryptography==50.0.0
 jinja2==3.1.6
 python-multipart==0.0.31
