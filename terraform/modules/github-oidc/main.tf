@@ -97,6 +97,13 @@ resource "aws_iam_role_policy" "github_actions" {
           "cloudwatch:PutMetricAlarm",
           "cloudwatch:DeleteAlarms",
           "cloudwatch:DescribeAlarms",
+          # Read on every PLAN, not just on apply: the AWS provider refreshes
+          # an alarm's tags before it can report that nothing changed. Without
+          # it a plan fails on all five alarms at once, which is what the
+          # first real run of this role did.
+          "cloudwatch:ListTagsForResource",
+          "cloudwatch:TagResource",
+          "cloudwatch:UntagResource",
           "sns:*",
         ]
         Resource = "*"
@@ -109,8 +116,13 @@ resource "aws_iam_role_policy" "github_actions" {
         Effect = "Allow"
         Action = ["dynamodb:*"]
         Resource = [
+          # TenantHistory was added to the application after this list was
+          # written and nothing connected the two, so the role could manage
+          # seven of the eight tables and the plan died on the eighth. A
+          # rename to a project prefix would let this be one wildcard and
+          # remove the whole class of omission.
           for t in ["Tenants", "Agents", "Whitelist", "MitigationState",
-          "Models", "TelemetryEvents", "UsageCounters"] :
+          "Models", "TelemetryEvents", "UsageCounters", "TenantHistory"] :
           "arn:aws:dynamodb:*:${data.aws_caller_identity.current.account_id}:table/${t}"
         ]
       },
@@ -180,6 +192,24 @@ resource "aws_iam_role_policy" "github_actions" {
         Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"
       },
       {
+        # The distribution, its cache policy and its origin access control.
+        # There was no CloudFront statement here at all: the distribution
+        # predates this role, and every apply since has been run with an
+        # operator's own credentials, so nothing ever asked.
+        #
+        # Resource = "*" because CloudFront largely does not support
+        # resource-level permissions for the calls a plan makes.
+        # ListCachePolicies and ListOriginRequestPolicies are account-wide by
+        # construction, and GetCachePolicy takes a policy id that does not
+        # exist until the first apply creates it. Same shape as the
+        # lambda/cognito/events/logs grant above, and the same caveat: scoped
+        # by SERVICE, not by project, so it can reach another project's
+        # distributions in this account.
+        Effect   = "Allow"
+        Action   = ["cloudfront:*"]
+        Resource = "*"
+      },
+      {
         # Reading the AWS-managed AWSLambdaBasicExecutionRole that iam.tf
         # attaches to both functions, and listing providers, are account-wide
         # reads that cannot be resource-scoped.
@@ -195,8 +225,11 @@ resource "aws_iam_role_policy" "github_actions" {
   })
 }
 
-# NOT VERIFIED AGAINST A REAL APPLY. `terraform validate` checks that the HCL
-# parses; it cannot tell you a policy is missing an action. The first apply is
-# done with the operator's own credentials, so gaps here surface only on the
+# VERIFIED AGAINST A REAL PLAN on 2026-10-02, and it found three gaps on the
+# first try: no CloudFront statement at all, no cloudwatch:ListTagsForResource,
+# and a DynamoDB list that had not grown with the application. `terraform
+# validate` checks that the HCL parses; it cannot tell you a policy is missing
+# an action. Every apply before that date was run with the operator's own
+# credentials, which is why nothing had ever asked. Gaps still surface only on
 # first CI-driven deploy - which is the real test of this policy, and has not
 # happened. See docs/deployment.md.
