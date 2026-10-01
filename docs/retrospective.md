@@ -74,6 +74,46 @@ can. The whole suite was re-run with them stripped afterwards: 1,049 passed,
 so this was the only one. And the fastest way to find a gap in a list of
 exempt paths is to stop maintaining the list.
 
+## 1c. The pipeline that would have undone the fix
+
+The deploy workflow had never run. The first three attempts failed in a row,
+and each failure was a thing that could only be found by running it:
+
+1. the package build deleted boto3/botocore before checking that the package
+   imports, so the check could only pass where something outside the package
+   supplied them - true on a developer machine, false on a runner;
+2. the deploy role could manage seven of the application's eight DynamoDB
+   tables, had no `cloudwatch:ListTagsForResource`, and had no CloudFront
+   statement at all. The module's own closing comment had predicted exactly
+   this and said why: `terraform validate` parses HCL and cannot tell you a
+   policy is missing an action;
+3. and the one worth remembering.
+
+`terraform.tfvars` is gitignored, correctly: this repository is public and the
+file holds a real person's email address. A CI checkout therefore does not
+have it, `alert_email` falls back to its `""` default, and
+`count = var.alert_email == "" ? 0 : 1` resolves to zero. The plan read:
+
+    aws_sns_topic_subscription.email[0] will be destroyed
+
+An apply would have done it. The pipeline would have deleted the subscription
+that every alarm in this project delivers to, and left the alarms in exactly
+the state they had already been in for five days without anyone noticing -
+armed, green, and reporting to nobody.
+
+Three properties made it dangerous rather than merely broken. It is invisible
+in review, because the destroy only appears when the plan runs somewhere
+without the file. It is silent in production, because deleting an SNS
+subscription breaks nothing that answers a request. And it undoes a fix a
+human had just performed by hand, so the system gets worse every time the
+automation is used correctly.
+
+The fix is to pass the value from a GitHub secret, so the pipeline has what it
+needs without the address entering a public repository. The general lesson is
+narrower than "check your variables": a gitignored input and a `count` that
+defaults to zero combine into a deletion, and nothing in Terraform marks that
+combination as worth looking at.
+
 ## 2. Gate rows that did not pass cleanly
 
 **Substitutions (4):**
