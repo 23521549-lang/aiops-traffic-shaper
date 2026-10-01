@@ -176,7 +176,20 @@ Observed in this run only.
   has **no required reviewers**, so the approval gate the workflow's header
   describes does not exist yet. Deploys have been run from a developer machine
   with Terraform instead.
-- No real nginx or iptables has ever been driven by the agent's enforcers.
+- **iptables** has never been driven for real. The adapter is covered only by
+  tests that inject a fake `subprocess.run`, so what is proven is the argv it
+  would build, not that netfilter accepts it. Unlike nginx this cannot be
+  exercised unprivileged, which is why it is still here.
+
+  **nginx no longer belongs on this list.** `scripts/nginx-enforcement-drill.py`
+  runs an unprivileged nginx on a loopback port and drives it with the real
+  `NginxAdapter`: a client gets 200, a real tier-2 block through a real
+  `nginx -s reload` turns that into 403, and unblocking returns it to 200.
+  12/12 checks pass. Two false results had to be cleared first, and both are
+  worth knowing: a test server using `return 200` answers before nginx reaches
+  the access phase where `deny` lives, so blocking appears not to work; and a
+  drill that spells the adapter's filenames out by hand asserts against files
+  the adapter never writes, and passes while proving nothing.
 
 ### Closed since this list was written, and left here because the list was wrong
 

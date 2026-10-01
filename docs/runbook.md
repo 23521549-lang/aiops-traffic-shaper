@@ -219,6 +219,8 @@ requires it on every POST (ADR-005).
 | Backup | `scripts/backup-tables.sh` | **exercised** — export and restore both performed against the live tables; raw output in `.sdlc/gate-evidence/phase-7-restore-drill.txt` |
 | Alerting | `terraform/alarms.tf`, `terraform/probe.tf` | 6 alarms → SNS. **Check the subscription is `Confirmed`, not `PendingConfirmation`** - AWS deletes a pending one after 72 hours and the alarms then fire into an empty topic, silently. This has already happened once |
 | Readiness | `GET /ready` | **exercised** — caught a missing `dynamodb:DescribeTable` grant on the first deployment |
+| Local enforcement (nginx) | `scripts/nginx-enforcement-drill.py` | **exercised** — real nginx, real reload, 200 → 403 → 200. Needs an `nginx` binary and no root; on a Windows checkout run it from WSL |
+| Local enforcement (iptables) | — | **not exercised.** Needs root, so there is no unprivileged equivalent of the nginx drill. The adapter's argv is unit-tested against a fake `subprocess.run` and nothing more |
 
 ### The public address is CloudFront, not the function URL
 
