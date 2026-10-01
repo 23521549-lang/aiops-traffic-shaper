@@ -32,3 +32,8 @@ output "api_live_version" {
   description = "Lambda version the `live` alias serves. Roll back by pointing the alias at an earlier one."
   value       = aws_lambda_alias.api_live.function_version
 }
+
+output "alerts_topic_arn" {
+  description = "Where every alarm delivers. Checked after each apply: a topic with no CONFIRMED subscription makes every alarm in alarms.tf and probe.tf decorative, and Terraform cannot tell the difference because the subscription resource stays in state either way."
+  value       = aws_sns_topic.alerts.arn
+}
