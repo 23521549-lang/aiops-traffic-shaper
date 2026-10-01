@@ -58,14 +58,29 @@ jobs:
         working-directory: terraform
         run: terraform init -no-color
 
+      # alert_email comes from a SECRET, not from terraform.tfvars. That file
+      # is gitignored on purpose - this repository is public and the address
+      # is a real person's - so a CI checkout does not have it, the variable
+      # falls back to its "" default, and `count = alert_email == "" ? 0 : 1`
+      # resolves to ZERO. A plan run without it reads
+      # `aws_sns_topic_subscription.email[0] will be destroyed`, and an apply
+      # would have carried that out: the pipeline would silently delete the
+      # subscription that every alarm in this project delivers to.
+      #
+      # That is not hypothetical. The subscription was already lost once, to
+      # AWS's 72-hour rule for unconfirmed email endpoints, and six armed
+      # alarms spent five days firing into an empty topic before anyone
+      # noticed. This would have reproduced that state on every deploy.
       - name: Terraform plan
         working-directory: terraform
-        run: terraform plan -no-color -var="github_repo=${{ github.repository }}"
+        run: |
+          terraform plan -no-color             -var="github_repo=${{ github.repository }}"             -var="alert_email=${{ secrets.ALERT_EMAIL }}"
 
       - name: Terraform apply
         if: github.event.inputs.apply == 'apply'
         working-directory: terraform
-        run: terraform apply -auto-approve -no-color -var="github_repo=${{ github.repository }}"
+        run: |
+          terraform apply -auto-approve -no-color             -var="github_repo=${{ github.repository }}"             -var="alert_email=${{ secrets.ALERT_EMAIL }}"
 
       - name: Smoke test
         if: github.event.inputs.apply == 'apply'
