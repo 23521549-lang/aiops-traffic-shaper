@@ -220,7 +220,7 @@ requires it on every POST (ADR-005).
 | Alerting | `terraform/alarms.tf`, `terraform/probe.tf` | 6 alarms → SNS. **Check the subscription is `Confirmed`, not `PendingConfirmation`** - AWS deletes a pending one after 72 hours and the alarms then fire into an empty topic, silently. This has already happened once |
 | Readiness | `GET /ready` | **exercised** — caught a missing `dynamodb:DescribeTable` grant on the first deployment |
 | Local enforcement (nginx) | `scripts/nginx-enforcement-drill.py` | **exercised** — real nginx, real reload, 200 → 403 → 200. Needs an `nginx` binary and no root; on a Windows checkout run it from WSL |
-| Local enforcement (iptables) | — | **not exercised.** Needs root, so there is no unprivileged equivalent of the nginx drill. The adapter's argv is unit-tested against a fake `subprocess.run` and nothing more |
+| Local enforcement (iptables) | `scripts/iptables-enforcement-drill.py` | **exercised** — real netfilter in a private network namespace, connection times out while blocked. Run it under `unshare --net --map-root-user`; it refuses to run outside one rather than ask for sudo |
 
 ### The public address is CloudFront, not the function URL
 

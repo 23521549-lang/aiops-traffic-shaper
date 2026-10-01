@@ -208,10 +208,16 @@ Observed in this run only.
   has **no required reviewers**, so the approval gate the workflow's header
   describes does not exist yet. Deploys have been run from a developer machine
   with Terraform instead.
-- **iptables** has never been driven for real. The adapter is covered only by
-  tests that inject a fake `subprocess.run`, so what is proven is the argv it
-  would build, not that netfilter accepts it. Unlike nginx this cannot be
-  exercised unprivileged, which is why it is still here.
+- Both local enforcers have now been driven for real, and neither needs root
+  on the developer's machine. `scripts/iptables-enforcement-drill.py` runs
+  under `unshare --net --map-root-user`, which is its own network namespace
+  with an empty filter table and no way to reach the host's firewall. 14/14:
+  the adapter's rule appears as
+  `-A INPUT -s 127.0.0.1/32 -m comment --comment aiops-agent -j DROP`, a TCP
+  connection that succeeded before it **times out** while it is in place, and
+  succeeds again once `unblock` removes it. The timeout rather than a refusal
+  is the point of DROP over REJECT, and a drill looking for
+  ConnectionRefused would have called a working block a failure.
 
   **nginx no longer belongs on this list.** `scripts/nginx-enforcement-drill.py`
   runs an unprivileged nginx on a loopback port and drives it with the real

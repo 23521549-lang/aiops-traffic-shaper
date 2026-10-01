@@ -65,6 +65,49 @@ OUT_ABS="$(cd "$OUT" && pwd)"
 pip install -r /tmp/runtime-reqs.txt --target "$BUILD" --quiet
 cp -r services "$BUILD/services"
 
+# Every entry point must import from the built tree, not just the API. Three
+# functions ship from this one package - API, retrain, probe - and a missing
+# dependency in any of them is an outage that only appears once that function
+# is invoked, possibly at 18:00 UTC by a scheduler with nobody watching.
+#
+# BEFORE the trim, not after. This used to run at the end, by which point
+# boto3/botocore/s3transfer had been deleted - so the only way it could pass
+# was for something OUTSIDE the package to provide them. A developer machine
+# has them in ~/.local/lib/pythonX.Y/site-packages and the check passed; a CI
+# runner does not, and the first deploy run that ever executed failed here
+# with ModuleNotFoundError: No module named 'botocore'. Checking the tree pip
+# actually produced is what this step was always meant to do, and deleting
+# the three modules Lambda's own runtime provides is a separate question that
+# this check has no business answering.
+#
+# -S, which skips site.py entirely, so sys.path is the package plus the
+# standard library and nothing else. That is the shape Lambda actually has:
+# /var/task, /var/runtime, stdlib. It matters in both directions.
+#
+# Too lenient without it: a dependency missing from requirements.txt is
+# satisfied by whatever the host happens to have installed, and the check
+# passes everywhere except production.
+#
+# Too strict with the half-measures: -s removes ~/.local but leaves the
+# distro'''s /usr/lib/python3/dist-packages, which mixed the package'''s
+# cryptography 50 with Ubuntu'''s older pyOpenSSL and died on
+# `module lib has no attribute GEN_EMAIL`. botocore guards that import with
+# try/except ImportError, and an AttributeError walks straight through it -
+# a failure neither CI nor Lambda can reproduce, because neither has a
+# system pyOpenSSL at all.
+#
+# PYTHONDONTWRITEBYTECODE is load-bearing. Without it this writes a
+# __pycache__ for every module it imports - measured: the package went from
+# 197MB to 225MB unzipped, halving the headroom under Lambda's 250MB limit.
+# It now runs before the __pycache__ cleanup, which removes anything it does
+# leave behind, but the variable stays: the cleanup is not its guarantee.
+( cd "$BUILD" && PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -S -c "
+import services.backend.main
+import services.backend.retrain_handler
+import services.backend.probe_handler
+" ) || { echo "ERROR: package does not import - see traceback above" >&2; exit 1; }
+echo "imports: OK (api, retrain, probe), before the trim"
+
 # Trimming, measured rather than assumed. The untrimmed package is 234MB
 # unzipped / 77MB zipped; these three cuts bring it to 200MB / 62MB and the
 # app still imports afterwards (verified, not inferred).
@@ -95,22 +138,6 @@ if find "$BUILD" -name "*.so" | grep -qv -- "-linux-gnu.so$"; then
   echo "NOTE: some .so files are not named *-linux-gnu.so; check them before deploying:" >&2
   find "$BUILD" -name "*.so" | grep -v -- "-linux-gnu.so$" | head -5 >&2
 fi
-
-# Every entry point must import from the built tree, not just the API. Three
-# functions ship from this one package - API, retrain, probe - and a missing
-# dependency in any of them is an outage that only appears once that function
-# is invoked, possibly at 18:00 UTC by a scheduler with nobody watching.
-#
-# PYTHONDONTWRITEBYTECODE is load-bearing. Without it this check writes a
-# __pycache__ for every module it imports, AFTER the __pycache__ cleanup above -
-# measured: the package went from 197MB to 225MB unzipped, halving the headroom
-# under Lambda's hard 250MB limit.
-( cd "$BUILD" && PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -c "
-import services.backend.main
-import services.backend.retrain_handler
-import services.backend.probe_handler
-" ) || { echo "ERROR: package does not import - see traceback above" >&2; exit 1; }
-echo "imports: OK (api, retrain, probe)"
 
 UNZIPPED=$(du -sm "$BUILD" | cut -f1)
 echo "--- size ---"
