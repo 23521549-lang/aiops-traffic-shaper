@@ -20,10 +20,20 @@ output "github_actions_role_arn" {
 
 output "capacity_budget" {
   description = "Provisioned throughput against the 25/25 Always-Free pool."
-  value       = "14 RCU / 20 WCU of 25 / 25 - see dynamodb.tf for the per-table split"
+  # Counted from the tables as deployed, base plus every GSI, not from
+  # memory: this line read "14 / 20" for several changes after it stopped
+  # being true, and it is the one figure an operator checks before adding
+  # a table. A budget that is wrong in the safe direction still teaches
+  # the reader to stop believing it.
+  value       = "17 RCU / 22 WCU of 25 / 25 - see dynamodb.tf for the per-table split"
 }
 
 output "api_live_version" {
   description = "Lambda version the `live` alias serves. Roll back by pointing the alias at an earlier one."
   value       = aws_lambda_alias.api_live.function_version
+}
+
+output "alerts_topic_arn" {
+  description = "Where every alarm delivers. Checked after each apply: a topic with no CONFIRMED subscription makes every alarm in alarms.tf and probe.tf decorative, and Terraform cannot tell the difference because the subscription resource stays in state either way."
+  value       = aws_sns_topic.alerts.arn
 }

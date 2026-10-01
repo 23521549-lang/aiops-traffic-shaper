@@ -29,14 +29,18 @@ def retrain_tenant(resource, tenant_id: str) -> ModelMetadata | None:
     propagate so the invocation counts as an error, Lambda's async retry
     tries again, and the retrain-failed alarm sees it."""
     whitelisted = {i["ip"] for i in WhitelistTable(resource).query_by_tenant(tenant_id)}
-    vectors = collect_training_vectors(resource, tenant_id, exclude_ips=whitelisted)
+    collected = collect_training_vectors(resource, tenant_id, exclude_ips=whitelisted)
+    vectors = collected.vectors
 
     if len(vectors) < MIN_TRAINING_SAMPLES:
         logger.info("Skipping retrain: tenant=%s samples=%d (need %d)",
                     tenant_id, len(vectors), MIN_TRAINING_SAMPLES)
         return None
 
-    staging_meta = train_and_save(resource, tenant_id, vectors, stage="staging")
+    # What the allowed list cost this baseline, carried through to the item
+    # so the console can state it rather than estimate it.
+    staging_meta = train_and_save(resource, tenant_id, vectors, stage="staging",
+                                  excluded_whitelist=collected.excluded_whitelist)
     if staging_meta is None:
         return None
 

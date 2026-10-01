@@ -1,41 +1,109 @@
+import logging
+import uuid
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
+from botocore.exceptions import ClientError
+from pydantic import ValidationError
 
-from services.backend.api.cognito_auth import admin_auth
+from services.backend.api.cognito_auth import actor_of, admin_auth, admin_claims
 from services.backend.core.dynamo import get_dynamo_resource
-from services.backend.core.tables import AgentsTable, TelemetryEventsTable, TenantsTable
-from services.backend.schemas.admin import AgentSummary, Tenant
+from services.backend.ui.csrf import verify_csrf_if_cookie_auth
+from services.backend.core.tables import (
+    AgentsTable, TelemetryEventsTable, TenantHistoryTable, TenantsTable,
+)
+from services.backend.api.cognito_login import get_cognito_client
+from services.backend.core.config import settings
+from services.backend.schemas.admin import (
+    AgentSummary, Tenant, TenantCreateRequest, TenantCreateResponse,
+)
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _audit(resource, tenant_id: str, claims: dict, what: str, old, new,
+           because: str | None = None) -> None:
+    """Spec 2.5. A tenant suspension or reactivation is one of the four
+    actions that earn an append-only row.
+
+    On the AFFECTED TENANT's partition, not an operator partition: the
+    question it answers is "what happened to this tenant", and it has to come
+    back from the same `query_settings` the rest of the product uses.
+
+    Wrapped like every other reporting write. Suspension is most often
+    reached for during an incident, which is exactly when the history table
+    is likeliest to be throttled, and losing the suspension to a lost log
+    line would be the wrong way round.
+    """
+    import time
+
+    from services.backend.api.routes.agent import _try_history
+
+    _try_history(TenantHistoryTable(resource).record_setting,
+                 tenant_id, actor=actor_of(claims), what=what,
+                 old=old, new=new, now=time.time(), because=because)
 
 
 @router.get("/admin/v1/tenants", response_model=list[Tenant], dependencies=[Depends(admin_auth)])
 def list_tenants(resource=Depends(get_dynamo_resource)) -> list[Tenant]:
-    return [Tenant(**item) for item in TenantsTable(resource).list_all()]
+    # Skip rather than propagate. A record this cannot parse costs the
+    # operator that one row; raising costs them the entire Control Platform,
+    # including the screen they would use to find the bad record.
+    tenants = []
+    for item in TenantsTable(resource).list_all():
+        try:
+            tenants.append(Tenant(**item))
+        except ValidationError:
+            logger.warning("Skipping unparseable tenant row: %s", item.get("tenant_id"))
+    return tenants
 
 
 @router.get("/admin/v1/agents", response_model=list[AgentSummary], dependencies=[Depends(admin_auth)])
-def list_agents(status: str = "stale", resource=Depends(get_dynamo_resource)) -> list[AgentSummary]:
-    # Cross-tenant listing via AgentsTable.query_by_status(), which uses
-    # the LastSeenIndex GSI — schema.md's own stated purpose for that GSI
-    # is finding e.g. stale/dead agents across every tenant, hence the
-    # "stale" default rather than trying to list "all" agents (which the
-    # GSI can't do in one query since its partition key IS status).
-    return [AgentSummary(**item) for item in AgentsTable(resource).query_by_status(status)]
+def list_agents(status: str = "active", resource=Depends(get_dynamo_resource),
+                now: datetime | None = None) -> list[AgentSummary]:
+    """Cross-tenant fleet health, one GSI query per call, no scan.
+
+    `status` is a liveness word, not the stored attribute. "active" and
+    "stale" both mean lifecycle-active and are told apart by `last_seen_at`
+    against the LastSeenIndex sort key; only "revoked" is a stored state.
+    The default used to be "stale", which matched nothing ever written, so
+    the landing view was permanently empty — see test_agent_liveness.py.
+    """
+    table = AgentsTable(resource)
+    if status == "revoked":
+        items = table.query_revoked()
+    elif status == "stale":
+        items = table.query_stale(now=now)
+    else:
+        items = table.query_live(now=now)
+    return [AgentSummary(**item) for item in items]
 
 
-@router.post("/admin/v1/tenants/{tenant_id}/suspend", dependencies=[Depends(admin_auth)])
-def suspend_tenant(tenant_id: str, resource=Depends(get_dynamo_resource)) -> dict:
+@router.post("/admin/v1/tenants/{tenant_id}/suspend",
+             dependencies=[Depends(admin_auth), Depends(verify_csrf_if_cookie_auth)])
+def suspend_tenant(tenant_id: str,
+                   claims: dict = Depends(admin_claims),
+                   resource=Depends(get_dynamo_resource)) -> dict:
     if not TenantsTable(resource).suspend(tenant_id):
         raise HTTPException(status_code=404, detail="Tenant not found")
     # Phase 4 / H3: suspension used to flip one attribute nobody read. It now
     # also revokes every API key already issued to this tenant's agents —
     # otherwise those keys keep working, since agent keys have no expiry.
     revoked = AgentsTable(resource).revoke_all_for_tenant(tenant_id)
+    # The revocation count rides on the row because it is the part the
+    # customer disputes: their agents stop, and stay stopped after
+    # reactivation, which surprises everyone the first time.
+    _audit(resource, tenant_id, claims, "tenant_status", "active", "suspended",
+           because=f"{revoked} agent key{'' if revoked == 1 else 's'} revoked")
     return {"message": f"tenant {tenant_id} suspended", "agents_revoked": revoked}
 
 
-@router.post("/admin/v1/tenants/{tenant_id}/reactivate", dependencies=[Depends(admin_auth)])
-def reactivate_tenant(tenant_id: str, resource=Depends(get_dynamo_resource)) -> dict:
+@router.post("/admin/v1/tenants/{tenant_id}/reactivate",
+             dependencies=[Depends(admin_auth), Depends(verify_csrf_if_cookie_auth)])
+def reactivate_tenant(tenant_id: str,
+                      claims: dict = Depends(admin_claims),
+                      resource=Depends(get_dynamo_resource)) -> dict:
     """Undo a suspension. Until this existed suspension was one-way, short of
     editing DynamoDB by hand.
 
@@ -46,6 +114,7 @@ def reactivate_tenant(tenant_id: str, resource=Depends(get_dynamo_resource)) -> 
     to start reporting again on their own - and they will not."""
     if not TenantsTable(resource).reactivate(tenant_id):
         raise HTTPException(status_code=404, detail="Tenant not found")
+    _audit(resource, tenant_id, claims, "tenant_status", "suspended", "active")
     return {
         "message": f"tenant {tenant_id} reactivated",
         "note": "agent keys revoked at suspension stay revoked; register agents again",
@@ -53,7 +122,7 @@ def reactivate_tenant(tenant_id: str, resource=Depends(get_dynamo_resource)) -> 
 
 
 @router.post("/admin/v1/tenants/{tenant_id}/training-exclude/{ip}",
-             dependencies=[Depends(admin_auth)])
+             dependencies=[Depends(admin_auth), Depends(verify_csrf_if_cookie_auth)])
 def exclude_ip_from_training(tenant_id: str, ip: str,
                              resource=Depends(get_dynamo_resource)) -> dict:
     """Stop the nightly retrain learning from this IP's traffic.
@@ -73,3 +142,83 @@ def exclude_ip_from_training(tenant_id: str, ip: str,
         "buckets_excluded": excluded,
         "note": "retrain to rebuild the model without this traffic",
     }
+
+
+# --- tenant creation ------------------------------------------------------
+
+@router.post("/admin/v1/tenants", response_model=TenantCreateResponse, status_code=201,
+             dependencies=[Depends(admin_auth), Depends(verify_csrf_if_cookie_auth)])
+def create_tenant(body: TenantCreateRequest,
+                  resource=Depends(get_dynamo_resource),
+                  cognito=Depends(get_cognito_client)) -> TenantCreateResponse:
+    """The route that did not exist.
+
+    Every tenant in this system was written straight into DynamoDB by hand,
+    which is why the one in production has a `note` and no `name` and 500'd
+    both admin pages on real data.
+
+    Ordering is deliberate: **DynamoDB first, Cognito second, `provisioning`
+    in between.** Cognito-first would leave a user whose `custom:tenant_id`
+    points at nothing — and `assert_tenant_active` fails closed on a missing
+    tenant, so that user would be silently inert with no row anywhere for an
+    operator to find. This way a failure leaves a visible `provisioning` row
+    that a retry of the same request can finish.
+
+    `custom:tenant_id` is `mutable = false` and absent from the client's
+    write_attributes (terraform/cognito.tf), so **creation is the only
+    moment it can ever be set**. There is no repair path for a user created
+    without it, only delete-and-recreate — which is why the irreversible
+    step comes after the cheap retryable one.
+    """
+    tenant_id = (body.tenant_id or uuid.uuid4().hex).strip()
+    now = datetime.now(timezone.utc).isoformat()
+    table = TenantsTable(resource)
+
+    created = table.create(tenant_id, name=body.name,
+                           contact_email=body.contact_email,
+                           status="provisioning", created_at=now)
+    if not created:
+        existing = table.get(tenant_id=tenant_id) or {}
+        if existing.get("status") != "provisioning":
+            raise HTTPException(status_code=409, detail=f"Tenant {tenant_id} already exists")
+        # A retry of an attempt that died between the two writes. Carry on
+        # and let AdminCreateUser be the idempotent step.
+
+    try:
+        cognito.admin_create_user(
+            UserPoolId=settings.cognito_user_pool_id,
+            Username=body.contact_email,
+            UserAttributes=[
+                {"Name": "email", "Value": body.contact_email},
+                # The pool sets account recovery to verified_email but never
+                # verifies anyone's, so password recovery cannot work for a
+                # user created without this.
+                {"Name": "email_verified", "Value": "true"},
+                {"Name": "custom:tenant_id", "Value": tenant_id},
+            ],
+            DesiredDeliveryMediums=["EMAIL"],
+        )
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        if code != "UsernameExistsException":
+            logger.error("tenant %s left provisioning: cognito said %s", tenant_id, code)
+            raise HTTPException(
+                status_code=502,
+                detail=(f"Tenant {tenant_id} was created but its first user was not. "
+                        "Retry this request to finish it.")) from None
+
+    table.update(
+        key={"tenant_id": tenant_id},
+        update_expression="SET #s = :active",
+        expr_names={"#s": "status"},
+        expr_values={":active": "active"},
+        condition_expression="attribute_exists(tenant_id)",
+    )
+
+    return TenantCreateResponse(
+        tenant_id=tenant_id, name=body.name, status="active", created_at=now,
+        first_user_email=body.contact_email,
+        # The temporary password is emailed by Cognito and never touches
+        # this backend's logs or its response body.
+        password_delivery="cognito_email",
+    )

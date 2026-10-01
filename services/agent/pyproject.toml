@@ -1,0 +1,43 @@
+# The package the landing page tells people to install.
+#
+# `pip install traffic-shaper-agent` and `traffic-shaper run` were on the
+# quickstart for months with nothing behind either one: there was no package,
+# no console script, and the CLI could only be reached as
+# `python -m services.agent.cli` from a checkout of the backend repo. A
+# customer following the page got "command not found" on the first line.
+#
+# It stays deliberately thin. ADR-002 puts all the ML in the backend, so this
+# depends on click and the standard library and nothing else - no boto3, no
+# numpy, no requests. That is what lets it be installed on a web server
+# without an argument about dependencies, and a dependency list that starts
+# growing here is a design change, not a packaging one.
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "traffic-shaper-agent"
+version = "1.0.0"
+description = "Reads your nginx access log, sends per-IP counts, enforces what comes back."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = ["click>=8.1,<9"]
+
+[project.urls]
+Homepage = "https://github.com/23521549-lang/aiops-traffic-shaper"
+
+[project.scripts]
+traffic-shaper = "services.agent.cli:cli"
+
+# The agent ships as `services.agent.*` because that is the import path its
+# own modules already use. Renaming the package would mean rewriting every
+# import in the repo to buy a shorter name nobody types.
+#
+# Both packages are listed by hand. `find` under a package-dir remap picks up
+# `tests` and misses `enforcer`, and a wheel missing enforcer/ installs
+# cleanly and then fails at the first import inside `run` - on the customer's
+# machine, not here.
+[tool.setuptools]
+packages = ["services.agent", "services.agent.enforcer"]
+package-dir = { "services.agent" = ".", "services.agent.enforcer" = "enforcer" }

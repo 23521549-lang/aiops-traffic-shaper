@@ -1,0 +1,395 @@
+{% extends "base.html" %}
+{# The landing page carries its own sheet. The console never loads it, and
+   this page never loads the console's. #}
+{% block head %}<link rel="stylesheet" href="/ui/static/landing.css">{% endblock %}
+{% import "_brand.html" as brand %}
+{% import "shared/_charts.html" as charts %}
+{% import "shared/_axis.html" as axis_macro %}
+{% block title %}Traffic Shaper · traffic của bạn có một mức bình thường{% endblock %}
+{% block body %}
+{{ charts.patterns() }}
+<a class="skip-link" href="#main-content">Bỏ qua, tới nội dung</a>
+
+<header class="lp-topbar on-ink">
+  <a href="/" class="lp-brand">{{ brand.lockup(22) }}</a>
+  <nav class="lp-nav" aria-label="Chính">
+    <a href="#how">Cách hoạt động</a>
+    <a href="#sigma">Sigma là gì</a>
+    <a href="#pricing">Giá</a>
+    <a href="/ui/login" class="btn btn-sm">Đăng nhập</a>
+  </nav>
+</header>
+
+<main id="main-content" tabindex="-1">
+
+{# ---- S1 hero ---------------------------------------------------------- #}
+<section class="lp-hero on-ink">
+  <div class="lp-hero-copy">
+    <h1>Traffic của bạn có một mức bình thường.<br>Chúng tôi chặn thứ rời khỏi nó.</h1>
+    <p class="lp-lead">
+      Mọi lớp phòng thủ dựa trên luật đều hỏi cùng một câu: <em>cái này có
+      giống một cuộc tấn công không?</em> Sản phẩm này hỏi câu tốt hơn:
+      <strong>cái này có giống bạn không?</strong>
+    </p>
+    <p class="muted">
+      Chúng tôi học nền của chính site bạn: số request, tỉ lệ lỗi, số byte,
+      thời gian, độ trải của đường dẫn, độ tản user agent và tỉ lệ POST.
+      Rồi đo mỗi địa chỉ nguồn bằng độ lệch chuẩn so với <em>cái nền đó</em>.
+      Quá 4σ thì làm chậm. Quá 5σ thì dừng lại.
+    </p>
+    {# One next action, and it is one a stranger can actually take. The
+       primary button used to be "Install the agent", whose first step is
+       signing in to an account nobody can create: there is no self-service
+       signup, and a button pointing at one that does not exist is worse than
+       admitting the constraint. Admitting constraints is the only asset this
+       page has.
+
+       A mailto and not a form. This page reads and writes no DynamoDB, which
+       is what lets it sit behind a cache behaviour and cost nothing, and a
+       public endpoint that stores anything is an abuse surface on a 20 WCU
+       budget with no rate limiting in front of it. #}
+    <p class="lp-cta">
+      {% if access_email %}
+      <a href="mailto:{{ access_email }}?subject=Traffic%20Shaper%20access%20request"
+         class="btn btn-primary">Xin quyền dùng</a>
+      <a href="#proof" class="btn btn-ghost">Xem số đo</a>
+      {% else %}
+      {# No address configured. A placeholder mailto would open a mail
+         client, send, and bounce somewhere the reader never sees, which is
+         the worst of the available failures: it looks like it worked. #}
+      <a href="#proof" class="btn btn-primary">Xem số đo</a>
+      {% endif %}
+    </p>
+    <p class="muted lp-fineprint">
+      Chỉ nhận qua lời mời.
+      {% if access_email %}Một người đọc các thư này và trả lời bằng tay,
+      thường trong một tới hai ngày.{% else %}Quyền dùng được thu xếp
+      trực tiếp với người đã mời bạn; không có địa chỉ nào đăng ở đây.{% endif %}
+      Không có form đăng ký, không có cấp tài khoản tức thì, vì không có ai
+      trực để sửa lúc ba giờ sáng, và nói khác đi sẽ là điều đầu tiên trên
+      trang này không đúng sự thật.
+    </p>
+    <p class="muted lp-fineprint">
+      Miễn phí mãi mãi. Không cần thẻ. Toàn bộ backend chạy trong hạn mức
+      Always-Free của AWS. Đó không phải khuyến mãi, đó là kiến trúc.
+    </p>
+  </div>
+  <div class="lp-hero-art">
+    {# An illustration, and it says so on the chart rather than under it.
+       These are forty-eight hardcoded numbers: no site produced them, and
+       captioning them as a real measurement was the one place this page
+       spent its credibility in the wrong direction. #}
+    <p class="lp-example-tag">Ví dụ minh hoạ, không phải dữ liệu khách hàng</p>
+    {{ charts.deviation(chart,
+        "Ví dụ: 24 giờ vẽ theo độ lệch chuẩn so với mức bình thường của chính một site",
+        "Minh hoạ cho thang đo, không phải số đo của site nào. Phần lớn các khoảng nằm trong dải yên; hai khoảng vượt qua hai đường mà sản phẩm sẽ làm chậm rồi dừng một nguồn.") }}
+  </div>
+</section>
+
+{# ---- S2 the problem --------------------------------------------------- #}
+<section class="lp-section">
+  <h2>Luật WAF là ý niệm bình thường của người khác.</h2>
+  <p class="lp-lead">
+    Giới hạn tốc độ là một con số bạn đoán. Danh sách chữ ký là mô tả các
+    cuộc tấn công của năm ngoái. Danh tiếng IP là phán xét về một người lạ,
+    hình thành ở nơi khác. Cả ba cùng một khuyết điểm: không cái nào từng
+    nhìn thấy site của bạn.
+  </p>
+  <p>
+    Nên ngưỡng bạn đặt hoặc là lỏng tới mức bỏ lọt một con bot cào đang âm
+    thầm ngốn tiền của bạn, hoặc chặt tới mức bóp nghẹt chính trang thanh
+    toán của bạn vào một ngày thứ Sáu. Một đợt tăng vọt là chuyện thường
+    với một cửa hàng đông khách nhưng là bất thường với một trang tài liệu,
+    và không luật dùng chung nào biết bạn là bên nào.
+  </p>
+  <div class="lp-grid-3">
+    <div class="lp-col">
+      <span class="lp-kicker">01 · Giới hạn tốc độ cố định</span>
+      <p>Một con số chọn trước khi có traffic nào. Nó sai vào ngày traffic
+         của bạn đổi dáng, và không gì báo cho bạn biết.</p>
+    </div>
+    <div class="lp-col">
+      <span class="lp-kicker">02 · Danh sách chữ ký</span>
+      <p>Mô tả những cuộc tấn công đã được ghi danh mục. Hữu ích, và về bản
+         chất luôn đi sau.</p>
+    </div>
+    <div class="lp-col">
+      <span class="lp-kicker">03 · Danh tiếng IP</span>
+      <p>Ý kiến của người khác về một địa chỉ, hình thành trên site của người
+         khác. Nó không nói gì về việc địa chỉ đó đã làm gì với bạn.</p>
+    </div>
+  </div>
+</section>
+
+{# ---- S3 how it works -------------------------------------------------- #}
+<section class="lp-section lp-section--panel" id="how">
+  <h2>Ba bộ phận chuyển động. Hai trong số đó là của chúng tôi.</h2>
+  <ol class="lp-steps">
+    <li>
+      <span class="lp-kicker">01 · Agent quan sát</span>
+      <p>Một client Python mỏng đọc đuôi log truy cập nginx và gom <em>siêu
+         dữ liệu</em> của request, không bao giờ lấy nội dung hay payload. Nó
+         không kèm ML và không kèm AWS SDK.</p>
+    </li>
+    <li>
+      <span class="lp-kicker">02 · Nền tảng đo</span>
+      <p>Chúng tôi gộp thành một bản ghi cho mỗi IP nguồn trong mỗi khoảng
+         năm giây, rồi chấm điểm bằng một IsolationForest riêng của bạn,
+         huấn luyện đêm qua trên traffic của bạn và không của ai khác.</p>
+    </li>
+    <li>
+      <span class="lp-kicker">03 · Agent thi hành</span>
+      <p>Quyết định trả về ngay trong cùng một phản hồi HTTP. Agent của bạn
+         ghi chúng vào nginx hoặc iptables, tuỳ cái nào nó tìm thấy, và tự
+         gỡ khi hết giờ. Không có gì khác gỡ hộ nó.</p>
+    </li>
+  </ol>
+
+  {# The enclosure is the point of this diagram: the customer's log data
+     leaves the machine as counts only. #}
+  <figure class="chart lp-flow">
+    <svg viewBox="0 0 640 170" role="img" class="c-flow" focusable="false"
+         preserveAspectRatio="xMidYMid meet">
+      <title>Dữ liệu của bạn đi đâu</title>
+      <desc>Log của bạn và nginx của bạn ở lại trên máy bạn. Chỉ có các con
+            đếm theo IP đi qua mạng, và chỉ có quyết định đi về.</desc>
+      <rect x="8" y="8" width="300" height="154" rx="10" class="c-enclosure"/>
+      <text x="158" y="28" text-anchor="middle" class="c-enclosure-label">máy của bạn · log của bạn · nginx của bạn</text>
+      <rect x="30" y="48" width="118" height="44" rx="6" class="c-node"/>
+      <text x="89" y="75" text-anchor="middle" class="c-node-label">agent</text>
+      <rect x="30" y="110" width="118" height="40" rx="6" class="c-node"/>
+      <text x="89" y="135" text-anchor="middle" class="c-node-label">nginx</text>
+      <rect x="452" y="48" width="160" height="44" rx="6" class="c-node c-node--ours"/>
+      <text x="532" y="75" text-anchor="middle" class="c-node-label">mô hình riêng của bạn</text>
+      <line x1="150" y1="60" x2="450" y2="60" class="c-arrow"/>
+      <text x="300" y="52" text-anchor="middle" class="c-arrow-label">POST /agent/v1/telemetry · chỉ con đếm</text>
+      <line x1="450" y1="82" x2="150" y2="82" class="c-arrow"/>
+      <text x="300" y="98" text-anchor="middle" class="c-arrow-label">decisions[]</text>
+      <line x1="89" y1="94" x2="89" y2="108" class="c-arrow"/>
+    </svg>
+  </figure>
+</section>
+
+{# ---- S4 sigma --------------------------------------------------------- #}
+<section class="lp-section on-ink lp-sigma" id="sigma">
+  <h2>σ, gọn trong một màn hình.</h2>
+  <p class="lp-lead">
+    σ (“sigma”) là một độ lệch chuẩn: đơn vị tự nhiên của cái <em>bất
+    thường</em> đối với một tập dữ liệu. Đó không phải điểm số do chúng tôi
+    bịa ra, và nó không mang cùng một ý nghĩa với hai site khác nhau. Đó
+    chính là điều cốt lõi.
+  </p>
+  <p class="muted">
+    Gần như mọi hoạt động bình thường nằm trong 3σ quanh trung bình của
+    chính nó. Chúng tôi để yên. Từ 4σ tới 5σ, nguồn bị làm chậm trong năm
+    phút. Quá 5σ, nguồn bị từ chối trong một giờ. Cả hai đồng hồ đều tự
+    hết hạn.
+  </p>
+  {{ axis_macro.render(axis, "Ba dải trên thang sigma",
+       "Thang đo mà mọi quyết định trong sản phẩm này đều được đo trên đó.") }}
+  <h3>Sao không dùng luôn điểm bất thường thô?</h3>
+  <p class="muted">
+    Vì chúng tôi đã thử. Cùng một cuộc tấn công dò mật khẩu được chấm
+    −0,204 rồi −0,105 rồi −0,092 trên ba mô hình kế tiếp nhau của cùng một
+    khách hàng, vượt qua ngưỡng cố định −0,1 của chúng tôi ở đâu đó giữa
+    chừng. Một con số đổi ý nghĩa mỗi đêm thì không thể làm ngưỡng, và
+    chắc chắn không thể đem cho bạn xem.
+  </p>
+</section>
+
+{# ---- S5 proof --------------------------------------------------------- #}
+<section class="lp-section" id="proof">
+  <h2>Chúng tôi đã đo, và công bố cả những lần trượt.</h2>
+  <p class="lp-lead">Hai mươi mô hình nền, mỗi mô hình ba trăm khoảng bình thường giữ riêng để kiểm.</p>
+  <div class="card">
+    <div class="table-scroll" tabindex="0" role="region" aria-labelledby="proof-cap">
+      <table>
+        <caption id="proof-cap" class="sr-only">Tỉ lệ bắt được và tỉ lệ báo nhầm theo từng ngưỡng</caption>
+        <thead>
+          <tr>
+            <th scope="col">Ngưỡng</th>
+            <th scope="col">Bắt được dò mật khẩu</th>
+            <th scope="col">Bắt được lạm dụng nhẹ</th>
+            <th scope="col">Báo nhầm</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row"><code>điểm thô &lt; −0.10</code></th>
+              <td class="num">14 / 20</td><td class="num">2 / 20</td><td class="num">0.00%</td></tr>
+          <tr class="lp-row-chosen"><th scope="row"><code>z &lt; −4.0</code> (làm chậm)</th>
+              <td class="num">20 / 20</td><td class="num">17 / 20</td><td class="num">0.27%</td></tr>
+          <tr><th scope="row"><code>z &lt; −5.0</code> (chặn)</th>
+              <td class="num">11 / 20</td><td class="num">0 / 20</td><td class="num">0.00%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="field-hint stack-sm">
+      Các con số này đo trên traffic mô phỏng, không phải traffic thật của
+      khách hàng, và chúng tôi sẽ nói rõ như vậy trên trang này cho tới khi
+      điều đó thay đổi. Một dòng khác cũng quan trọng không kém:
+      <code>điểm thô &lt; −0.15</code> không bắt được gì cả, nghĩa là ngưỡng chặn
+      cứng mà chúng tôi phát hành đầu tiên chưa một lần nào kích hoạt.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Một trận lũ tốn của chúng tôi bằng một dòng nhỏ giọt.</h3>
+    <div class="table-scroll" tabindex="0" role="region" aria-label="Chi phí mỗi lô theo lượng log">
+    <table>
+      <tbody>
+        <tr><th scope="row">20 dòng log từ 10 IP</th><td class="num">12 lượt ghi DynamoDB</td></tr>
+        <tr><th scope="row">200 dòng log từ 10 IP</th><td class="num">12 lượt ghi DynamoDB</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="field-hint stack-sm">
+      Đó là lý do sản phẩm này miễn phí, và có một bài kiểm thử sẽ hỏng nếu
+      điều đó thôi đúng.
+    </p>
+  </div>
+</section>
+
+{# ---- S6 what it doesn't do yet ---------------------------------------- #}
+<section class="lp-section lp-section--panel lp-narrow">
+  <h2>Những thứ nó chưa làm được.</h2>
+  <ul class="lp-gaps">
+    <li><strong>Chưa khách hàng bên ngoài nào dùng.</strong> Hệ thống đã triển
+        khai, toàn bộ vòng chạy đầu cuối trên production với khách hàng demo
+        của chính chúng tôi, và chưa ai khác đăng ký. Bạn sẽ là người đầu
+        tiên.</li>
+    <li><strong>Chưa có đăng nhập một lần.</strong> Bạn đăng nhập bằng email và
+        mật khẩu. Không có OAuth, không SAML, không SCIM, nên không có cách
+        gắn nó vào thư mục người dùng của công ty bạn.</li>
+    <li><strong>Chưa chặn tốc độ ở biên.</strong> Chúng tôi bỏ API Gateway để
+        ở trong hạn mức miễn phí, và chưa lấy lại được phần đó.</li>
+    <li><strong>Việc hãm còn thô.</strong> Ở mức 100% phần miễn phí của ngày,
+        chúng tôi từ chối telemetry toàn bộ thay vì hãm riêng từng khách
+        hàng.</li>
+    <li><strong>Chúng tôi có lưu địa chỉ IP của người dùng cuối.</strong> Nếu
+        điều đó là vấn đề tuân thủ với bạn, thì đó là một vấn đề tuân thủ,
+        và chúng tôi chưa giải quyết nó.</li>
+  </ul>
+</section>
+
+{# ---- S7 pricing ------------------------------------------------------- #}
+<section class="lp-section" id="pricing">
+  <h2>Miễn phí. Và đây là trần, nói công khai.</h2>
+  <p class="lp-lead">
+    Chỉ có một gói và nó không tốn đồng nào, vì backend được dựng để vừa
+    trong hạn mức Always-Free của AWS chứ không phải một gói dùng thử.
+  </p>
+  <div class="card lp-price">
+    <h3>Miễn phí mãi mãi</h3>
+    <ul class="lp-features">
+      <li>Không giới hạn số site · không giới hạn số agent</li>
+      <li>Mô hình riêng từng khách hàng, huấn luyện lại mỗi đêm</li>
+      <li>Thi hành bằng nginx và iptables</li>
+      <li>Đủ API</li>
+    </ul>
+    <p><strong>Trần là 25% ngân sách request chung của ngày, cho mỗi khách
+       hàng.</strong> Nếu bạn vượt qua, chúng tôi ngưng nhận telemetry cho
+       tới hết ngày UTC, và console báo cho bạn từ mức 80%. Chúng tôi
+       không tính tiền bạn, và cũng không âm thầm làm tệ đi.</p>
+    <p><a href="#install" class="btn btn-ghost">Xem cài đặt cần những gì</a></p>
+  </div>
+  <p class="muted">Một gói trả phí nếu có sẽ chỉ để nâng cái trần đó. Hiện nó chưa tồn tại.</p>
+</section>
+
+{# ---- S8 install ------------------------------------------------------- #}
+<section class="lp-section lp-section--panel" id="install">
+  <h2>Cài đặt</h2>
+  <pre class="lp-code"><code>pip install traffic-shaper-agent
+
+traffic-shaper connect \
+  --backend-url https://&lt;your-deployment&gt; \
+  --tenant-id &lt;from the console&gt; \
+  --agent-id &lt;from the console&gt; \
+  --api-key &lt;from the console&gt;
+
+traffic-shaper run</code></pre>
+  <p class="muted">
+    Đây là những gì diễn ra sau khi bạn có quyền dùng. Đăng nhập, mở trang
+    Agent, thêm một agent. Console in ra đúng câu lệnh đó với các giá trị của
+    bạn điền sẵn. Khoá chỉ hiện một lần, vì chúng tôi chỉ lưu bản băm của
+    nó. Agent ghi thông tin đăng nhập vào
+    <code>~/.aiops-agent/config.json</code>, chỉ chủ sở hữu đọc được, và
+    không cần gì thêm.
+  </p>
+  <p class="muted">
+    Nó đọc log truy cập nginx của bạn, và log phải ở định dạng JSON như trong
+    <code>config/nginx/nginx.conf</code>: agent cần phương thức và đường dẫn
+    của request thành hai trường riêng, mà định dạng combined không mang
+    chúng theo kiểu đó.
+  </p>
+  <p>
+    <strong>Ngày đầu tiên không thi hành gì cả.</strong> Cho tới khi mô hình
+    đầu tiên của bạn được huấn luyện, bạn thấy mọi thứ chúng tôi thấy và
+    chúng tôi không đổi gì. Việc đó thường mất một đêm.
+  </p>
+</section>
+
+{# ---- S9 FAQ ----------------------------------------------------------- #}
+<section class="lp-section lp-narrow">
+  <h2>Câu hỏi</h2>
+  {# <details>/<summary>: accessible, keyboard-operable, zero JavaScript,
+     and the question text is in the DOM for search. #}
+  <details><summary>Chính xác thì cái gì rời khỏi máy chủ của tôi?</summary>
+    <p>Các con đếm, theo từng IP, theo từng năm giây: số request, số lỗi, số
+       POST, tổng byte, tổng thời gian, số đường dẫn khác nhau, số user agent
+       khác nhau. Không URL, không nội dung, không header, không cookie.</p></details>
+  <details><summary>Nếu backend của các bạn sập thì sao?</summary>
+    <p>Agent của bạn vẫn phục vụ traffic và ngưng nhận quyết định. Các biện
+       pháp đang áp tự hết hạn theo lịch của chúng. Không có gì hỏng theo
+       kiểu chặn hết.</p></details>
+  <details><summary>Nó có chặn nhầm hệ giám sát của tôi không?</summary>
+    <p>Có, và danh sách cho qua sinh ra để lo việc đó. Một IP được cho qua thì
+       được miễn mọi biện pháp <em>và</em> bị loại khỏi huấn luyện, nên cho
+       qua một địa chỉ không dạy mô hình rằng kiểu của nó là bình
+       thường.</p></details>
+  <details><summary>Nếu nó chặn một khách hàng thật thì sao?</summary>
+    <p>Một cú bấm trong console gỡ ngay và gỡ vĩnh viễn. Chúng tôi từng làm
+       sai chỗ này một thời gian: nút báo thành công nhưng để nguyên lệnh
+       chặn tới cả một giờ. Bây giờ thì không, và có một bài kiểm thử đặt
+       tên theo đúng lần hỏng đó.</p></details>
+  <details><summary>Kẻ tấn công có huấn luyện được mô hình không?</summary>
+    <p>Những khoảng bị phán là thù địch được đánh dấu và loại khỏi lần huấn
+       luyện sau. Chúng tôi tìm ra điều này bằng cách tái hiện nó: ba bản sao
+       của một cuộc tấn công nằm trong cửa sổ huấn luyện là IsolationForest
+       thôi thấy nó bất thường, vì ba điểm giống hệt nhau là một cụm, và
+       một cụm thì không phải ngoại lai.</p></details>
+  <details><summary>Làm sao giữ một mô hình tệ không lên production?</summary>
+    <p>Một cổng kiểm định loại những mô hình sẽ chặn quá nhiều traffic bình
+       thường, hoặc có độ trải điểm đã mất ổn định. Mô hình cũ ở
+       lại.</p></details>
+  <details><summary>Sao lại dùng độ lệch chuẩn mà không dùng điểm số?</summary>
+    <p>Vì điểm bất thường thô đổi ý nghĩa mỗi lần mô hình được huấn luyện
+       lại. Xem <a href="#sigma">σ, gọn trong một màn hình</a>.</p></details>
+  <details><summary>Nó miễn phí thật không?</summary>
+    <p>Có, với một cái trần được nói rõ. Xem <a href="#pricing">cái trần</a>.</p></details>
+</section>
+
+</main>
+
+<footer class="lp-footer">
+  <div class="lp-footer-grid">
+    <div>{{ brand.lockup(20) }}</div>
+    <div>
+      <h4>Sản phẩm</h4>
+      <a href="#how">Cách hoạt động</a><a href="#sigma">σ</a>
+      <a href="#pricing">Giá</a>
+    </div>
+    <div>
+      <h4>Bắt đầu</h4>
+      <a href="#install">Cài nhanh</a><a href="/ui/login">Đăng nhập</a>
+    </div>
+    <div>
+      <h4>Nói thật</h4>
+      <a href="#proof">Số đo</a><a href="#pricing">Cái trần</a>
+    </div>
+  </div>
+  <p class="lp-footer-rule muted">
+    Traffic Shaper {{ brand.sigma(12) }} Được dựng để không tốn gì khi chạy.
+    Đã đo, và số đo nằm ngay trên trang này.
+  </p>
+</footer>
+{% endblock %}

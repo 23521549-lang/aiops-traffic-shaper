@@ -29,7 +29,7 @@ def test_control_platform_shows_all_tenants(dynamo_resource, cognito_test_keys):
                                        created_at="2026-08-21T00:00:00Z")
     TenantsTable(dynamo_resource).put(tenant_id="t-2", name="Globex", status="active",
                                        created_at="2026-08-21T00:00:00Z")
-    resp = client.get("/admin/ui")
+    resp = client.get("/admin/ui/tenants")
     assert resp.status_code == 200
     assert "Acme" in resp.text
     assert "Globex" in resp.text
@@ -41,7 +41,7 @@ def test_control_platform_shows_ceiling_warning_banner(dynamo_resource, cognito_
     client = _client(dynamo_resource, cognito_test_keys)
     UsageCountersTable(dynamo_resource).put(date=_today(), total_requests=999999, estimated_gb_seconds=0.0)
     resp = client.get("/admin/ui")
-    assert "approaching today" in resp.text
+    assert "tiến sát trần Always-Free" in resp.text
 
 
 def test_suspend_tenant_via_ui(dynamo_resource, cognito_test_keys):
@@ -50,24 +50,44 @@ def test_suspend_tenant_via_ui(dynamo_resource, cognito_test_keys):
                                        created_at="2026-08-21T00:00:00Z")
     resp = client.post("/admin/ui/tenants/t-1/suspend", headers=_csrf(client))
     assert resp.status_code == 200
-    assert "Suspended" in resp.text
+    assert "Đã tạm ngưng" in resp.text
     assert TenantsTable(dynamo_resource).get(tenant_id="t-1")["status"] == "suspended"
 
 
-def test_agents_partial_filters_by_status(dynamo_resource, cognito_test_keys):
+def test_the_tenant_pane_separates_live_agents_from_quiet_ones(
+        dynamo_resource, cognito_test_keys):
+    """Rewritten twice. The first version fabricated a `status="stale"` row
+    that no code path writes; both agents below are lifecycle-active and what
+    separates them is whether they have called in.
+
+    The second rewrite moved it here. This used to assert against a filtered
+    Agents page, which was a filter over a list wearing the shape of a page.
+    The distinction it makes is real and still has to hold; it is now made on
+    the tenant the agents belong to, which is where an operator deciding
+    whether to suspend is already looking.
+    """
+    from datetime import datetime, timedelta, timezone
+
     client = _client(dynamo_resource, cognito_test_keys)
-    AgentsTable(dynamo_resource).put(tenant_id="t-1", agent_id="a-1", status="active",
-                                      last_seen_at="2026-08-21T00:00:00Z", agent_version="0.1.0")
-    AgentsTable(dynamo_resource).put(tenant_id="t-1", agent_id="a-2", status="stale",
-                                      last_seen_at="2026-08-20T00:00:00Z", agent_version="0.1.0")
+    now = datetime.now(timezone.utc)
+    TenantsTable(dynamo_resource).put(tenant_id="t-1", name="Acme",
+                                      status="active",
+                                      created_at="2026-08-21T00:00:00Z")
+    AgentsTable(dynamo_resource).put(tenant_id="t-1", agent_id="a-live", status="active",
+                                      last_seen_at=(now - timedelta(seconds=10)).isoformat(),
+                                      agent_version="0.1.0")
+    AgentsTable(dynamo_resource).put(tenant_id="t-1", agent_id="a-quiet", status="active",
+                                      last_seen_at=(now - timedelta(hours=2)).isoformat(),
+                                      agent_version="0.1.0")
 
-    resp_stale = client.get("/admin/ui/agents", params={"status": "stale"})
-    assert "a-2" in resp_stale.text
-    assert "a-1" not in resp_stale.text
+    page = client.get("/admin/ui/tenants", params={"id": "t-1"}).text
+    live_at = page.index("a-live")
+    quiet_at = page.index("a-quiet")
 
-    resp_active = client.get("/admin/ui/agents", params={"status": "active"})
-    assert "a-1" in resp_active.text
-    assert "a-2" not in resp_active.text
+    assert "Đang báo cáo" in page and "Im lặng" in page
+    # Each label belongs to its own row, which a page containing both words
+    # somewhere would not establish.
+    assert "Đang báo cáo" in page[min(live_at, quiet_at):max(live_at, quiet_at)]         or "Im lặng" in page[min(live_at, quiet_at):max(live_at, quiet_at)]
 
 
 def test_non_admin_cannot_reach_control_platform(dynamo_resource, cognito_test_keys):
@@ -91,12 +111,12 @@ def test_a_suspended_tenant_can_be_reactivated_from_the_control_platform(dynamo_
     client = _client(dynamo_resource, cognito_test_keys)
     TenantsTable(dynamo_resource).put(tenant_id="t-1", name="Acme", status="suspended",
                                        created_at="2026-08-21T00:00:00Z")
-    page = client.get("/admin/ui").text
+    page = client.get("/admin/ui/tenants").text
     assert 'hx-post="/admin/ui/tenants/t-1/reactivate"' in page
 
     resp = client.post("/admin/ui/tenants/t-1/reactivate", headers=_csrf(client))
     assert resp.status_code == 200
-    assert "Active" in resp.text
+    assert "Đang hoạt động" in resp.text
     assert TenantsTable(dynamo_resource).get(tenant_id="t-1")["status"] == "active"
 
 

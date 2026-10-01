@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -16,8 +17,6 @@ class UsageReport:
     date: str
     total_requests: int
     estimated_gb_seconds: float
-    dynamodb_consumed_rcu: float
-    dynamodb_consumed_wcu: float
     ceiling_warning: bool
 
 
@@ -25,7 +24,36 @@ def _today() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
+# What this function is configured at. Lambda publishes it in the environment;
+# locally there is no Lambda, and the fallback is the size this product is
+# actually deployed at, so a figure read on a laptop is in the same units as
+# one read in production.
+_DEFAULT_MEMORY_MB = 512
+
+
+def lambda_memory_gb() -> float:
+    """Half of the GB-seconds figure. The other half is wall time, which the
+    middleware already has because it is already wrapping the call.
+
+    Tolerant of a malformed value on purpose: this runs on every metered
+    request, and an environment variable somebody mistyped must not turn
+    metering into a 500 on the product itself.
+    """
+    try:
+        mb = int(os.environ.get("AWS_LAMBDA_FUNCTION_MEMORY_SIZE",
+                                _DEFAULT_MEMORY_MB))
+    except (TypeError, ValueError):
+        mb = _DEFAULT_MEMORY_MB
+    return (mb if mb > 0 else _DEFAULT_MEMORY_MB) / 1024
+
+
 def record_invocation(resource, estimated_gb_seconds: float = 0.0) -> None:
+    """One ADD on the day's counter row.
+
+    The default is 0.0 and for most of this product's life every caller took
+    it, so the operations console displayed GB-seconds: 0.00 permanently. A
+    gauge showing a constant is a lie with a number on it.
+    """
     UsageCountersTable(resource).add_invocation(_today(), estimated_gb_seconds)
 
 
@@ -37,8 +65,6 @@ def get_usage_report(resource, date: str | None) -> UsageReport:
         date=d,
         total_requests=total,
         estimated_gb_seconds=float(item.get("estimated_gb_seconds", 0)),
-        dynamodb_consumed_rcu=float(item.get("dynamodb_consumed_rcu", 0)),
-        dynamodb_consumed_wcu=float(item.get("dynamodb_consumed_wcu", 0)),
         ceiling_warning=total >= _DAILY_REQUEST_CEILING * _WARNING_RATIO,
     )
 
@@ -96,6 +122,56 @@ def record_tenant_ingest(resource, tenant_id: str, count: int = 1) -> None:
     )
 
 
+# BatchGetItem takes at most 100 keys in one call. Seven days times fifteen
+# tenants crosses it, and a page that quietly showed the first fourteen would
+# be a billing screen lying by omission - the same class of defect as a gauge
+# showing a constant.
+_BATCH_KEY_LIMIT = 100
+
+
+def tenant_requests_over(resource, tenant_ids: list[str], days: int = 7,
+                         today: str | None = None) -> dict[str, list[int]]:
+    """Several days for several tenants, in as few round trips as possible.
+
+    Suspend is the operator's only lever and a single day's count cannot aim
+    it: a tenant that has always been busy and one that started flooding an
+    hour ago show the same number today and call for opposite decisions.
+
+    One GetItem per tenant per day is seventy calls for ten tenants on a page
+    load. BatchGetItem bills the same capacity for the same rows and costs one
+    call, which is what `get_many` was built for in Phase 0 and never used
+    for.
+
+    Oldest day first: a trend has a direction and a chart is read left to
+    right. A day with no row is a real zero rather than a gap - unlike
+    telemetry, the counter is written on every accepted batch, so its absence
+    is itself a measurement. Every tenant asked for gets a full-length list,
+    because the caller draws one row each and a short list misaligns the days
+    silently.
+    """
+    if not tenant_ids:
+        return {}
+    if len(tenant_ids) * days > _BATCH_KEY_LIMIT:
+        raise ValueError(
+            f"{len(tenant_ids)} tenants over {days} days is "
+            f"{len(tenant_ids) * days} keys, past the {_BATCH_KEY_LIMIT} "
+            f"BatchGetItem allows. Ask for fewer days or fewer tenants.")
+
+    end = datetime.strptime(today or _today(), "%Y-%m-%d").replace(
+        tzinfo=timezone.utc)
+    dates = [(end - timedelta(days=n)).strftime("%Y-%m-%d")
+             for n in range(days - 1, -1, -1)]
+    keys = [_tenant_counter_key(t, d) for t in tenant_ids for d in dates]
+    rows = UsageCountersTable(resource).get_many(keys)
+
+    return {
+        tenant_id: [int((rows.get(_tenant_counter_key(tenant_id, d)) or {})
+                        .get("total_requests", 0))
+                    for d in dates]
+        for tenant_id in tenant_ids
+    }
+
+
 def tenant_requests_today(resource, tenant_id: str) -> int:
     item = UsageCountersTable(resource).get(date=_tenant_counter_key(tenant_id)) or {}
     return int(item.get("total_requests", 0))
@@ -103,3 +179,46 @@ def tenant_requests_today(resource, tenant_id: str) -> int:
 
 def is_tenant_over_quota(resource, tenant_id: str) -> bool:
     return tenant_requests_today(resource, tenant_id) >= tenant_daily_quota()
+
+
+def protection_status(resource, tenant_id: str) -> dict:
+    """Whether this tenant's traffic is being measured right now, and why not.
+
+    Three facts from two keys on one table, in one BatchGetItem.
+
+    The global one matters as much as the tenant's own, and nothing has ever
+    shown it: `enforce_usage_ceiling` refuses ingest platform-wide, so a
+    tenant sitting comfortably inside its 25% share can still be unmeasured
+    because the day filled up elsewhere. The agent sees that as a 429 and the
+    console said nothing at all, so the screen and the agent disagreed about
+    whether the customer was protected.
+
+    The two reasons are different sentences to the customer: one they can act
+    on by sending less, one they cannot act on at all.
+    """
+    today = _today()
+    # Reuse the key builder rather than formatting the string here. The
+    # marker that makes a tenant row uncollidable with the global row is
+    # documented next to it, and a second copy of that format is a second
+    # place for it to drift.
+    tenant_key = _tenant_counter_key(tenant_id, today)
+    rows = UsageCountersTable(resource).get_many([today, tenant_key])
+
+    global_used = int(rows.get(today, {}).get("total_requests", 0))
+    tenant_used = int(rows.get(tenant_key, {}).get("total_requests", 0))
+    tenant_ceiling = tenant_daily_quota()
+
+    reason = None
+    if global_used >= _DAILY_REQUEST_CEILING:
+        reason = "global"
+    elif tenant_used >= tenant_ceiling:
+        reason = "tenant"
+
+    return {
+        "tenant_used": tenant_used,
+        "tenant_ceiling": tenant_ceiling,
+        "global_used": global_used,
+        "global_ceiling": int(_DAILY_REQUEST_CEILING),
+        "throttled": reason is not None,
+        "throttled_reason": reason,
+    }

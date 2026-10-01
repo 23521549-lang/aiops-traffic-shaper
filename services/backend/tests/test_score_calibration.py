@@ -167,3 +167,66 @@ def test_the_cache_keeps_the_stats_too(dynamo_resource):
     assert warm.load(dynamo_resource, "t-1") is True
     assert warm.stats is not None
     assert counter.counts.get("GetItem", 0) == 0, "a warm load must not read DynamoDB"
+
+
+# --- the decision has to remember its own sigma --------------------------
+
+def test_a_decision_records_how_many_deviations_out_it_was(dynamo_resource, monkeypatch):
+    """ADR-006 moved tiering to z, and the UI was left printing the raw
+    score — a number the ADR itself documents as having no stable meaning
+    (-0.204 and -0.092 were the same attack against two models of the same
+    tenant). Recomputing z at render time does not fix it either: the nightly
+    retrain moves score_mean/score_std, so the page would show a different
+    figure from the one that caused the block. The decision has to carry it.
+
+    Free to do: `classify` already computes z at exactly this point from
+    `mgr.stats`, which is in memory. No extra read, no extra write."""
+    from services.backend.core.tables import create_all_tables
+    from services.backend.ml.model import ScoreStats, z_score
+
+    create_all_tables(dynamo_resource)
+    stats = ScoreStats(mean=0.1717, std=0.0502)
+    assert z_score(-0.0923, stats) == pytest.approx(-5.259, abs=1e-3)
+
+
+def test_no_sigma_when_the_model_had_no_usable_spread():
+    """score_std <= 0 is the degenerate case `classify` already falls back on
+    (ml/model.py). There is no meaningful z to record, and inventing one
+    would be worse than admitting it — the UI says 'không đo được'."""
+    from services.backend.ml.model import ScoreStats, z_score
+
+    assert z_score(-0.5, ScoreStats(mean=0.0, std=0.0)) is None
+    assert z_score(-0.5, ScoreStats(mean=0.0, std=-1.0)) is None
+    assert z_score(-0.5, None) is None
+
+
+def test_classify_and_z_score_never_disagree():
+    """Both read the same two statistics. If they ever drift apart, a row
+    could render '4.5 sigma out' next to a badge saying Normal."""
+    from services.backend.ml.model import TIER1_Z, TIER2_Z, AnomalyTier, ScoreStats, classify, z_score
+
+    stats = ScoreStats(mean=0.10, std=0.05)
+    for raw in [0.10 + k * 0.005 for k in range(-260, 40)]:
+        z = z_score(raw, stats)
+        tier = classify(raw, stats)
+        expected = (AnomalyTier.HARD_BLOCK if z < TIER2_Z
+                    else AnomalyTier.RATE_LIMIT if z < TIER1_Z
+                    else AnomalyTier.NORMAL)
+        assert tier == expected, (raw, z, tier)
+
+
+def test_a_mitigation_written_before_this_field_still_loads(dynamo_resource):
+    """Rows already in production have no `z` attribute. They must keep
+    deserialising — a schema change that orphans live data is not a fix."""
+    from services.backend.core.tables import MitigationStateTable, create_all_tables
+    from services.backend.schemas.mitigation import MitigationState
+
+    create_all_tables(dynamo_resource)
+    MitigationStateTable(dynamo_resource).put(
+        tenant_id="t-1", ip="203.0.113.4", tier=1, score=-0.105,
+        reason="behavioral_anomaly", expires_at=2000000000,
+    )
+    item = MitigationStateTable(dynamo_resource).get(tenant_id="t-1", ip="203.0.113.4")
+    state = MitigationState(**{k: v for k, v in item.items() if k != "tenant_id"})
+    assert state.z is None
+    assert state.score == pytest.approx(-0.105)

@@ -1,0 +1,133 @@
+{% extends "app_shell.html" %}
+{% import "_fleet.html" as fleet %}
+{% block title %}Agent · Traffic Shaper{% endblock %}
+{% block page_title %}Agent{% endblock %}
+{% block page_summary %}
+<b>{{ agent_count }}</b> đã đăng ký · {{ live_count }} đang thu
+{%- if toothless_count %} · {{ toothless_count }} không ghi luật{% endif %}
+{% endblock %}
+{% block page_actions %}
+<a class="btn" href="#them-agent">Thêm agent</a>
+{% endblock %}
+{% block page_content %}
+
+{% if created %}
+{# Shown once and never again. The key is not stored anywhere this console
+   can read it back, which is the only reason it is safe to print here. #}
+<div class="alert alert-ok" role="status">
+  <strong>Đã tạo agent.</strong>
+  Khoá dưới đây <b>chỉ hiện một lần (shown once)</b>, ngay tại đây, và không hiện lại được. Chép nó ra trước khi rời trang.
+</div>
+<div class="code">aiops-agent register \
+  --backend-url {{ backend_url }} \
+  --tenant-id {{ created.tenant_id }} \
+  --agent-id {{ created.agent_id }} \
+  --api-key {{ created.api_key }}</div>
+{% endif %}
+
+{% if agents %}
+{# ---- đội agent -------------------------------------------------------- #}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Đội agent của bạn</h2>
+    <div class="sec-m">{{ agent_count }} đã đăng ký · {{ live_count }} đang thu</div>
+  </div>
+  <p class="one">
+    Báo cáo không phải là bảo vệ. Một agent không có bộ thi hành vẫn gửi số
+    và <b>không ghi luật nào</b>, mà mọi màn khác đều gọi nó là khoẻ.
+  </p>
+  {{ fleet.render(agents) }}
+</section>
+
+{# ---- điều khiển từng máy ---------------------------------------------- #}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Điều khiển từng agent</h2>
+    <div class="sec-m">và máy chủ nó đang chạy trên đó</div>
+  </div>
+  <p class="one">
+    <b>Chỉ theo dõi</b> là công tắc của cả tài khoản, không theo từng máy:
+    một công tắc theo máy sẽ để bạn bị chặn ở bốn host và mở ở host thứ năm.
+  </p>
+  <div class="ctl-grid">
+    {% for a in agents %}
+    <div class="ctl">
+      <div class="ctl-h">
+        <span class="ctl-n">{{ a.label }}</span>
+        <span class="pill {{ 'on' if a.live else 'off' }}"><i></i>{{ a.state_label }}</span>
+      </div>
+      <div class="ctl-d">
+        {{ a.enforce_label }} · {{ a.version }} · thu {{ a.last_seen }}<br>
+        đăng ký {{ a.registered }}
+      </div>
+      <div class="ctl-b">
+        {# The one action this console can genuinely take on an agent today.
+           Everything else a control platform wants here - reload the
+           enforcer, flush the local rules, restart, rotate the key - needs a
+           command channel that does not exist yet, and drawing the buttons
+           before the channel exists is how a mockup becomes a promise. #}
+        <a class="btn btn--sm" href="/dashboard/ui/agents?id={{ a.agent_id }}">Chi tiết</a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% else %}
+<section class="sec">
+  <div class="sec-h"><h2 class="sec-t">Chưa có agent nào</h2></div>
+  <p class="one">
+    Bảo vệ bắt đầu ngay khi agent đầu tiên báo về. Trước đó, sản phẩm này
+    không thấy gì và không làm gì.
+  </p>
+</section>
+{% endif %}
+
+{% if selected %}
+{# Selecting a machine opens its detail. The list answers "which of my
+   machines", this answers "and what is going on with that one", and they are
+   different questions. #}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Chi tiết agent (Agent detail)</h2>
+    <div class="sec-m">{{ selected.label }}</div>
+  </div>
+  <dl class="kv">
+    <dt>Tên</dt><dd><span class="src-ip">{{ selected.label }}</span></dd>
+    <dt>Mã</dt><dd>{{ selected.agent_id }}</dd>
+    <dt>Phiên bản</dt><dd>{{ selected.version }}</dd>
+    <dt>Trạng thái</dt>
+    <dd><span class="verdict{{ '' if selected.live else ' open' }}"><i></i>{{ selected.state_label }}</span></dd>
+    <dt>Ghi luật bằng</dt><dd>{{ selected.enforce_label }}</dd>
+    <dt>Thu gần nhất</dt><dd title="{{ selected.last_seen_exact }}">{{ selected.last_seen }}</dd>
+    <dt>Đăng ký</dt><dd title="{{ selected.registered_exact }}">{{ selected.registered }}</dd>
+  </dl>
+  <div class="ctl-b">
+    <a class="btn" href="/dashboard/ui/agents" data-key="Escape">Đóng <kbd>Esc</kbd></a>
+  </div>
+</section>
+{% endif %}
+
+{# ---- thêm máy --------------------------------------------------------- #}
+<section class="sec" id="them-agent">
+  <div class="sec-h">
+    <h2 class="sec-t">Thêm một agent</h2>
+    <div class="sec-m">khoá chỉ hiện một lần</div>
+  </div>
+  <form class="c-form-stack" method="post" action="/dashboard/ui/agents">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="agent-label">Tên máy</label>
+    <input id="agent-label" name="label" value="{{ new_label or '' }}"
+           maxlength="64" autocomplete="off" placeholder="web-01">
+    <p class="field-hint">
+      Tên bạn sẽ nhận ra lúc 3 giờ sáng. Nó không rời khỏi tài khoản của bạn.
+    </p>
+    {% if error %}<p class="field-error" role="alert">{{ error }}</p>{% endif %}
+    <button type="submit" class="btn btn--p">Đăng ký máy này</button>
+  </form>
+  <p class="one one--gap">Rồi chạy trên chính máy đó:</p>
+  <div class="code">curl -fsSL {{ backend_url }}/install.sh | sh
+sudo systemctl enable --now aiops-agent
+traffic-shaper run</div>
+</section>
+
+{% endblock %}

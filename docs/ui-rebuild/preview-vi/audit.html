@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nhật ký &middot; Traffic Shaper</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="mock"><span>Bản dựng xem thử</span>
+  <span class="key"><span class="key-s"></span>nét đứt = chưa có trong sản phẩm</span>
+  <span class="sp"></span><span><a href="index.html">Cổng</a> &middot; <a href="agents.html">Agent</a> &middot; <a href="history.html">Lịch sử</a> &middot; <a href="allowed.html">Cho qua</a> &middot; <a href="model.html">Mô hình</a> &middot; <a href="audit.html">Nhật ký</a> &middot; <a href="system.html">Cách hoạt động</a></span></div>
+<div class="app">
+  <header class="bar">
+    <span class="brand"><span class="beacon"></span>Traffic Shaper</span>
+    <span class="sp"></span>
+    <span class="who">acme-prod</span>
+    <span class="cost">Hôm nay <b>0 đồng</b></span>
+    <button class="btn" data-toggle="pl-top" data-alt="Bật lại bảo vệ">Chỉ theo dõi</button>
+    <button class="btn" data-new title="Chưa có trong sản phẩm" >Tạm dừng 30 phút</button>
+    <button class="btn" >Lệnh<kbd>K</kbd></button>
+    <button class="btn" >Đăng xuất</button>
+  </header>
+  <div class="body">
+    <nav class="nav">
+      <div class="gp">Điều khiển</div>
+      <a href="index.html"><span>Cổng</span><span class="ct">2</span></a>
+      <a href="history.html"><span>Lịch sử</span></a>
+      <a href="allowed.html"><span>Cho qua</span><span class="ct">6</span></a>
+      <div class="gp">Hệ thống</div>
+      <a href="agents.html"><span>Agent</span><span class="ct">5</span></a>
+      <a href="model.html"><span>Mô hình</span></a>
+      <a href="system.html"><span>Cách hoạt động</span></a>
+      <div class="gp">Sổ sách</div>
+      <a href="audit.html" aria-current="page"><span>Nhật ký</span></a>
+    </nav>
+    <main class="main">
+      <div class="head">
+        <div><h1 class="h1">Nhật ký</h1><p class="sub"><b>8</b> thay đổi trong 30 ngày</p></div>
+        <div class="head-act"><button class="btn" data-new title="Chưa có trong sản phẩm" >Xuất sổ</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Lọc</button></div>
+      </div>
+      <section class="sec">
+        <div class="sec-h"><h2 class="sec-t">Ai đổi gì</h2><div class="sec-m">8 thay đổi trong 30 ngày</div></div>
+        <p class="one">Sản phẩm <b>đã ghi</b> sổ này từ lâu và chưa từng cho ai xem. Đây là câu hỏi đầu tiên của mọi buổi rà soát sau sự cố.</p>
+        <div class="log-row"><span class="log-when">2 giờ trước</span><span class="log-what"><b>Cho qua một địa chỉ</b> &middot; <span class="log-move">192.0.2.144</span></span><span class="log-who">owner@acme.example</span></div>
+        <div class="log-row"><span class="log-when">hôm qua 22:41</span><span class="log-what"><b>Bật lại thi hành</b> &middot; <span class="log-move"><s>chỉ theo dõi</s> &rarr; <b>đang thi hành</b></span></span><span class="log-who">ops@acme.example</span></div>
+        <div class="log-row"><span class="log-when">hôm qua 22:14</span><span class="log-what"><b>Dời cổng làm chậm</b> &middot; <span class="log-move"><s>3,75 sigma</s> &rarr; <b>4,00 sigma</b></span></span><span class="log-who">ops@acme.example</span></div>
+        <div class="log-row"><span class="log-when">hôm qua 22:09</span><span class="log-what"><b>Tắt thi hành</b> &middot; <span class="log-move"><s>đang thi hành</s> &rarr; <b>chỉ theo dõi</b></span></span><span class="log-who">ops@acme.example</span></div>
+        <div class="log-row"><span class="log-when">3 ngày trước</span><span class="log-what"><b>Dời cổng chặn</b> &middot; <span class="log-move"><s>5,50 sigma</s> &rarr; <b>5,00 sigma</b></span></span><span class="log-who">owner@acme.example</span></div>
+        <div class="log-row"><span class="log-when">6 ngày trước</span><span class="log-what"><b>Cho qua một địa chỉ</b> &middot; <span class="log-move">198.51.100.212</span></span><span class="log-who">owner@acme.example</span></div>
+        <div class="log-row"><span class="log-when">12 ngày trước</span><span class="log-what"><b>Đăng ký agent</b> &middot; <span class="log-move">api-02</span></span><span class="log-who">ops@acme.example</span></div>
+        <div class="log-row"><span class="log-when">28 ngày trước</span><span class="log-what"><b>Thu hồi khoá</b> &middot; <span class="log-move">web-old-03</span></span><span class="log-who">owner@acme.example</span></div>
+      </section>
+      <section class="sec">
+        <div class="sec-h"><h2 class="sec-t">Điều khiển</h2></div>
+        <div class="ctl-b"><button class="btn" data-new title="Chưa có trong sản phẩm" >Xuất sổ</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Lọc theo người</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Lọc theo loại thay đổi</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Gửi webhook mỗi thay đổi</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Báo email khi tắt thi hành</button></div>
+      </section>
+
+    </main>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

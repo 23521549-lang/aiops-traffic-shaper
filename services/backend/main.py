@@ -1,6 +1,9 @@
+import logging
 import os
 
 from botocore.exceptions import BotoCoreError, ClientError
+import time
+
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from mangum import Mangum
@@ -11,11 +14,16 @@ from services.backend.api.routes.agent import router as agent_router
 from services.backend.api.routes.dashboard import router as dashboard_router
 from services.backend.core.config import settings
 from services.backend.core.dynamo import get_dynamo_resource
-from services.backend.core.usage import record_invocation
+from services.backend.core.usage import lambda_memory_gb, record_invocation
 from services.backend.ui.auth_pages import router as ui_auth_router
 from services.backend.ui.control_platform import router as ui_control_platform_router
 from services.backend.ui.csrf import CsrfError
+from services.backend.ui.templates_env import templates
 from services.backend.ui.dashboard import router as ui_dashboard_router
+from services.backend.ui.public import router as ui_public_router
+from services.backend.ui.static_files import router as ui_static_router
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 app.include_router(agent_router)
@@ -25,6 +33,8 @@ app.include_router(admin_router)
 app.include_router(ui_auth_router)
 app.include_router(ui_dashboard_router)
 app.include_router(ui_control_platform_router)
+app.include_router(ui_static_router)
+app.include_router(ui_public_router)
 
 _UI_PAGE_PREFIXES = ("/dashboard/ui", "/admin/ui")
 
@@ -58,6 +68,56 @@ async def ui_auth_redirect_handler(request: Request, exc: HTTPException):
                         headers=getattr(exc, "headers", None))
 
 
+# --- error pages ---------------------------------------------------------
+
+# A browser asking for a page and a client asking for JSON want different
+# things from a failure, and the product had neither: a 404 was FastAPI's
+# bare {"detail": "Not Found"} and a 500 was a stack trace behind a generic
+# gateway error. An error page is a product surface.
+_HTML_ACCEPT = "text/html"
+
+
+def _wants_html(request: Request) -> bool:
+    if request.url.path.startswith(("/agent/v1", "/dashboard/v1", "/admin/v1")):
+        return False
+    return _HTML_ACCEPT in request.headers.get("accept", "")
+
+
+def _error_page(request: Request, code: int, heading: str, detail: str,
+                back_url: str = "/", back_label: str = "Go back") -> Response:
+    return templates.TemplateResponse(request, "error.html", {
+        "code": code, "heading": heading, "detail": detail,
+        "back_url": back_url, "back_label": back_label,
+        "request_id": request.headers.get("x-amzn-trace-id", ""),
+        "theme": request.cookies.get("theme", ""),
+    }, status_code=code)
+
+
+@app.exception_handler(404)
+async def not_found(request: Request, exc):
+    if not _wants_html(request):
+        return JSONResponse(status_code=404, content={"detail": "Not Found"})
+    return _error_page(
+        request, 404, "That page isn’t here.",
+        "The link may be old, or the address may have a typo in it. "
+        "Nothing is wrong with your account.",
+    )
+
+
+@app.exception_handler(500)
+async def server_error(request: Request, exc):
+    # Deliberately says nothing about what failed. The detail belongs in
+    # CloudWatch, and the reference above is how to find it.
+    logger.exception("unhandled error on %s", request.url.path)
+    if not _wants_html(request):
+        return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
+    return _error_page(
+        request, 500, "Something broke on our side.",
+        "This is not something you did, and nothing you were looking at has "
+        "changed. If it keeps happening, quote the reference below.",
+    )
+
+
 def _resolve_resource(request):
     """Middleware runs outside FastAPI's Depends() call graph, so it does
     NOT automatically honor app.dependency_overrides the way a route
@@ -81,11 +141,29 @@ _UNMETERED_PATH_PREFIXES = ("/health", "/ready", "/ui/login", "/ui/logout", "/ui
 def _should_meter(request, response) -> bool:
     if request.url.path.startswith(_UNMETERED_PATH_PREFIXES):
         return False
+    # A request that matched NO route never reached the application, so there
+    # is no work here to meter - and it is the cheapest thing in the world for
+    # an anonymous caller to generate by the thousand. The prefix list above
+    # cannot cover it: `/ui/static/../main.py` is normalised to `/ui/main.py`
+    # before this middleware ever sees it, which escapes every prefix and then
+    # billed a DynamoDB write for a 404. The front door `/` had already been
+    # special-cased for exactly this reason, one URL at a time.
+    #
+    # `endpoint` is set in the scope by Starlette's router when a route
+    # matches, so its absence is the router itself saying nothing handled this.
+    if "endpoint" not in request.scope:
+        return False
     # "/" cannot be expressed as a prefix - every path starts with it - and it
     # is the most exposed URL the deployment has. Before it redirected it
     # answered 404, and that 404 was metered: a DynamoDB write per drive-by
     # request on the front door.
     if request.url.path == "/":
+        return False
+    # The landing page and the theme toggle are anonymous and read no
+    # DynamoDB, which is what lets them sit behind a CloudFront cache
+    # behaviour. Metering them would spend write capacity on traffic that
+    # never reaches the application.
+    if request.url.path.startswith("/ui/prefs/"):
         return False
     if response.status_code in (401, 403, 429):
         return False
@@ -103,9 +181,17 @@ async def track_usage(request, call_next):
     covers authenticated work only. This is a mitigation, not a cure — a
     caller holding valid credentials can still spend quota; edge rate limiting
     remains the real answer, and remains out of scope for the 0-cost model."""
+    started = time.perf_counter()
     response = await call_next(request)
     if _should_meter(request, response):
-        record_invocation(_resolve_resource(request))
+        # The figure the operations console shows. It used to take
+        # record_invocation's 0.0 default, so GB-seconds read 0.00 for the
+        # life of the product - a gauge showing a constant. Both halves are
+        # free here: this middleware is already wrapping the call, and Lambda
+        # publishes its own memory size.
+        elapsed = time.perf_counter() - started
+        record_invocation(_resolve_resource(request),
+                          lambda_memory_gb() * elapsed)
     return response
 
 
@@ -118,11 +204,15 @@ _SECURITY_HEADERS = {
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
     "Content-Security-Policy": (
         "default-src 'self'; "
-        # The UI's only script is /ui/static/interactions.js, served from this
-        # same origin — no inline script, so no 'unsafe-inline' here. The
-        # inline <style> block in base.html is why style-src needs it.
+        # Every script is same-origin under /ui/static/ and there is no
+        # inline script anywhere, so no 'unsafe-inline' on either directive.
         "script-src 'self'; "
-        "style-src 'self' 'unsafe-inline'; "
+        # Tightened from 'self' 'unsafe-inline' (ADR-007). The only reason
+        # it was ever loose was base.html's 116-line inline <style>, which
+        # now lives in /ui/static/app.css. htmx would have re-opened it by
+        # injecting its own indicator styles, so it is configured with
+        # includeIndicatorStyles:false and those rules ship in app.css too.
+        "style-src 'self'; "
         "img-src 'self' data:; "
         "frame-ancestors 'none'; "
         "base-uri 'self'; "
@@ -137,17 +227,6 @@ async def security_headers(request, call_next):
     for header, value in _SECURITY_HEADERS.items():
         response.headers.setdefault(header, value)
     return response
-
-
-@app.get("/")
-def root():
-    """The front door. Every entry point this product documents is a
-    sub-path - /ui/login, /dashboard/ui, /admin/ui - and until now nothing
-    answered "/" at all, so anyone handed the deployment URL and nothing else
-    met FastAPI's JSON 404. Send them where a person arriving with no
-    credentials has to go anyway; the two UI routers already redirect there on
-    401/403."""
-    return RedirectResponse(url="/ui/login", status_code=302)
 
 
 @app.get("/health")
@@ -186,9 +265,11 @@ def ready(resource=Depends(get_dynamo_resource)):
     """Readiness: can this instance actually serve? Two dependencies decide
     that, and both have failed silently in this project's history.
 
-    DynamoDB - tables are created by create_all_tables() from application
-    code, not by Terraform, so a fresh deployment can be up and answering
-    /health with no table behind it.
+    DynamoDB - in production the tables exist only because terraform
+    created them; create_all_tables() is called by the test suite and by
+    scripts/run_local.py, never by this application. (This docstring said
+    the opposite for a long time.) Either way a deployment can be up and
+    answering /health with no table behind it, which is what this checks.
 
     Cognito configuration - Phase 4 (H1) made authentication fail CLOSED when
     the pool id or app client id is unset. Such a deployment authenticates
@@ -201,10 +282,19 @@ def ready(resource=Depends(get_dynamo_resource)):
         "cognito_config": bool(settings.cognito_user_pool_id
                                and settings.cognito_app_client_id),
     }
+    # Reported, deliberately NOT gating. Without an address the landing page
+    # offers no request-access button and says access is arranged directly,
+    # so nothing is broken and nothing bounces - the page is simply quieter
+    # than it could be. Taking a serving instance out of rotation over a
+    # marketing link would be the larger mistake, and a deploy gate that
+    # wants to refuse this can read the field.
+    warnings = {"access_request_email": bool(settings.access_request_email)}
+
     if all(checks.values()):
-        return {"status": "ready", "checks": checks}
+        return {"status": "ready", "checks": checks, "warnings": warnings}
     return JSONResponse(status_code=503,
-                        content={"status": "not_ready", "checks": checks})
+                        content={"status": "not_ready", "checks": checks,
+                                 "warnings": warnings})
 
 
 handler = Mangum(app)

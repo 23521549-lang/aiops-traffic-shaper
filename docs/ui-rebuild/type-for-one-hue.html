@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nam cap chu cho luat mot sac</title>
+<style>
+/* ══════════════════════════════════════════════════════════════════════
+   NĂM CẶP CHỮ, MỘT LUẬT MÀU
+
+   Luật màu đã chốt: MỘT SẮC, NĂM MỨC. Màu nói độ lớn; phán quyết nói bằng
+   dấu đặc màu mực cộng một chữ. Không có thông tin nào chỉ nằm trong sắc.
+
+   Trang này giữ nguyên luật đó, giữ nguyên bố cục, giữ nguyên từng con số,
+   và chỉ đổi ba biến: chữ tiêu đề, chữ thân, chữ số. Phần màn hình sinh
+   bằng vòng lặp nên năm bản giống hệt nhau tới từng pixel.
+
+   Thứ đáng nhìn kỹ nhất là CHỮ SỐ. Sản phẩm này là một cột số: địa chỉ IP,
+   giá trị sigma, số đếm. Một kiểu chữ đẹp mà chữ số hẹp, không đều bề rộng,
+   hoặc lẫn 0 với O là một kiểu chữ sai cho việc này. Ô mẫu của mỗi cặp có
+   một dòng riêng để thử đúng chuyện đó.
+
+   Font OFL, tải một lần về repo. Không request nào lúc xem.
+   ══════════════════════════════════════════════════════════════════════ */
+
+@font-face { font-family: InstrSerif;  src: url("fonts/instrumentserif.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: Schibsted;   src: url("fonts/schibsted.woff2") format("woff2"); font-weight: 400 700; font-display: swap; }
+@font-face { font-family: JBMono;      src: url("fonts/jetbrainsmono.woff2") format("woff2"); font-weight: 400 600; font-display: swap; }
+@font-face { font-family: Literata;    src: url("fonts/literata.woff2") format("woff2"); font-weight: 300 700; font-display: swap; }
+@font-face { font-family: PublicSans;  src: url("fonts/publicsans.woff2") format("woff2"); font-weight: 300 700; font-display: swap; }
+@font-face { font-family: DMMono;      src: url("fonts/dmmono.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: Fraunces;    src: url("fonts/fraunces.woff2") format("woff2"); font-weight: 300 700; font-display: swap; }
+@font-face { font-family: Archivo;     src: url("fonts/archivo.woff2") format("woff2"); font-weight: 400 700; font-display: swap; }
+@font-face { font-family: SpaceMono;   src: url("fonts/spacemono.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: InstrSans;   src: url("fonts/instrumentsans.woff2") format("woff2"); font-weight: 400 700; font-display: swap; }
+@font-face { font-family: MartianMono; src: url("fonts/martianmono.woff2") format("woff2"); font-weight: 400 500; font-display: swap; }
+@font-face { font-family: Recursive;   src: url("fonts/recursive.woff2") format("woff2"); font-weight: 300 800; font-display: swap; }
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: #fbfbfc; color: #0c0e12;
+  font-family: PublicSans, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3 { margin: 0; font-weight: 600; }
+.doc { max-width: 1160px; margin: 0 auto; padding: 0 28px 130px; }
+.doc-top {
+  position: sticky; top: 0; z-index: 20; padding: 13px 28px;
+  border-bottom: 1px solid #e8e9ed; background: rgb(251 251 252 / .92);
+  backdrop-filter: blur(10px);
+  font-family: JBMono, monospace; font-size: 11px; color: #83868f; letter-spacing: .05em;
+}
+.lede { padding: 54px 0 0; max-width: 76ch; }
+.lede h1 { font-size: 32px; line-height: 1.15; letter-spacing: -.02em; margin-bottom: 14px; }
+.lede p { color: #545660; margin: 0 0 12px; font-size: 15px; }
+.lede b { color: #0c0e12; font-weight: 600; }
+.fixed {
+  margin: 24px 0 0; padding: 15px 20px; background: #f2f2f7;
+  border-left: 3px solid #2f3a90; border-radius: 0 5px 5px 0; max-width: 76ch;
+}
+.fixed p { margin: 0; font-size: 13.5px; color: #545660; }
+.fixed b { color: #0c0e12; }
+
+/* ── mỗi cặp ────────────────────────────────────────────────────────── */
+.pair { padding-top: 88px; }
+.pair-head { max-width: 78ch; margin-bottom: 20px; }
+.eyebrow {
+  font-family: JBMono, monospace; font-size: 10.5px; letter-spacing: .18em;
+  text-transform: uppercase; color: #9b9ea8; margin: 0 0 10px;
+}
+.pair-head h2 { font-size: 24px; letter-spacing: -.015em; margin-bottom: 10px; }
+.pair-head p { color: #545660; margin: 0 0 10px; }
+.pair-head .risk { color: #545660; border-left: 2px solid #d6d8de; padding-left: 14px; }
+.pair-head .risk b { color: #0c0e12; }
+.files {
+  font-family: JBMono, monospace; font-size: 11px; color: #83868f;
+  border-top: 1px solid #e8e9ed; padding-top: 9px; margin-top: 14px;
+}
+
+/* ── ô mẫu ──────────────────────────────────────────────────────────── */
+.spec {
+  border: 1px solid #e8e9ed; border-radius: 3px; background: #fff;
+  padding: 4px 20px 10px; margin-bottom: 18px;
+}
+.spec-row {
+  display: grid; grid-template-columns: 96px 1fr; gap: 20px; align-items: baseline;
+  padding: 13px 0; border-bottom: 1px solid #f0f1f4;
+}
+.spec-row:last-child { border-bottom: 0; }
+.spec-k {
+  font-family: JBMono, monospace; font-size: 9.5px; letter-spacing: .14em;
+  text-transform: uppercase; color: #9b9ea8;
+}
+.spec-d  { font-family: var(--f-d); font-size: var(--d-size); font-weight: var(--d-weight);
+           line-height: 1.1; letter-spacing: -.02em; }
+.spec-t  { font-family: var(--f-t); font-size: 14.5px; color: #545660; }
+.spec-fig { font-family: var(--f-d); font-size: 30px; font-weight: var(--d-weight);
+            letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.spec-n  { font-family: var(--f-n); font-size: 14px; line-height: 1.8;
+           font-variant-numeric: tabular-nums; }
+
+/* ── màn hình ───────────────────────────────────────────────────────── */
+.demo { border: 1px solid #e0e1e6; border-radius: 3px; overflow: hidden;
+        box-shadow: 0 26px 60px -44px rgb(0 0 0 / .4); }
+.scr { background: #fff; color: #0c0e12; font-family: var(--f-t); }
+.scr-top {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 15px 30px 11px; border-bottom: 1px solid #e8e9ed;
+}
+.scr-top .b { font-family: var(--f-d); font-size: 20px; font-weight: var(--d-weight);
+              letter-spacing: -.01em; }
+.scr-top .m { font-family: var(--f-n); font-size: 11px; color: #9195a0; }
+.scr-body { display: grid; grid-template-columns: 146px 1fr; }
+.scr-nav { border-right: 1px solid #e8e9ed; padding: 18px 0; }
+.scr-nav a { display: block; padding: 6px 20px; font-size: 13.5px; color: #585c66; text-decoration: none; }
+.scr-nav a.on { color: #0c0e12; font-weight: 600; box-shadow: inset 3px 0 0 #2f3a90; }
+.scr-nav .gp { font-family: var(--f-n); font-size: 9.5px; letter-spacing: .14em;
+               text-transform: uppercase; color: #9195a0; padding: 14px 20px 5px; }
+.scr-main { padding: 26px 30px 28px; min-width: 0; }
+.scr-h1 { font-family: var(--f-d); font-size: var(--d-size); font-weight: var(--d-weight);
+          line-height: 1.06; letter-spacing: -.02em; margin-bottom: 6px; }
+.scr-lead { color: #585c66; font-size: 14.5px; margin: 0 0 26px; max-width: 58ch; }
+.scr-lead b { color: #0c0e12; font-weight: 600; }
+.scr-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 26px; margin-bottom: 30px; }
+.scr-stats .v { font-family: var(--f-d); font-size: var(--stat-fig); font-weight: var(--d-weight);
+                line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.scr-stats .k { font-family: var(--f-n); font-size: 9.5px; letter-spacing: .14em;
+                text-transform: uppercase; color: #9195a0; margin-top: 6px; }
+.scr-lab {
+  font-family: var(--f-n); font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase;
+  color: #9195a0; border-bottom: 1px solid #e8e9ed; padding-bottom: 6px; margin-bottom: 13px;
+  display: flex; justify-content: space-between;
+}
+.scr-scale { display: flex; justify-content: space-between; font-family: var(--f-n);
+             font-size: 10px; color: #9195a0; margin-top: 3px; }
+.scr-split { display: grid; grid-template-columns: 1fr 1fr; gap: 38px; margin-top: 30px; }
+.scr-row {
+  display: grid; grid-template-columns: 62px 1fr 48px; gap: 13px; align-items: center;
+  padding: 7px 0; font-family: var(--f-n); font-size: 12px; cursor: pointer;
+  border-bottom: 1px solid #e8e9ed; font-variant-numeric: tabular-nums;
+}
+.scr-row[aria-current] { font-weight: 600; }
+.scr-row .bar { height: 7px; border-radius: 4px; background: #eceefa; }
+.scr-row .bar i { display: block; height: 100%; border-radius: 4px; }
+.scr-row .n { text-align: right; }
+.scr-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.scr-tbl th { text-align: left; font-family: var(--f-n); font-size: 9.5px; letter-spacing: .14em;
+              text-transform: uppercase; color: #9195a0; font-weight: 400;
+              padding: 0 0 8px; border-bottom: 1px solid #e8e9ed; }
+.scr-tbl td { padding: 12px 0; border-bottom: 1px solid #e8e9ed; vertical-align: middle;
+              text-align: right; }
+.scr-tbl td:first-child, .scr-tbl td.l { text-align: left; }
+.scr-tbl td.l { font-size: 12.5px; color: #585c66; }
+.scr-tbl .ip { font-family: var(--f-n); font-size: 13px; }
+.scr-tbl .fig { font-family: var(--f-d); font-size: var(--d-fig); font-weight: var(--d-weight);
+                letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.mark { display: inline-flex; align-items: center; gap: 7px; font-family: var(--f-n);
+        font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+.mark i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; background: #0c0e12; }
+.mark.open i { background: transparent; box-shadow: inset 0 0 0 1.5px #0c0e12; }
+.scr-tbl .btn { font-family: var(--f-t); font-size: 12.5px; padding: 5px 14px; cursor: pointer;
+                background: transparent; color: #0c0e12; border: 1px solid #e0e1e6; border-radius: 20px; }
+.scr-tbl .btn:hover { border-color: #2f3a90; color: #2f3a90; }
+
+.plot { display: block; width: 100%; height: auto; }
+.dot { animation: settle 1s cubic-bezier(.16,1,.3,1) both; }
+@keyframes settle { from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: none; } }
+.ridge { animation: rise .9s cubic-bezier(.16,1,.3,1) both; transform-origin: bottom; }
+@keyframes rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .dot, .ridge { animation: none; } }
+
+/* ── bảng số cuối ───────────────────────────────────────────────────── */
+.nums { width: 100%; border-collapse: collapse; margin-top: 22px; }
+.nums th, .nums td { text-align: left; padding: 15px 18px 15px 0; border-bottom: 1px solid #e8e9ed;
+                     vertical-align: middle; }
+.nums thead th { font-family: JBMono, monospace; font-size: 10px; letter-spacing: .14em;
+                 text-transform: uppercase; color: #9b9ea8; font-weight: 400; }
+.nums tbody th { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.nums .big { font-size: 26px; letter-spacing: -.01em; font-variant-numeric: tabular-nums; line-height: 1; }
+.nums .col { font-size: 13.5px; font-variant-numeric: tabular-nums; line-height: 1.65; }
+
+@media (max-width: 920px) {
+  .scr-body, .scr-split { grid-template-columns: 1fr; }
+  .scr-stats { grid-template-columns: repeat(2, 1fr); }
+  .doc { padding: 0 16px 80px; }
+}
+</style>
+</head>
+<body>
+<div class="doc-top">aiops-traffic-shaper &middot; luật màu: một sắc, năm mức &middot; năm cặp chữ &middot; 2026-09-25</div>
+<div class="doc">
+
+<div class="lede">
+  <h1>Năm cặp chữ, cùng một luật màu</h1>
+  <p>
+    Luật màu đã chốt và không đổi ở trang này: <b>một sắc, năm mức</b>. Sắc
+    nói độ lớn; phán quyết nói bằng dấu đặc màu mực cộng một chữ. Bố cục và
+    từng con số cũng giữ nguyên.
+  </p>
+  <p>
+    Thứ duy nhất đổi là ba biến: chữ tiêu đề, chữ thân, chữ số.
+  </p>
+  <div class="fixed">
+    <p>
+      <b>Nhìn kỹ chữ số.</b> Sản phẩm này về bản chất là một cột số: địa chỉ
+      IP, giá trị sigma, số đếm. Một kiểu chữ đẹp mà chữ số không đều bề
+      rộng, hoặc lẫn <b>0</b> với <b>O</b> và <b>1</b> với <b>l</b>, là kiểu
+      chữ sai cho việc này dù nó đẹp tới đâu. Mỗi ô mẫu có một dòng riêng để
+      thử đúng chuyện đó, và cuối trang có bảng đặt năm cặp cạnh nhau trên
+      cùng những con số.
+    </p>
+  </div>
+</div>
+
+<section class="pair" id="t1" style="--f-d: InstrSerif, Georgia, serif; --f-t: Schibsted, sans-serif;
+          --f-n: JBMono, monospace; --d-size: 42px; --d-fig: 22px;
+          --stat-fig: 33px; --d-weight: 400;">
+  <p class="eyebrow">Cặp T1</p>
+  <div class="pair-head">
+    <h2>Instrument Serif + Schibsted Grotesk</h2>
+    <p>Bản bạn vừa xem. Serif tương phản rất cao cho tiêu đề và con số lớn, grotesk trung tính cho thân. Đẹp và hiện đại.</p>
+    <p class="risk"><b>Rủi ro:</b> Instrument Serif là kiểu chữ đang thịnh. Nét mảnh của nó rất mảnh, nên ở cỡ nhỏ và trên màn hình kém, con số dễ mất nét. Đây là rủi ro thật cho một sản phẩm mà con số là nội dung.</p>
+    <p class="files">instrumentserif 21KB + schibsted 46KB + jetbrainsmono 31KB = 98KB</p>
+  </div>
+
+      <div class="spec">
+        <div class="spec-row">
+          <span class="spec-k">Tiêu đề</span>
+          <span class="spec-d">Hai nguồn đang bị giữ.</span>
+        </div>
+        <div class="spec-row">
+          <span class="spec-k">Thân</span>
+          <span class="spec-t">Sigma là khoảng cách khỏi ngày thường của chính bạn.
+            Số 0 là giống hệt bạn. Càng lớn càng lạ.</span>
+        </div>
+        <div class="spec-row">
+          <span class="spec-k">Số lớn</span>
+          <span class="spec-fig">6.41 &nbsp; 4.28 &nbsp; 184,220</span>
+        </div>
+        <div class="spec-row">
+          <span class="spec-k">Cột số</span>
+          <span class="spec-n">203.0.113.44 &nbsp;&nbsp; 6.41&#963; &nbsp;&nbsp; 0123456789<br>
+            198.51.100.07 &nbsp;&nbsp; 4.28&#963; &nbsp;&nbsp; 0O1lI5S8B</span>
+        </div>
+      </div>
+
+  <div class="demo">
+    <div class="scr">
+      <div class="scr-top">
+        <span class="b">Traffic Shaper</span>
+        <span class="m">acme-prod &middot; owner@acme.example</span>
+      </div>
+      <div class="scr-body">
+        <nav class="scr-nav">
+          <div class="gp">Control</div>
+          <a href="#" class="on">Gate</a>
+          <a href="#">History</a>
+          <a href="#">Allowed</a>
+          <div class="gp">System</div>
+          <a href="#">Agents</a>
+          <a href="#">Model</a>
+        </nav>
+        <div class="scr-main">
+          <h3 class="scr-h1">Hai nguồn đang bị giữ.</h3>
+          <p class="scr-lead">
+            Đo được <b>184,220</b> request trong 24 giờ qua, từ 5 agent, lần
+            báo gần nhất 8 giây trước.
+          </p>
+
+          <div class="scr-stats">
+            <div><div class="v">5</div><div class="k">agents reporting</div></div>
+            <div><div class="v">184,220</div><div class="k">requests / 24h</div></div>
+            <div><div class="v">4.00&#963;</div><div class="k">slow gate</div></div>
+            <div><div class="v">$0.00</div><div class="k">cost today</div></div>
+          </div>
+
+          <div class="scr-lab"><span>Distribution by distance</span><span>24 hours</span></div>
+          <svg class="plot" viewBox="0 0 880 150" role="img" aria-label="Phan bo nguon">
+            <defs>
+              <linearGradient id="tint-t1" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" stop-color="#eceefa"/><stop offset=".33" stop-color="#ccd1f0"/>
+                <stop offset=".58" stop-color="#9aa3e0"/><stop offset=".80" stop-color="#5f6cc4"/>
+                <stop offset="1" stop-color="#2f3a90"/>
+              </linearGradient>
+            </defs>
+            <path class="ridge" d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122 L880,122 L0,122 Z"
+                  fill="url(#tint-t1)" opacity=".55"/>
+            <path d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122"
+                  fill="none" stroke="#2f3a90" stroke-width="1.1" opacity=".4"/>
+            <g class="dot">
+              <circle cx="182" cy="98" r="3.4" fill="#ccd1f0"/><circle cx="239" cy="88" r="3.4" fill="#ccd1f0"/>
+              <circle cx="297" cy="74" r="3.4" fill="#9aa3e0"/><circle cx="349" cy="86" r="3.4" fill="#9aa3e0"/>
+              <circle cx="396" cy="66" r="3.4" fill="#9aa3e0"/><circle cx="459" cy="80" r="3.4" fill="#5f6cc4"/>
+              <circle cx="502" cy="90" r="3.4" fill="#5f6cc4"/><circle cx="537" cy="70" r="3.4" fill="#5f6cc4"/>
+              <circle cx="565" cy="86" r="3.4" fill="#2f3a90"/>
+            </g>
+            <g class="dot">
+              <circle cx="629" cy="56" r="6.5" fill="#0c0e12"/>
+              <text x="629" y="40" fill="#0c0e12" font-size="10" font-family="JBMono" text-anchor="middle">SLOWED</text>
+              <circle cx="818" cy="44" r="6.5" fill="#0c0e12"/>
+              <text x="818" y="28" fill="#0c0e12" font-size="10" font-family="JBMono" text-anchor="middle">BLOCKED</text>
+            </g>
+            <line x1="587" y1="6" x2="587" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="733" y1="6" x2="733" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="0" y1="122" x2="880" y2="122" stroke="#0c0e12" stroke-width="1"/>
+          </svg>
+          <div class="scr-scale"><span>0&#963;</span><span>1&#963;</span><span>2&#963;</span><span>3&#963;</span><span>4&#963; slow</span><span>5&#963; block</span><span>6&#963;</span></div>
+
+          <div class="scr-split">
+            <div>
+              <div class="scr-lab"><span>Where you slow</span><span>13 positions</span></div>
+              <div class="scr-row"><span>3.50&#963;</span><span class="bar"><i style="width:100%;background:#2f3a90"></i></span><span class="n">1482</span></div>
+              <div class="scr-row"><span>3.75&#963;</span><span class="bar"><i style="width:63%;background:#5f6cc4"></i></span><span class="n">940</span></div>
+              <div class="scr-row" aria-current="true"><span>4.00&#963;</span><span class="bar"><i style="width:25%;background:#9aa3e0"></i></span><span class="n">371</span></div>
+              <div class="scr-row"><span>4.25&#963;</span><span class="bar"><i style="width:11%;background:#ccd1f0"></i></span><span class="n">164</span></div>
+              <div class="scr-row"><span>4.50&#963;</span><span class="bar"><i style="width:4%;background:#eceefa"></i></span><span class="n">61</span></div>
+            </div>
+            <div>
+              <div class="scr-lab"><span>Being acted on</span><span>2</span></div>
+              <table class="scr-tbl">
+                <thead><tr><th>Source</th><th>Distance</th><th>At your servers</th><th></th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><span class="ip">203.0.113.44</span><br><span class="mark"><i></i>blocked</span></td>
+                    <td><span class="fig">6.41</span></td>
+                    <td class="l">3 / 3 written</td>
+                    <td><button class="btn">Allow</button></td>
+                  </tr>
+                  <tr>
+                    <td><span class="ip">198.51.100.7</span><br><span class="mark open"><i></i>slowed</span></td>
+                    <td><span class="fig">4.28</span></td>
+                    <td class="l">1 / 3 behind</td>
+                    <td><button class="btn">Allow</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="pair" id="t2" style="--f-d: Literata, Georgia, serif; --f-t: PublicSans, sans-serif;
+          --f-n: DMMono, monospace; --d-size: 37px; --d-fig: 21px;
+          --stat-fig: 31px; --d-weight: 400;">
+  <p class="eyebrow">Cặp T2</p>
+  <div class="pair-head">
+    <h2>Literata + Public Sans</h2>
+    <p>Literata do Google đặt làm cho đọc sách điện tử, nên nó được vẽ để chịu được văn bản dài trên màn hình. Bình thản, chắc chắn, ít thời trang hơn hẳn. Public Sans là kiểu chữ của chính phủ Mỹ, vẽ để rõ ràng chứ không để gây ấn tượng.</p>
+    <p class="risk"><b>Rủi ro:</b> Ít đặc trưng hơn. Nếu bạn muốn người ta nhớ mặt sản phẩm thì đây là hướng dễ quên nhất trong năm. File Literata cũng nặng nhất (110KB) vì mang trục quang học.</p>
+    <p class="files">literata 110KB + publicsans 26KB + dmmono 14KB = 150KB</p>
+  </div>
+
+      <div class="spec">
+        <div class="spec-row">
+          <span class="spec-k">Tiêu đề</span>
+          <span class="spec-d">Hai nguồn đang bị giữ.</span>
+        </div>
+        <div class="spec-row">
+          <span class="spec-k">Thân</span>
+          <span class="spec-t">Sigma là khoảng cách khỏi ngày thường của chính bạn.
+            Số 0 là giống hệt bạn. Càng lớn càng lạ.</span>
+        </div>
+        <div class="spec-row">
+          <span class="spec-k">Số lớn</span>
+          <span class="spec-fig">6.41 &nbsp; 4.28 &nbsp; 184,220</span>
+        </div>
+        <div class="spec-row">
+          <span class="spec-k">Cột số</span>
+          <span class="spec-n">203.0.113.44 &nbsp;&nbsp; 6.41&#963; &nbsp;&nbsp; 0123456789<br>
+            198.51.100.07 &nbsp;&nbsp; 4.28&#963; &nbsp;&nbsp; 0O1lI5S8B</span>
+        </div>
+      </div>
+
+  <div class="demo">
+    <div class="scr">
+      <div class="scr-top">
+        <span class="b">Traffic Shaper</span>
+        <span class="m">acme-prod &middot; owner@acme.example</span>
+      </div>
+      <div class="scr-body">
+        <nav class="scr-nav">
+          <div class="gp">Control</div>
+          <a href="#" class="on">Gate</a>
+          <a href="#">History</a>
+          <a href="#">Allowed</a>
+          <div class="gp">System</div>
+          <a href="#">Agents</a>
+          <a href="#">Model</a>
+        </nav>
+        <div class="scr-main">
+          <h3 class="scr-h1">Hai nguồn đang bị giữ.</h3>
+          <p class="scr-lead">
+            Đo được <b>184,220</b> request trong 24 giờ qua, từ 5 agent, lần
+            báo gần nhất 8 giây trước.
+          </p>
+
+          <div class="scr-stats">
+            <div><div class="v">5</div><div class="k">agents reporting</div></div>
+            <div><div class="v">184,220</div><div class="k">requests / 24h</div></div>
+            <div><div class="v">4.00&#963;</div><div class="k">slow gate</div></div>
+            <div><div class="v">$0.00</div><div class="k">cost today</div></div>
+          </div>
+
+          <div class="scr-lab"><span>Distribution by distance</span><span>24 hours</span></div>
+          <svg class="plot" viewBox="0 0 880 150" role="img" aria-label="Phan bo nguon">
+            <defs>
+              <linearGradient id="tint-t2" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" stop-color="#eceefa"/><stop offset=".33" stop-color="#ccd1f0"/>
+                <stop offset=".58" stop-color="#9aa3e0"/><stop offset=".80" stop-color="#5f6cc4"/>
+                <stop offset="1" stop-color="#2f3a90"/>
+              </linearGradient>
+            </defs>
+            <path class="ridge" d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122 L880,122 L0,122 Z"
+                  fill="url(#tint-t2)" opacity=".55"/>
+            <path d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122"
+                  fill="none" stroke="#2f3a90" stroke-width="1.1" opacity=".4"/>
+            <g class="dot">
+              <circle cx="182" cy="98" r="3.4" fill="#ccd1f0"/><circle cx="239" cy="88" r="3.4" fill="#ccd1f0"/>
+              <circle cx="297" cy="74" r="3.4" fill="#9aa3e0"/><circle cx="349" cy="86" r="3.4" fill="#9aa3e0"/>
+              <circle cx="396" cy="66" r="3.4" fill="#9aa3e0"/><circle cx="459" cy="80" r="3.4" fill="#5f6cc4"/>
+              <circle cx="502" cy="90" r="3.4" fill="#5f6cc4"/><circle cx="537" cy="70" r="3.4" fill="#5f6cc4"/>
+              <circle cx="565" cy="86" r="3.4" fill="#2f3a90"/>
+            </g>
+            <g class="dot">
+              <circle cx="629" cy="56" r="6.5" fill="#0c0e12"/>
+              <text x="629" y="40" fill="#0c0e12" font-size="10" font-family="DMMono" text-anchor="middle">SLOWED</text>
+              <circle cx="818" cy="44" r="6.5" fill="#0c0e12"/>
+              <text x="818" y="28" fill="#0c0e12" font-size="10" font-family="DMMono" text-anchor="middle">BLOCKED</text>
+            </g>
+            <line x1="587" y1="6" x2="587" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="733" y1="6" x2="733" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="0" y1="122" x2="880" y2="122" stroke="#0c0e12" stroke-width="1"/>
+          </svg>
+          <div class="scr-scale"><span>0&#963;</span><span>1&#963;</span><span>2&#963;</span><span>3&#963;</span><span>4&#963; slow</span><span>5&#963; block</span><span>6&#963;</span></div>
+
+          <div class="scr-split">
+            <div>
+              <div class="scr-lab"><span>Where you slow</span><span>13 positions</span></div>
+              <div class="scr-row"><span>3.50&#963;</span><span class="bar"><i style="width:100%;background:#2f3a90"></i></span><span class="n">1482</span></div>
+              <div class="scr-row"><span>3.75&#963;</span><span class="bar"><i style="width:63%;background:#5f6cc4"></i></span><span class="n">940</span></div>
+              <div class="scr-row" aria-current="true"><span>4.00&#963;</span><span class="bar"><i style="width:25%;background:#9aa3e0"></i></span><span class="n">371</span></div>
+              <div class="scr-row"><span>4.25&#963;</span><span class="bar"><i style="width:11%;background:#ccd1f0"></i></span><span class="n">164</span></div>
+              <div class="scr-row"><span>4.50&#963;</span><span class="bar"><i style="width:4%;background:#eceefa"></i></span><span class="n">61</span></div>
+            </div>
+            <div>
+              <div class="scr-lab"><span>Being acted on</span><span>2</span></div>
+              <table class="scr-tbl">
+                <thead><tr><th>Source</th><th>Distance</th><th>At your servers</th><th></th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><span class="ip">203.0.113.44</span><br><span class="mark"><i></i>blocked</span></td>
+                    <td><span class="fig">6.41</span></td>
+                    <td class="l">3 / 3 written</td>
+                    <td><button class="btn">Allow</button></td>
+                  </tr>
+                  <tr>
+                    <td><span class="ip">198.51.100.7</span><br><span class="mark open"><i></i>slowed</span></td>
+                    <td><span class="fig">4.28</span></td>
+                    <td class="l">1 / 3 behind</td>
+                    <td><button class="btn">Allow</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="pair" id="t3" style="--f-d: Fraunces, Georgia, serif; --f-t: Archivo, sans-serif;
+          --f-n: SpaceMono, monospace; --d-size: 38px; --d-fig: 21px;
+          --stat-fig: 31px; --d-weight: 500;">
+  <p class="eyebrow">Cặp T3</p>
+  <div class="pair-head">
+    <h2>Fraunces + Archivo</h2>
+    <p>Fraunces là serif biến thiên có trục quang học thật: ở cỡ lớn nó nhả ra những chi tiết mà cỡ nhỏ giấu đi. Ấm, có cá tính, hơi cổ. Archivo là grotesk đặc, chắc. Space Mono thì không thể nhầm với bất cứ mono nào khác.</p>
+    <p class="risk"><b>Rủi ro:</b> Cá tính là con dao hai lưỡi trên một sản phẩm bảo mật doanh nghiệp. Space Mono có chữ số rất đặc thù, đọc nhanh thì tốt, nhưng trông ít nghiêm túc hơn.</p>
+    <p class="files">fraunces 67KB + archivo 34KB + spacemono 16KB = 117KB</p>
+  </div>
+
+      <div class="spec">
+        <div class="spec-row">
+          <span class="spec-k">Tiêu đề</span>
+          <span class="spec-d">Hai nguồn đang bị giữ.</span>
+        </div>
+        <div class="spec-row">
+          <span class="spec-k">Thân</span>
+          <span class="spec-t">Sigma là khoảng cách khỏi ngày thường của chính bạn.
+            Số 0 là giống hệt bạn. Càng lớn càng lạ.</span>
+        </div>
+        <div class="spec-row">
+          <span class="spec-k">Số lớn</span>
+          <span class="spec-fig">6.41 &nbsp; 4.28 &nbsp; 184,220</span>
+        </div>
+        <div class="spec-row">
+          <span class="spec-k">Cột số</span>
+          <span class="spec-n">203.0.113.44 &nbsp;&nbsp; 6.41&#963; &nbsp;&nbsp; 0123456789<br>
+            198.51.100.07 &nbsp;&nbsp; 4.28&#963; &nbsp;&nbsp; 0O1lI5S8B</span>
+        </div>
+      </div>
+
+  <div class="demo">
+    <div class="scr">
+      <div class="scr-top">
+        <span class="b">Traffic Shaper</span>
+        <span class="m">acme-prod &middot; owner@acme.example</span>
+      </div>
+      <div class="scr-body">
+        <nav class="scr-nav">
+          <div class="gp">Control</div>
+          <a href="#" class="on">Gate</a>
+          <a href="#">History</a>
+          <a href="#">Allowed</a>
+          <div class="gp">System</div>
+          <a href="#">Agents</a>
+          <a href="#">Model</a>
+        </nav>
+        <div class="scr-main">
+          <h3 class="scr-h1">Hai nguồn đang bị giữ.</h3>
+          <p class="scr-lead">
+            Đo được <b>184,220</b> request trong 24 giờ qua, từ 5 agent, lần
+            báo gần nhất 8 giây trước.
+          </p>
+
+          <div class="scr-stats">
+            <div><div class="v">5</div><div class="k">agents reporting</div></div>
+            <div><div class="v">184,220</div><div class="k">requests / 24h</div></div>
+            <div><div class="v">4.00&#963;</div><div class="k">slow gate</div></div>
+            <div><div class="v">$0.00</div><div class="k">cost today</div></div>
+          </div>
+
+          <div class="scr-lab"><span>Distribution by distance</span><span>24 hours</span></div>
+          <svg class="plot" viewBox="0 0 880 150" role="img" aria-label="Phan bo nguon">
+            <defs>
+              <linearGradient id="tint-t3" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" stop-color="#eceefa"/><stop offset=".33" stop-color="#ccd1f0"/>
+                <stop offset=".58" stop-color="#9aa3e0"/><stop offset=".80" stop-color="#5f6cc4"/>
+                <stop offset="1" stop-color="#2f3a90"/>
+              </linearGradient>
+            </defs>
+            <path class="ridge" d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122 L880,122 L0,122 Z"
+                  fill="url(#tint-t3)" opacity=".55"/>
+            <path d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122"
+                  fill="none" stroke="#2f3a90" stroke-width="1.1" opacity=".4"/>
+            <g class="dot">
+              <circle cx="182" cy="98" r="3.4" fill="#ccd1f0"/><circle cx="239" cy="88" r="3.4" fill="#ccd1f0"/>
+              <circle cx="297" cy="74" r="3.4" fill="#9aa3e0"/><circle cx="349" cy="86" r="3.4" fill="#9aa3e0"/>
+              <circle cx="396" cy="66" r="3.4" fill="#9aa3e0"/><circle cx="459" cy="80" r="3.4" fill="#5f6cc4"/>
+              <circle cx="502" cy="90" r="3.4" fill="#5f6cc4"/><circle cx="537" cy="70" r="3.4" fill="#5f6cc4"/>
+              <circle cx="565" cy="86" r="3.4" fill="#2f3a90"/>
+            </g>
+            <g class="dot">
+              <circle cx="629" cy="56" r="6.5" fill="#0c0e12"/>
+              <text x="629" y="40" fill="#0c0e12" font-size="10" font-family="SpaceMono" text-anchor="middle">SLOWED</text>
+              <circle cx="818" cy="44" r="6.5" fill="#0c0e12"/>
+              <text x="818" y="28" fill="#0c0e12" font-size="10" font-family="SpaceMono" text-anchor="middle">BLOCKED</text>
+            </g>
+            <line x1="587" y1="6" x2="587" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="733" y1="6" x2="733" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="0" y1="122" x2="880" y2="122" stroke="#0c0e12" stroke-width="1"/>
+          </svg>
+          <div class="scr-scale"><span>0&#963;</span><span>1&#963;</span><span>2&#963;</span><span>3&#963;</span><span>4&#963; slow</span><span>5&#963; block</span><span>6&#963;</span></div>
+
+          <div class="scr-split">
+            <div>
+              <div class="scr-lab"><span>Where you slow</span><span>13 positions</span></div>
+              <div class="scr-row"><span>3.50&#963;</span><span class="bar"><i style="width:100%;background:#2f3a90"></i></span><span class="n">1482</span></div>
+              <div class="scr-row"><span>3.75&#963;</span><span class="bar"><i style="width:63%;background:#5f6cc4"></i></span><span class="n">940</span></div>
+              <div class="scr-row" aria-current="true"><span>4.00&#963;</span><span class="bar"><i style="width:25%;background:#9aa3e0"></i></span><span class="n">371</span></div>
+              <div class="scr-row"><span>4.25&#963;</span><span class="bar"><i style="width:11%;background:#ccd1f0"></i></span><span class="n">164</span></div>
+              <div class="scr-row"><span>4.50&#963;</span><span class="bar"><i style="width:4%;background:#eceefa"></i></span><span class="n">61</span></div>
+            </div>
+            <div>
+              <div class="scr-lab"><span>Being acted on</span><span>2</span></div>
+              <table class="scr-tbl">
+                <thead><tr><th>Source</th><th>Distance</th><th>At your servers</th><th></th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><span class="ip">203.0.113.44</span><br><span class="mark"><i></i>blocked</span></td>
+                    <td><span class="fig">6.41</span></td>
+                    <td class="l">3 / 3 written</td>
+                    <td><button class="btn">Allow</button></td>
+                  </tr>
+                  <tr>
+                    <td><span class="ip">198.51.100.7</span><br><span class="mark open"><i></i>slowed</span></td>
+                    <td><span class="fig">4.28</span></td>
+                    <td class="l">1 / 3 behind</td>
+                    <td><button class="btn">Allow</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="pair" id="t4" style="--f-d: InstrSans, sans-serif; --f-t: InstrSans, sans-serif;
+          --f-n: MartianMono, monospace; --d-size: 34px; --d-fig: 19px;
+          --stat-fig: 29px; --d-weight: 600;">
+  <p class="eyebrow">Cặp T4</p>
+  <div class="pair-head">
+    <h2>Instrument Sans + Martian Mono</h2>
+    <p>Bỏ hẳn chữ có chân. Một grotesk cho mọi thứ, và một mono rất rộng cho số. Lạnh, như mặt một thiết bị đo. Martian Mono được vẽ rộng có chủ đích, nên một cột số đọc rất dễ.</p>
+    <p class="risk"><b>Rủi ro:</b> Mất hẳn sự tương phản giữa lời và số mà chữ có chân đem lại. Martian Mono rộng nên cùng một bảng sẽ tốn nhiều chiều ngang hơn, đúng chỗ console này đã chật ở 390px.</p>
+    <p class="files">instrumentsans 30KB + martianmono 23KB = 53KB</p>
+  </div>
+
+      <div class="spec">
+        <div class="spec-row">
+          <span class="spec-k">Tiêu đề</span>
+          <span class="spec-d">Hai nguồn đang bị giữ.</span>
+        </div>
+        <div class="spec-row">
+          <span class="spec-k">Thân</span>
+          <span class="spec-t">Sigma là khoảng cách khỏi ngày thường của chính bạn.
+            Số 0 là giống hệt bạn. Càng lớn càng lạ.</span>
+        </div>
+        <div class="spec-row">
+          <span class="spec-k">Số lớn</span>
+          <span class="spec-fig">6.41 &nbsp; 4.28 &nbsp; 184,220</span>
+        </div>
+        <div class="spec-row">
+          <span class="spec-k">Cột số</span>
+          <span class="spec-n">203.0.113.44 &nbsp;&nbsp; 6.41&#963; &nbsp;&nbsp; 0123456789<br>
+            198.51.100.07 &nbsp;&nbsp; 4.28&#963; &nbsp;&nbsp; 0O1lI5S8B</span>
+        </div>
+      </div>
+
+  <div class="demo">
+    <div class="scr">
+      <div class="scr-top">
+        <span class="b">Traffic Shaper</span>
+        <span class="m">acme-prod &middot; owner@acme.example</span>
+      </div>
+      <div class="scr-body">
+        <nav class="scr-nav">
+          <div class="gp">Control</div>
+          <a href="#" class="on">Gate</a>
+          <a href="#">History</a>
+          <a href="#">Allowed</a>
+          <div class="gp">System</div>
+          <a href="#">Agents</a>
+          <a href="#">Model</a>
+        </nav>
+        <div class="scr-main">
+          <h3 class="scr-h1">Hai nguồn đang bị giữ.</h3>
+          <p class="scr-lead">
+            Đo được <b>184,220</b> request trong 24 giờ qua, từ 5 agent, lần
+            báo gần nhất 8 giây trước.
+          </p>
+
+          <div class="scr-stats">
+            <div><div class="v">5</div><div class="k">agents reporting</div></div>
+            <div><div class="v">184,220</div><div class="k">requests / 24h</div></div>
+            <div><div class="v">4.00&#963;</div><div class="k">slow gate</div></div>
+            <div><div class="v">$0.00</div><div class="k">cost today</div></div>
+          </div>
+
+          <div class="scr-lab"><span>Distribution by distance</span><span>24 hours</span></div>
+          <svg class="plot" viewBox="0 0 880 150" role="img" aria-label="Phan bo nguon">
+            <defs>
+              <linearGradient id="tint-t4" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" stop-color="#eceefa"/><stop offset=".33" stop-color="#ccd1f0"/>
+                <stop offset=".58" stop-color="#9aa3e0"/><stop offset=".80" stop-color="#5f6cc4"/>
+                <stop offset="1" stop-color="#2f3a90"/>
+              </linearGradient>
+            </defs>
+            <path class="ridge" d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122 L880,122 L0,122 Z"
+                  fill="url(#tint-t4)" opacity=".55"/>
+            <path d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122"
+                  fill="none" stroke="#2f3a90" stroke-width="1.1" opacity=".4"/>
+            <g class="dot">
+              <circle cx="182" cy="98" r="3.4" fill="#ccd1f0"/><circle cx="239" cy="88" r="3.4" fill="#ccd1f0"/>
+              <circle cx="297" cy="74" r="3.4" fill="#9aa3e0"/><circle cx="349" cy="86" r="3.4" fill="#9aa3e0"/>
+              <circle cx="396" cy="66" r="3.4" fill="#9aa3e0"/><circle cx="459" cy="80" r="3.4" fill="#5f6cc4"/>
+              <circle cx="502" cy="90" r="3.4" fill="#5f6cc4"/><circle cx="537" cy="70" r="3.4" fill="#5f6cc4"/>
+              <circle cx="565" cy="86" r="3.4" fill="#2f3a90"/>
+            </g>
+            <g class="dot">
+              <circle cx="629" cy="56" r="6.5" fill="#0c0e12"/>
+              <text x="629" y="40" fill="#0c0e12" font-size="10" font-family="MartianMono" text-anchor="middle">SLOWED</text>
+              <circle cx="818" cy="44" r="6.5" fill="#0c0e12"/>
+              <text x="818" y="28" fill="#0c0e12" font-size="10" font-family="MartianMono" text-anchor="middle">BLOCKED</text>
+            </g>
+            <line x1="587" y1="6" x2="587" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="733" y1="6" x2="733" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="0" y1="122" x2="880" y2="122" stroke="#0c0e12" stroke-width="1"/>
+          </svg>
+          <div class="scr-scale"><span>0&#963;</span><span>1&#963;</span><span>2&#963;</span><span>3&#963;</span><span>4&#963; slow</span><span>5&#963; block</span><span>6&#963;</span></div>
+
+          <div class="scr-split">
+            <div>
+              <div class="scr-lab"><span>Where you slow</span><span>13 positions</span></div>
+              <div class="scr-row"><span>3.50&#963;</span><span class="bar"><i style="width:100%;background:#2f3a90"></i></span><span class="n">1482</span></div>
+              <div class="scr-row"><span>3.75&#963;</span><span class="bar"><i style="width:63%;background:#5f6cc4"></i></span><span class="n">940</span></div>
+              <div class="scr-row" aria-current="true"><span>4.00&#963;</span><span class="bar"><i style="width:25%;background:#9aa3e0"></i></span><span class="n">371</span></div>
+              <div class="scr-row"><span>4.25&#963;</span><span class="bar"><i style="width:11%;background:#ccd1f0"></i></span><span class="n">164</span></div>
+              <div class="scr-row"><span>4.50&#963;</span><span class="bar"><i style="width:4%;background:#eceefa"></i></span><span class="n">61</span></div>
+            </div>
+            <div>
+              <div class="scr-lab"><span>Being acted on</span><span>2</span></div>
+              <table class="scr-tbl">
+                <thead><tr><th>Source</th><th>Distance</th><th>At your servers</th><th></th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><span class="ip">203.0.113.44</span><br><span class="mark"><i></i>blocked</span></td>
+                    <td><span class="fig">6.41</span></td>
+                    <td class="l">3 / 3 written</td>
+                    <td><button class="btn">Allow</button></td>
+                  </tr>
+                  <tr>
+                    <td><span class="ip">198.51.100.7</span><br><span class="mark open"><i></i>slowed</span></td>
+                    <td><span class="fig">4.28</span></td>
+                    <td class="l">1 / 3 behind</td>
+                    <td><button class="btn">Allow</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="pair" id="t5" style="--f-d: Recursive, sans-serif; --f-t: Recursive, sans-serif;
+          --f-n: Recursive, monospace; --d-size: 34px; --d-fig: 19px;
+          --stat-fig: 29px; --d-weight: 700;">
+  <p class="eyebrow">Cặp T5</p>
+  <div class="pair-head">
+    <h2>Recursive, một họ duy nhất</h2>
+    <p>Một file variable duy nhất mang cả sans lẫn mono, đổi qua trục MONO. Nghĩa là một tài nguyên, một dòng trong _ASSETS, và bộ chữ nhẹ nhất trong năm hướng. Với một sản phẩm có trần tài nguyên cứng thì đó là một lập luận kỹ thuật thật, không phải sở thích.</p>
+    <p class="risk"><b>Rủi ro:</b> Mono và sans cùng một xương nên chúng KHÔNG tương phản mạnh với nhau. Cột số sẽ ít tách khỏi lời hơn bốn hướng trên. Kiểm ngay bên dưới: nếu hai dòng trong ô mẫu trông giống hệt nhau thì trục MONO chưa được phục vụ và tôi sẽ lấy bản variable đầy đủ.</p>
+    <p class="files">recursive 72KB, một file</p>
+  </div>
+
+      <div class="spec">
+        <div class="spec-row">
+          <span class="spec-k">Tiêu đề</span>
+          <span class="spec-d">Hai nguồn đang bị giữ.</span>
+        </div>
+        <div class="spec-row">
+          <span class="spec-k">Thân</span>
+          <span class="spec-t">Sigma là khoảng cách khỏi ngày thường của chính bạn.
+            Số 0 là giống hệt bạn. Càng lớn càng lạ.</span>
+        </div>
+        <div class="spec-row">
+          <span class="spec-k">Số lớn</span>
+          <span class="spec-fig">6.41 &nbsp; 4.28 &nbsp; 184,220</span>
+        </div>
+        <div class="spec-row">
+          <span class="spec-k">Cột số &middot; trục MONO</span>
+          <span class="spec-n" style="font-variation-settings: "MONO" 1;">203.0.113.44 &nbsp;&nbsp; 6.41&#963; &nbsp;&nbsp; 0123456789<br>
+            198.51.100.07 &nbsp;&nbsp; 4.28&#963; &nbsp;&nbsp; 0O1lI5S8B</span>
+        </div>
+      </div>
+
+  <div class="demo">
+    <div class="scr">
+      <div class="scr-top">
+        <span class="b">Traffic Shaper</span>
+        <span class="m">acme-prod &middot; owner@acme.example</span>
+      </div>
+      <div class="scr-body">
+        <nav class="scr-nav">
+          <div class="gp">Control</div>
+          <a href="#" class="on">Gate</a>
+          <a href="#">History</a>
+          <a href="#">Allowed</a>
+          <div class="gp">System</div>
+          <a href="#">Agents</a>
+          <a href="#">Model</a>
+        </nav>
+        <div class="scr-main">
+          <h3 class="scr-h1">Hai nguồn đang bị giữ.</h3>
+          <p class="scr-lead">
+            Đo được <b>184,220</b> request trong 24 giờ qua, từ 5 agent, lần
+            báo gần nhất 8 giây trước.
+          </p>
+
+          <div class="scr-stats">
+            <div><div class="v">5</div><div class="k">agents reporting</div></div>
+            <div><div class="v">184,220</div><div class="k">requests / 24h</div></div>
+            <div><div class="v">4.00&#963;</div><div class="k">slow gate</div></div>
+            <div><div class="v">$0.00</div><div class="k">cost today</div></div>
+          </div>
+
+          <div class="scr-lab"><span>Distribution by distance</span><span>24 hours</span></div>
+          <svg class="plot" viewBox="0 0 880 150" role="img" aria-label="Phan bo nguon">
+            <defs>
+              <linearGradient id="tint-t5" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" stop-color="#eceefa"/><stop offset=".33" stop-color="#ccd1f0"/>
+                <stop offset=".58" stop-color="#9aa3e0"/><stop offset=".80" stop-color="#5f6cc4"/>
+                <stop offset="1" stop-color="#2f3a90"/>
+              </linearGradient>
+            </defs>
+            <path class="ridge" d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122 L880,122 L0,122 Z"
+                  fill="url(#tint-t5)" opacity=".55"/>
+            <path d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122"
+                  fill="none" stroke="#2f3a90" stroke-width="1.1" opacity=".4"/>
+            <g class="dot">
+              <circle cx="182" cy="98" r="3.4" fill="#ccd1f0"/><circle cx="239" cy="88" r="3.4" fill="#ccd1f0"/>
+              <circle cx="297" cy="74" r="3.4" fill="#9aa3e0"/><circle cx="349" cy="86" r="3.4" fill="#9aa3e0"/>
+              <circle cx="396" cy="66" r="3.4" fill="#9aa3e0"/><circle cx="459" cy="80" r="3.4" fill="#5f6cc4"/>
+              <circle cx="502" cy="90" r="3.4" fill="#5f6cc4"/><circle cx="537" cy="70" r="3.4" fill="#5f6cc4"/>
+              <circle cx="565" cy="86" r="3.4" fill="#2f3a90"/>
+            </g>
+            <g class="dot">
+              <circle cx="629" cy="56" r="6.5" fill="#0c0e12"/>
+              <text x="629" y="40" fill="#0c0e12" font-size="10" font-family="Recursive" text-anchor="middle">SLOWED</text>
+              <circle cx="818" cy="44" r="6.5" fill="#0c0e12"/>
+              <text x="818" y="28" fill="#0c0e12" font-size="10" font-family="Recursive" text-anchor="middle">BLOCKED</text>
+            </g>
+            <line x1="587" y1="6" x2="587" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="733" y1="6" x2="733" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="0" y1="122" x2="880" y2="122" stroke="#0c0e12" stroke-width="1"/>
+          </svg>
+          <div class="scr-scale"><span>0&#963;</span><span>1&#963;</span><span>2&#963;</span><span>3&#963;</span><span>4&#963; slow</span><span>5&#963; block</span><span>6&#963;</span></div>
+
+          <div class="scr-split">
+            <div>
+              <div class="scr-lab"><span>Where you slow</span><span>13 positions</span></div>
+              <div class="scr-row" style="font-variation-settings: "MONO" 1;"><span>3.50&#963;</span><span class="bar"><i style="width:100%;background:#2f3a90"></i></span><span class="n">1482</span></div>
+              <div class="scr-row" style="font-variation-settings: "MONO" 1;"><span>3.75&#963;</span><span class="bar"><i style="width:63%;background:#5f6cc4"></i></span><span class="n">940</span></div>
+              <div class="scr-row" style="font-variation-settings: "MONO" 1;" aria-current="true"><span>4.00&#963;</span><span class="bar"><i style="width:25%;background:#9aa3e0"></i></span><span class="n">371</span></div>
+              <div class="scr-row" style="font-variation-settings: "MONO" 1;"><span>4.25&#963;</span><span class="bar"><i style="width:11%;background:#ccd1f0"></i></span><span class="n">164</span></div>
+              <div class="scr-row" style="font-variation-settings: "MONO" 1;"><span>4.50&#963;</span><span class="bar"><i style="width:4%;background:#eceefa"></i></span><span class="n">61</span></div>
+            </div>
+            <div>
+              <div class="scr-lab"><span>Being acted on</span><span>2</span></div>
+              <table class="scr-tbl">
+                <thead><tr><th>Source</th><th>Distance</th><th>At your servers</th><th></th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><span class="ip">203.0.113.44</span><br><span class="mark"><i></i>blocked</span></td>
+                    <td><span class="fig">6.41</span></td>
+                    <td class="l">3 / 3 written</td>
+                    <td><button class="btn">Allow</button></td>
+                  </tr>
+                  <tr>
+                    <td><span class="ip">198.51.100.7</span><br><span class="mark open"><i></i>slowed</span></td>
+                    <td><span class="fig">4.28</span></td>
+                    <td class="l">1 / 3 behind</td>
+                    <td><button class="btn">Allow</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="pair">
+  <p class="eyebrow">So trực tiếp</p>
+  <div class="pair-head">
+    <h2>Cùng những con số, năm kiểu chữ</h2>
+    <p>
+      Đây là phép thử thật cho sản phẩm này. Cột giữa là con số lớn kiểu như
+      trên thẻ thống kê; cột phải là cột số trong bảng, chỗ chữ số phải đều
+      bề rộng và <b>0</b> phải không lẫn với <b>O</b>.
+    </p>
+  </div>
+  <table class="nums">
+    <thead><tr><th>Cặp chữ</th><th>Số lớn</th><th>Cột số</th></tr></thead>
+    <tbody>
+      <tr>
+        <th>T1 &middot; Instrument Serif</th>
+        <td><span class="big" style="font-family:InstrSerif, Georgia, serif;font-weight:400">6.41 &nbsp; 184,220</span></td>
+        <td><span class="col" style="font-family:JBMono, monospace;">203.0.113.44<br>198.51.100.07<br>0O1lI5S8B</span></td>
+      </tr>
+      <tr>
+        <th>T2 &middot; Literata</th>
+        <td><span class="big" style="font-family:Literata, Georgia, serif;font-weight:400">6.41 &nbsp; 184,220</span></td>
+        <td><span class="col" style="font-family:DMMono, monospace;">203.0.113.44<br>198.51.100.07<br>0O1lI5S8B</span></td>
+      </tr>
+      <tr>
+        <th>T3 &middot; Fraunces</th>
+        <td><span class="big" style="font-family:Fraunces, Georgia, serif;font-weight:500">6.41 &nbsp; 184,220</span></td>
+        <td><span class="col" style="font-family:SpaceMono, monospace;">203.0.113.44<br>198.51.100.07<br>0O1lI5S8B</span></td>
+      </tr>
+      <tr>
+        <th>T4 &middot; Instrument Sans</th>
+        <td><span class="big" style="font-family:InstrSans, sans-serif;font-weight:600">6.41 &nbsp; 184,220</span></td>
+        <td><span class="col" style="font-family:MartianMono, monospace;">203.0.113.44<br>198.51.100.07<br>0O1lI5S8B</span></td>
+      </tr>
+      <tr>
+        <th>T5 &middot; Recursive, một họ duy nhất</th>
+        <td><span class="big" style="font-family:Recursive, sans-serif;font-weight:700">6.41 &nbsp; 184,220</span></td>
+        <td><span class="col" style="font-family:Recursive, monospace; font-variation-settings: "MONO" 1;">203.0.113.44<br>198.51.100.07<br>0O1lI5S8B</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="fixed" style="margin-top:32px;max-width:none">
+    <p>
+      <b>Nếu cần một ý kiến:</b> với luật một sắc, chữ có chân đang gánh phần
+      lớn cá tính, vì bảng màu đã tự nguyện im lặng. Nghĩa là lựa chọn nằm
+      giữa <b>T2</b> (Literata, chắc chắn, chịu được cỡ nhỏ, nhưng nặng 110KB
+      và dễ quên) và <b>T3</b> (Fraunces, nhiều cá tính nhất, chữ số đẹp).
+      <b>T1</b> đẹp nhất trên màn lớn nhưng nét mảnh của Instrument Serif là
+      một rủi ro thật cho con số nhỏ. <b>T4</b> và <b>T5</b> là hai hướng
+      không chữ có chân, nhẹ hơn nhiều, nhưng sẽ trả lại cho bảng màu cái
+      việc tạo cá tính mà luật một sắc vừa lấy đi.
+    </p>
+  </div>
+</section>
+
+</div>
+</body>
+</html>

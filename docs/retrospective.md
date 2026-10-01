@@ -42,6 +42,38 @@ hour of deploying that no amount of local testing could have found (§3). The
 cost of carrying it was not the deployment work; it was that five phases of
 green tests described a system nobody had ever seen answer a request.
 
+## 1b. The defect only CI could see
+
+The test suite ran green on a developer machine for the whole of Phase 7 and
+went red the first time it ran in CI. The failing assertion was trivial -
+`/ui/static/../main.py` should answer 404 - and the reason it failed was not:
+
+    botocore.exceptions.NoCredentialsError: Unable to locate credentials
+
+That test builds a bare `TestClient` with no `get_dynamo_resource` override.
+The usage middleware wraps every request and resolves the resource itself, so
+with no override it reached for the real one. On a machine holding AWS
+credentials - which any machine that has run `terraform apply` does - boto3
+found them and the test passed. In CI there were none, and it did not.
+
+Underneath that was a product defect rather than a test defect. The path is
+normalised to `/ui/main.py` before the middleware sees it, which escapes every
+entry in `_UNMETERED_PATH_PREFIXES`, so a 404 for a path no route claims billed
+a DynamoDB write. The Function URL is public and has no edge rate limiting, so
+that is a lever an anonymous caller can pull as fast as they can open sockets,
+against the one budget the whole product is organised around. M8 had already
+found this shape once and fixed it for `/` alone, one URL at a time.
+
+The fix states the rule instead of listing the exceptions: a request that
+matched no route never reached the application, so it is not metered.
+
+Two things worth keeping from this. A test that needs the developer's AWS
+account to pass is not testing what it claims to, and nothing in the suite can
+tell you which tests those are - only an environment without the credentials
+can. The whole suite was re-run with them stripped afterwards: 1,049 passed,
+so this was the only one. And the fastest way to find a gap in a list of
+exempt paths is to stop maintaining the list.
+
 ## 2. Gate rows that did not pass cleanly
 
 **Substitutions (4):**
@@ -159,17 +191,52 @@ Observed in this run only.
 - Whether per-IP edge rate limiting is worth leaving Always-Free for.
 
 **Engineering decides:**
-- No real traffic has been served: no tenant registered, no telemetry scored in
-  production, no nightly retrain on live data. **The largest remaining gap.**
-- The deploy workflow has never run; GitHub environment `production` and the
-  two repo variables are unconfigured.
-- Rollback is untested, and with no Lambda alias it is a re-apply from a tag
-  rather than a pointer flip.
-- Throttling is global, not per tenant. No un-suspend endpoint.
-- Nothing polls `/health` or `/ready`; no alarm on the free-tier ceiling.
-- The retrain loop walks tenants serially against a 15-minute Lambda ceiling.
-- Terraform and `create_all_tables()` both create the seven tables.
-- No supported local application run; no real nginx or iptables has ever been
-  driven by the agent's enforcers.
-- A stale `aiops-traffic-shaper-prod-terraform-lock` table from the old model
-  is still in the account.
+- No real traffic has been served: one demo tenant, three agents registered,
+  and `TelemetryEvents` empty. No telemetry has been scored in production and
+  no nightly retrain has run on live data. **The largest remaining gap, and
+  the only one on this list that engineering cannot close by itself.**
+- **The alert email is unconfirmed, so six armed alarms reach nobody.** AWS
+  deletes a pending SNS subscription after 72 hours; the one created on
+  2026-09-26 was never confirmed and had been silently removed by 2026-10-01.
+  Recreated on 2026-10-01 and pending again. Until somebody clicks the link in
+  the mail to the address in `terraform.tfvars`, every alarm below fires into
+  an empty topic. This is the same "instrumentation, not observability" shape
+  that `alarms.tf` was written to fix, one layer further out, and the comment
+  on `aws_sns_topic_subscription.email` had warned about it in advance.
+- The deploy workflow has never run. `AWS_DEPLOY_ROLE_ARN` and `AWS_REGION`
+  were set as repo variables on 2026-10-01; the `production` environment still
+  has **no required reviewers**, so the approval gate the workflow's header
+  describes does not exist yet. Deploys have been run from a developer machine
+  with Terraform instead.
+- **iptables** has never been driven for real. The adapter is covered only by
+  tests that inject a fake `subprocess.run`, so what is proven is the argv it
+  would build, not that netfilter accepts it. Unlike nginx this cannot be
+  exercised unprivileged, which is why it is still here.
+
+  **nginx no longer belongs on this list.** `scripts/nginx-enforcement-drill.py`
+  runs an unprivileged nginx on a loopback port and drives it with the real
+  `NginxAdapter`: a client gets 200, a real tier-2 block through a real
+  `nginx -s reload` turns that into 403, and unblocking returns it to 200.
+  12/12 checks pass. Two false results had to be cleared first, and both are
+  worth knowing: a test server using `return 200` answers before nginx reaches
+  the access phase where `deny` lives, so blocking appears not to work; and a
+  drill that spells the adapter's filenames out by hand asserts against files
+  the adapter never writes, and passes while proving nothing.
+
+### Closed since this list was written, and left here because the list was wrong
+
+Seven items above were carried as open long after the work that closed them.
+They are recorded rather than deleted, because the failure worth remembering
+is not any one of them, it is that a document nobody re-read kept asserting
+them while the code disagreed.
+
+| Was listed as open | What is actually true |
+|---|---|
+| Rollback is a re-apply from a tag, no Lambda alias | Alias `live` exists and tracks a published version (19 at the time of writing), so rollback is a pointer flip. Still untested. |
+| Throttling is global, not per tenant | `enforce_tenant_quota` is a dependency on the telemetry route and refuses with 429 at 25% of the daily ceiling, per tenant. Six tests in `test_tenant_quota.py`. |
+| No un-suspend endpoint | `POST /admin/v1/tenants/{id}/reactivate`, plus the console equivalent. |
+| Nothing polls `/health` or `/ready` | The probe Lambda runs every five minutes on an EventBridge rule and checks `/ready` **through CloudFront**, which is the path a real agent takes. |
+| No alarm on the free-tier ceiling | `aiops-traffic-shaper-free-tier-80pct` fires on the probe's `DailyUsageRatio` at 0.8, the same threshold the console banner uses. Six alarms exist in total. |
+| The retrain loop walks tenants serially | `dispatch_all` fans out one asynchronous invocation per tenant (`InvocationType="Event"`), so no tenant shares another's 15-minute ceiling. |
+| Terraform and `create_all_tables()` both create the tables | Terraform owns the eight tables in production. `create_all_tables()` is now reached only by the test suite and by `scripts/run_local.py`, which is also the supported local run that this list said did not exist. |
+| A stale `aiops-traffic-shaper-prod-terraform-lock` table | Deleted 2026-10-01. It held one legacy `-md5` digest row and nothing referenced it: the backend moved to S3-native locking (`use_lockfile = true`), and `PAY_PER_REQUEST` is the one billing mode ADR-002 names as having no Always-Free allowance. |

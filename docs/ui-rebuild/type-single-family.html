@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bay phuong an mot ho chu duy nhat</title>
+<style>
+/* ══════════════════════════════════════════════════════════════════════
+   MỘT HỌ CHỮ DUY NHẤT
+
+   Ràng buộc mới: chữ và số cùng một họ. Không ghép mono riêng.
+
+   Ràng buộc đó không phải chuyện thẩm mỹ, nó loại thẳng một số họ. Sản
+   phẩm này là một cột số, nên họ được chọn BẮT BUỘC phải có chữ số đều bề
+   rộng, hoặc mặc định, hoặc bật được qua `tnum`. Bảy họ dưới đây đều đã
+   qua bài kiểm đó, đọc thẳng từ bảng OpenType trong chính file woff2 bằng
+   fontTools, không tin mô tả trên trang tải.
+
+   Những họ TRƯỢT bài kiểm không có mặt ở đây dù đẹp: Fraunces, Instrument
+   Serif và Commissioner đều có chữ số không đều bề rộng và không có tnum,
+   nên một cột sigma sẽ nhảy qua lại giữa các dòng.
+
+   Không họ nào trong 19 file đã kiểm có feature `zero`, tức là không có số
+   0 gạch chéo. Vì vậy việc phân biệt 0 với O phải dựa vào hình dạng sẵn
+   có, và mỗi ô mẫu có riêng một dòng để thử đúng chuyện đó.
+
+   Luật màu giữ nguyên: một sắc, năm mức. Bố cục giữ nguyên. Font OFL, tải
+   một lần về repo, không request nào lúc xem.
+   ══════════════════════════════════════════════════════════════════════ */
+
+@font-face { font-family: Familjen;    src: url("fonts/familjen.woff2") format("woff2"); font-weight: 400 700; font-display: swap; }
+@font-face { font-family: SpaceGrotesk;src: url("fonts/spacegrotesk.woff2") format("woff2"); font-weight: 300 700; font-display: swap; }
+@font-face { font-family: MartianMono; src: url("fonts/martianmono.woff2") format("woff2"); font-weight: 100 800; font-display: swap; }
+@font-face { font-family: Archivo;     src: url("fonts/archivo.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: Golos;       src: url("fonts/golos.woff2") format("woff2"); font-weight: 400 900; font-display: swap; }
+@font-face { font-family: SourceSerif; src: url("fonts/sourceserif.woff2") format("woff2"); font-weight: 200 900; font-display: swap; }
+@font-face { font-family: Bricolage;   src: url("fonts/bricolage.woff2") format("woff2"); font-weight: 200 800; font-display: swap; }
+@font-face { font-family: PublicSans;  src: url("fonts/publicsans.woff2") format("woff2"); font-weight: 300 700; font-display: swap; }
+@font-face { font-family: JBMono;      src: url("fonts/jetbrainsmono.woff2") format("woff2"); font-weight: 400 600; font-display: swap; }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: #fbfbfc; color: #0c0e12;
+       font-family: PublicSans, -apple-system, "Segoe UI", sans-serif;
+       font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+h1, h2, h3 { margin: 0; font-weight: 600; }
+.doc { max-width: 1160px; margin: 0 auto; padding: 0 28px 130px; }
+.doc-top { position: sticky; top: 0; z-index: 20; padding: 13px 28px;
+  border-bottom: 1px solid #e8e9ed; background: rgb(251 251 252 / .92); backdrop-filter: blur(10px);
+  font-family: JBMono, monospace; font-size: 11px; color: #83868f; letter-spacing: .05em; }
+.lede { padding: 54px 0 0; max-width: 78ch; }
+.lede h1 { font-size: 32px; line-height: 1.15; letter-spacing: -.02em; margin-bottom: 14px; }
+.lede p { color: #545660; margin: 0 0 12px; font-size: 15px; }
+.lede b { color: #0c0e12; font-weight: 600; }
+.note { margin: 24px 0 0; padding: 15px 20px; background: #f2f2f7;
+        border-left: 3px solid #2f3a90; border-radius: 0 5px 5px 0; max-width: 78ch; }
+.note p { margin: 0 0 9px; font-size: 13.5px; color: #545660; }
+.note p:last-child { margin: 0; }
+.note b { color: #0c0e12; }
+.out { margin: 20px 0 0; padding: 15px 20px; background: #fdf4f2;
+       border-left: 3px solid #b32d0e; border-radius: 0 5px 5px 0; max-width: 78ch; }
+.out p { margin: 0; font-size: 13.5px; color: #545660; }
+.out b { color: #0c0e12; }
+
+.opt { padding-top: 84px; }
+.opt-head { max-width: 78ch; margin-bottom: 18px; }
+.eyebrow { font-family: JBMono, monospace; font-size: 10.5px; letter-spacing: .18em;
+           text-transform: uppercase; color: #9b9ea8; margin: 0 0 10px; }
+.opt-head h2 { font-size: 24px; letter-spacing: -.015em; margin-bottom: 4px; }
+.facts { font-family: JBMono, monospace; font-size: 11px; color: #83868f;
+         margin: 0 0 14px; font-variant-numeric: tabular-nums; }
+.facts b { color: #0c0e12; font-weight: 400; }
+.opt-head p { color: #545660; margin: 0 0 10px; }
+.opt-head .risk { border-left: 2px solid #d6d8de; padding-left: 14px; }
+.opt-head .risk b { color: #0c0e12; }
+
+/* ô mẫu, tất cả bằng chính họ đang xét */
+.spec { border: 1px solid #e8e9ed; border-radius: 3px; background: #fff;
+        padding: 4px 20px 10px; margin-bottom: 18px;
+        font-family: var(--f); font-variant-numeric: tabular-nums; }
+.spec .r { display: grid; grid-template-columns: 90px 1fr; gap: 20px; align-items: baseline;
+           padding: 13px 0; border-bottom: 1px solid #f0f1f4; }
+.spec .r:last-child { border-bottom: 0; }
+.spec .k { font-family: JBMono, monospace; font-size: 9.5px; letter-spacing: .14em;
+           text-transform: uppercase; color: #9b9ea8; }
+.spec .d { font-size: var(--h); font-weight: var(--w); line-height: 1.08; letter-spacing: -.02em; }
+.spec .t { font-size: 14.5px; color: #545660; line-height: 1.65; }
+.spec .fg { font-size: 30px; font-weight: var(--w); letter-spacing: -.01em; }
+.spec .col { font-size: 15px; line-height: 1.75; }
+.spec .oo { font-size: 24px; letter-spacing: .02em; }
+
+.demo { border: 1px solid #e0e1e6; border-radius: 3px; overflow: hidden;
+        box-shadow: 0 26px 60px -44px rgb(0 0 0 / .4); }
+.scr { background: #fff; color: #0c0e12; font-family: var(--f);
+       font-variant-numeric: tabular-nums; }
+.scr-top { display: flex; align-items: baseline; justify-content: space-between;
+           padding: 15px 30px 11px; border-bottom: 1px solid #e8e9ed; }
+.scr-top .b { font-size: 19px; font-weight: var(--w); letter-spacing: -.01em; }
+.scr-top .m { font-size: 11.5px; color: #9195a0; }
+.scr-body { display: grid; grid-template-columns: 148px 1fr; }
+.scr-nav { border-right: 1px solid #e8e9ed; padding: 18px 0; }
+.scr-nav a { display: block; padding: 6px 20px; font-size: 13.5px; color: #585c66; text-decoration: none; }
+.scr-nav a.on { color: #0c0e12; font-weight: 600; box-shadow: inset 3px 0 0 #2f3a90; }
+.scr-nav .gp { font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase;
+               color: #9195a0; padding: 14px 20px 5px; }
+.scr-main { padding: 26px 30px 28px; min-width: 0; }
+.scr-h1 { font-size: var(--h); font-weight: var(--w); line-height: 1.06;
+          letter-spacing: -.02em; margin-bottom: 6px; }
+.scr-lead { color: #585c66; font-size: 14.5px; margin: 0 0 26px; max-width: 58ch; }
+.scr-lead b { color: #0c0e12; font-weight: 600; }
+.scr-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 26px; margin-bottom: 30px; }
+.scr-stats .v { font-size: 29px; font-weight: var(--w); line-height: 1; letter-spacing: -.02em; }
+.scr-stats .k { font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase;
+                color: #9195a0; margin-top: 6px; }
+.scr-lab { font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: #9195a0;
+           border-bottom: 1px solid #e8e9ed; padding-bottom: 6px; margin-bottom: 13px;
+           display: flex; justify-content: space-between; }
+.scr-scale { display: flex; justify-content: space-between; font-size: 10.5px;
+             color: #9195a0; margin-top: 3px; }
+.scr-split { display: grid; grid-template-columns: 1fr 1fr; gap: 38px; margin-top: 30px; }
+.scr-row { display: grid; grid-template-columns: 64px 1fr 48px; gap: 13px; align-items: center;
+           padding: 7px 0; font-size: 12.5px; cursor: pointer; border-bottom: 1px solid #e8e9ed; }
+.scr-row[aria-current] { font-weight: 600; }
+.scr-row .bar { height: 7px; border-radius: 4px; background: #eceefa; }
+.scr-row .bar i { display: block; height: 100%; border-radius: 4px; }
+.scr-row .n { text-align: right; }
+.scr-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.scr-tbl th { text-align: left; font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase;
+              color: #9195a0; font-weight: 400; padding: 0 0 8px; border-bottom: 1px solid #e8e9ed; }
+.scr-tbl td { padding: 12px 0; border-bottom: 1px solid #e8e9ed; vertical-align: middle; text-align: right; }
+.scr-tbl td:first-child, .scr-tbl td.l { text-align: left; }
+.scr-tbl td.l { font-size: 12.5px; color: #585c66; }
+.scr-tbl .ip { font-size: 13.5px; }
+.scr-tbl .fig { font-size: 21px; font-weight: var(--w); letter-spacing: -.01em; }
+.mark { display: inline-flex; align-items: center; gap: 7px; font-size: 10px;
+        letter-spacing: .1em; text-transform: uppercase; }
+.mark i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; background: #0c0e12; }
+.mark.open i { background: transparent; box-shadow: inset 0 0 0 1.5px #0c0e12; }
+.scr-tbl .btn { font-family: inherit; font-size: 12.5px; padding: 5px 14px; cursor: pointer;
+                background: transparent; color: #0c0e12; border: 1px solid #e0e1e6; border-radius: 20px; }
+.scr-tbl .btn:hover { border-color: #2f3a90; color: #2f3a90; }
+
+.plot { display: block; width: 100%; height: auto; }
+.dot { animation: settle 1s cubic-bezier(.16,1,.3,1) both; }
+@keyframes settle { from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: none; } }
+.ridge { animation: rise .9s cubic-bezier(.16,1,.3,1) both; transform-origin: bottom; }
+@keyframes rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .dot, .ridge { animation: none; } }
+
+.cmp { width: 100%; border-collapse: collapse; margin-top: 22px; }
+.cmp th, .cmp td { text-align: left; padding: 14px 16px 14px 0;
+                   border-bottom: 1px solid #e8e9ed; vertical-align: middle; }
+.cmp thead th { font-family: JBMono, monospace; font-size: 10px; letter-spacing: .14em;
+                text-transform: uppercase; color: #9b9ea8; font-weight: 400; }
+.cmp tbody th { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.cmp .num { font-family: JBMono, monospace; font-size: 12px; color: #545660;
+            font-variant-numeric: tabular-nums; }
+.cmp .samp { font-size: 15px; line-height: 1.6; font-variant-numeric: tabular-nums; }
+.cmp .oo { font-size: 20px; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 920px) {
+  .scr-body, .scr-split { grid-template-columns: 1fr; }
+  .scr-stats { grid-template-columns: repeat(2, 1fr); }
+  .doc { padding: 0 16px 80px; }
+}
+</style>
+</head>
+<body>
+<div class="doc-top">aiops-traffic-shaper &middot; một họ chữ duy nhất &middot; chữ và số cùng kiểu &middot; 2026-09-25</div>
+<div class="doc">
+
+<div class="lede">
+  <h1>Bảy phương án một họ chữ duy nhất</h1>
+  <p>
+    Chữ và số cùng một họ, không ghép mono riêng. Luật màu giữ nguyên
+    <b>một sắc, năm mức</b>. Bố cục và từng con số cũng giữ nguyên, nên thứ
+    duy nhất đổi giữa bảy phần là <b>một biến</b>.
+  </p>
+  <div class="note">
+    <p>
+      <b>Ràng buộc này không phải chuyện thẩm mỹ.</b> Sản phẩm là một cột số,
+      nên họ được chọn bắt buộc phải có chữ số đều bề rộng, hoặc mặc định,
+      hoặc bật được qua <b>tnum</b>. Bảy họ dưới đây đều đã qua bài kiểm đó,
+      đọc thẳng từ bảng OpenType trong chính file woff2, không tin mô tả trên
+      trang tải.
+    </p>
+    <p>
+      Con số <b>0 so O</b> ở mỗi phần là bề rộng số 0 chia bề rộng chữ O, đo
+      từ bảng hmtx. Càng thấp thì hai ký tự càng khó nhầm khi liếc qua một
+      địa chỉ IP. Không họ nào có feature <b>zero</b> (số 0 gạch chéo), nên
+      đây là thứ duy nhất giúp phân biệt, và mỗi ô mẫu có một dòng riêng để
+      bạn tự nhìn.
+    </p>
+  </div>
+  <div class="out">
+    <p>
+      <b>Đã loại, dù đẹp:</b> Fraunces, Instrument Serif và Commissioner đều
+      có chữ số không đều bề rộng và không có tnum. Một cột sigma sẽ nhảy qua
+      lại giữa các dòng. Điều này cũng phủ nhận gợi ý Fraunces mà tôi đưa ra
+      trước khi có ràng buộc một họ duy nhất.
+    </p>
+  </div>
+</div>
+
+<section class="opt" id="familjen" style="--f: Familjen, sans-serif; --w: 600; --h: 34px;">
+  <p class="eyebrow">Phương án 1</p>
+  <div class="opt-head">
+    <h2>Familjen Grotesk</h2>
+    <p class="facts">18KB &middot; cột số: <b>đã đều sẵn</b> &middot;
+       0 so O: <b>0.86</b> &middot; wght 400-700 &middot; OFL</p>
+    <p>Grotesque Thuỵ Điển, hình học nhưng không lạnh. Nhẹ nhất trong bảy, và là họ duy nhất vừa đều bề rộng sẵn vừa còn có tnum dự phòng.</p>
+    <p class="risk"><b>Đánh đổi:</b> Chỉ có bốn trọng lượng. Với một họ duy nhất thì phân cấp phải dựa gần hết vào trọng lượng, nên dải hẹp là một giới hạn thật.</p>
+  </div>
+
+      <div class="spec">
+        <div class="r"><span class="k">Tiêu đề</span><span class="d">Hai nguồn đang bị giữ.</span></div>
+        <div class="r"><span class="k">Thân</span><span class="t">Sigma là khoảng cách khỏi ngày thường của chính bạn. Số 0 là giống hệt bạn. Càng lớn càng lạ, và bạn chọn xa tới đâu thì đáng hành động.</span></div>
+        <div class="r"><span class="k">Số lớn</span><span class="fg">6.41 &nbsp; 4.28 &nbsp; 184,220</span></div>
+        <div class="r"><span class="k">Cột số</span><span class="col">203.0.113.44<br>198.51.100.07<br>&nbsp;&nbsp;10.0.0.255</span></div>
+        <div class="r"><span class="k">0 so O</span><span class="oo">0O &nbsp; 1lI &nbsp; 5S &nbsp; 8B &nbsp; 2Z &nbsp; 6G</span></div>
+      </div>
+
+  <div class="demo">
+    <div class="scr">
+      <div class="scr-top"><span class="b">Traffic Shaper</span><span class="m">acme-prod &middot; owner@acme.example</span></div>
+      <div class="scr-body">
+        <nav class="scr-nav">
+          <div class="gp">Control</div>
+          <a href="#" class="on">Gate</a><a href="#">History</a><a href="#">Allowed</a>
+          <div class="gp">System</div>
+          <a href="#">Agents</a><a href="#">Model</a>
+        </nav>
+        <div class="scr-main">
+          <h3 class="scr-h1">Hai nguồn đang bị giữ.</h3>
+          <p class="scr-lead">Đo được <b>184,220</b> request trong 24 giờ qua, từ 5 agent, lần báo gần nhất 8 giây trước.</p>
+          <div class="scr-stats">
+            <div><div class="v">5</div><div class="k">agents reporting</div></div>
+            <div><div class="v">184,220</div><div class="k">requests / 24h</div></div>
+            <div><div class="v">4.00&#963;</div><div class="k">slow gate</div></div>
+            <div><div class="v">$0.00</div><div class="k">cost today</div></div>
+          </div>
+          <div class="scr-lab"><span>Distribution by distance</span><span>24 hours</span></div>
+          <svg class="plot" viewBox="0 0 880 150" role="img" aria-label="Phan bo nguon theo khoang cach">
+            <defs><linearGradient id="g-familjen" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#eceefa"/><stop offset=".33" stop-color="#ccd1f0"/>
+              <stop offset=".58" stop-color="#9aa3e0"/><stop offset=".80" stop-color="#5f6cc4"/>
+              <stop offset="1" stop-color="#2f3a90"/></linearGradient></defs>
+            <path class="ridge" d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122 L880,122 L0,122 Z" fill="url(#g-familjen)" opacity=".55"/>
+            <path d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122" fill="none" stroke="#2f3a90" stroke-width="1.1" opacity=".4"/>
+            <g class="dot">
+              <circle cx="182" cy="98" r="3.4" fill="#ccd1f0"/><circle cx="239" cy="88" r="3.4" fill="#ccd1f0"/>
+              <circle cx="297" cy="74" r="3.4" fill="#9aa3e0"/><circle cx="349" cy="86" r="3.4" fill="#9aa3e0"/>
+              <circle cx="396" cy="66" r="3.4" fill="#9aa3e0"/><circle cx="459" cy="80" r="3.4" fill="#5f6cc4"/>
+              <circle cx="502" cy="90" r="3.4" fill="#5f6cc4"/><circle cx="537" cy="70" r="3.4" fill="#5f6cc4"/>
+              <circle cx="565" cy="86" r="3.4" fill="#2f3a90"/>
+            </g>
+            <g class="dot">
+              <circle cx="629" cy="56" r="6.5" fill="#0c0e12"/>
+              <text x="629" y="40" fill="#0c0e12" font-size="10" font-family="Familjen" text-anchor="middle" letter-spacing="1">SLOWED</text>
+              <circle cx="818" cy="44" r="6.5" fill="#0c0e12"/>
+              <text x="818" y="28" fill="#0c0e12" font-size="10" font-family="Familjen" text-anchor="middle" letter-spacing="1">BLOCKED</text>
+            </g>
+            <line x1="587" y1="6" x2="587" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="733" y1="6" x2="733" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="0" y1="122" x2="880" y2="122" stroke="#0c0e12" stroke-width="1"/>
+          </svg>
+          <div class="scr-scale"><span>0&#963;</span><span>1&#963;</span><span>2&#963;</span><span>3&#963;</span><span>4&#963; slow</span><span>5&#963; block</span><span>6&#963;</span></div>
+          <div class="scr-split">
+            <div>
+              <div class="scr-lab"><span>Where you slow</span><span>13 positions</span></div>
+              <div class="scr-row"><span>3.50&#963;</span><span class="bar"><i style="width:100%;background:#2f3a90"></i></span><span class="n">1482</span></div>
+              <div class="scr-row"><span>3.75&#963;</span><span class="bar"><i style="width:63%;background:#5f6cc4"></i></span><span class="n">940</span></div>
+              <div class="scr-row" aria-current="true"><span>4.00&#963;</span><span class="bar"><i style="width:25%;background:#9aa3e0"></i></span><span class="n">371</span></div>
+              <div class="scr-row"><span>4.25&#963;</span><span class="bar"><i style="width:11%;background:#ccd1f0"></i></span><span class="n">164</span></div>
+              <div class="scr-row"><span>4.50&#963;</span><span class="bar"><i style="width:4%;background:#eceefa"></i></span><span class="n">61</span></div>
+            </div>
+            <div>
+              <div class="scr-lab"><span>Being acted on</span><span>2</span></div>
+              <table class="scr-tbl">
+                <thead><tr><th>Source</th><th>Distance</th><th>At your servers</th><th></th></tr></thead>
+                <tbody>
+                  <tr><td><span class="ip">203.0.113.44</span><br><span class="mark"><i></i>blocked</span></td>
+                      <td><span class="fig">6.41</span></td><td class="l">3 / 3 written</td>
+                      <td><button class="btn">Allow</button></td></tr>
+                  <tr><td><span class="ip">198.51.100.7</span><br><span class="mark open"><i></i>slowed</span></td>
+                      <td><span class="fig">4.28</span></td><td class="l">1 / 3 behind</td>
+                      <td><button class="btn">Allow</button></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="opt" id="spacegrotesk" style="--f: SpaceGrotesk, sans-serif; --w: 600; --h: 34px;">
+  <p class="eyebrow">Phương án 2</p>
+  <div class="opt-head">
+    <h2>Space Grotesk</h2>
+    <p class="facts">22KB &middot; cột số: <b>bật tnum</b> &middot;
+       0 so O: <b>0.96</b> &middot; wght 300-700 &middot; OFL</p>
+    <p>Rút từ Space Mono ra thành chữ tỉ lệ, nên nó mang sẵn cái chất kỹ thuật mà sản phẩm này muốn, trong một họ đọc được cả văn xuôi.</p>
+    <p class="risk"><b>Đánh đổi:</b> Số 0 rộng bằng 96% chữ O, gần nhất trong bảy. Trong một cột IP thì đó là tỉ lệ dễ nhầm nhất. Đáng nhìn kỹ dòng 0O ở ô mẫu.</p>
+  </div>
+
+      <div class="spec">
+        <div class="r"><span class="k">Tiêu đề</span><span class="d">Hai nguồn đang bị giữ.</span></div>
+        <div class="r"><span class="k">Thân</span><span class="t">Sigma là khoảng cách khỏi ngày thường của chính bạn. Số 0 là giống hệt bạn. Càng lớn càng lạ, và bạn chọn xa tới đâu thì đáng hành động.</span></div>
+        <div class="r"><span class="k">Số lớn</span><span class="fg">6.41 &nbsp; 4.28 &nbsp; 184,220</span></div>
+        <div class="r"><span class="k">Cột số</span><span class="col">203.0.113.44<br>198.51.100.07<br>&nbsp;&nbsp;10.0.0.255</span></div>
+        <div class="r"><span class="k">0 so O</span><span class="oo">0O &nbsp; 1lI &nbsp; 5S &nbsp; 8B &nbsp; 2Z &nbsp; 6G</span></div>
+      </div>
+
+  <div class="demo">
+    <div class="scr">
+      <div class="scr-top"><span class="b">Traffic Shaper</span><span class="m">acme-prod &middot; owner@acme.example</span></div>
+      <div class="scr-body">
+        <nav class="scr-nav">
+          <div class="gp">Control</div>
+          <a href="#" class="on">Gate</a><a href="#">History</a><a href="#">Allowed</a>
+          <div class="gp">System</div>
+          <a href="#">Agents</a><a href="#">Model</a>
+        </nav>
+        <div class="scr-main">
+          <h3 class="scr-h1">Hai nguồn đang bị giữ.</h3>
+          <p class="scr-lead">Đo được <b>184,220</b> request trong 24 giờ qua, từ 5 agent, lần báo gần nhất 8 giây trước.</p>
+          <div class="scr-stats">
+            <div><div class="v">5</div><div class="k">agents reporting</div></div>
+            <div><div class="v">184,220</div><div class="k">requests / 24h</div></div>
+            <div><div class="v">4.00&#963;</div><div class="k">slow gate</div></div>
+            <div><div class="v">$0.00</div><div class="k">cost today</div></div>
+          </div>
+          <div class="scr-lab"><span>Distribution by distance</span><span>24 hours</span></div>
+          <svg class="plot" viewBox="0 0 880 150" role="img" aria-label="Phan bo nguon theo khoang cach">
+            <defs><linearGradient id="g-spacegrotesk" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#eceefa"/><stop offset=".33" stop-color="#ccd1f0"/>
+              <stop offset=".58" stop-color="#9aa3e0"/><stop offset=".80" stop-color="#5f6cc4"/>
+              <stop offset="1" stop-color="#2f3a90"/></linearGradient></defs>
+            <path class="ridge" d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122 L880,122 L0,122 Z" fill="url(#g-spacegrotesk)" opacity=".55"/>
+            <path d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122" fill="none" stroke="#2f3a90" stroke-width="1.1" opacity=".4"/>
+            <g class="dot">
+              <circle cx="182" cy="98" r="3.4" fill="#ccd1f0"/><circle cx="239" cy="88" r="3.4" fill="#ccd1f0"/>
+              <circle cx="297" cy="74" r="3.4" fill="#9aa3e0"/><circle cx="349" cy="86" r="3.4" fill="#9aa3e0"/>
+              <circle cx="396" cy="66" r="3.4" fill="#9aa3e0"/><circle cx="459" cy="80" r="3.4" fill="#5f6cc4"/>
+              <circle cx="502" cy="90" r="3.4" fill="#5f6cc4"/><circle cx="537" cy="70" r="3.4" fill="#5f6cc4"/>
+              <circle cx="565" cy="86" r="3.4" fill="#2f3a90"/>
+            </g>
+            <g class="dot">
+              <circle cx="629" cy="56" r="6.5" fill="#0c0e12"/>
+              <text x="629" y="40" fill="#0c0e12" font-size="10" font-family="SpaceGrotesk" text-anchor="middle" letter-spacing="1">SLOWED</text>
+              <circle cx="818" cy="44" r="6.5" fill="#0c0e12"/>
+              <text x="818" y="28" fill="#0c0e12" font-size="10" font-family="SpaceGrotesk" text-anchor="middle" letter-spacing="1">BLOCKED</text>
+            </g>
+            <line x1="587" y1="6" x2="587" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="733" y1="6" x2="733" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="0" y1="122" x2="880" y2="122" stroke="#0c0e12" stroke-width="1"/>
+          </svg>
+          <div class="scr-scale"><span>0&#963;</span><span>1&#963;</span><span>2&#963;</span><span>3&#963;</span><span>4&#963; slow</span><span>5&#963; block</span><span>6&#963;</span></div>
+          <div class="scr-split">
+            <div>
+              <div class="scr-lab"><span>Where you slow</span><span>13 positions</span></div>
+              <div class="scr-row"><span>3.50&#963;</span><span class="bar"><i style="width:100%;background:#2f3a90"></i></span><span class="n">1482</span></div>
+              <div class="scr-row"><span>3.75&#963;</span><span class="bar"><i style="width:63%;background:#5f6cc4"></i></span><span class="n">940</span></div>
+              <div class="scr-row" aria-current="true"><span>4.00&#963;</span><span class="bar"><i style="width:25%;background:#9aa3e0"></i></span><span class="n">371</span></div>
+              <div class="scr-row"><span>4.25&#963;</span><span class="bar"><i style="width:11%;background:#ccd1f0"></i></span><span class="n">164</span></div>
+              <div class="scr-row"><span>4.50&#963;</span><span class="bar"><i style="width:4%;background:#eceefa"></i></span><span class="n">61</span></div>
+            </div>
+            <div>
+              <div class="scr-lab"><span>Being acted on</span><span>2</span></div>
+              <table class="scr-tbl">
+                <thead><tr><th>Source</th><th>Distance</th><th>At your servers</th><th></th></tr></thead>
+                <tbody>
+                  <tr><td><span class="ip">203.0.113.44</span><br><span class="mark"><i></i>blocked</span></td>
+                      <td><span class="fig">6.41</span></td><td class="l">3 / 3 written</td>
+                      <td><button class="btn">Allow</button></td></tr>
+                  <tr><td><span class="ip">198.51.100.7</span><br><span class="mark open"><i></i>slowed</span></td>
+                      <td><span class="fig">4.28</span></td><td class="l">1 / 3 behind</td>
+                      <td><button class="btn">Allow</button></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="opt" id="martianmono" style="--f: MartianMono, sans-serif; --w: 600; --h: 30px;">
+  <p class="eyebrow">Phương án 3</p>
+  <div class="opt-head">
+    <h2>Martian Mono</h2>
+    <p class="facts">23KB &middot; cột số: <b>đã đều sẵn</b> &middot;
+       0 so O: <b>1.00</b> &middot; wght 100-800 &middot; OFL</p>
+    <p>Cách hiểu thẳng nhất câu 'chữ và số giống nhau': một họ đều chiều rộng cho tuyệt đối mọi thứ. Được vẽ rộng có chủ đích nên một cột số đọc rất thoải mái.</p>
+    <p class="risk"><b>Đánh đổi:</b> Văn xuôi dài bằng chữ đều chiều rộng đọc chậm hơn, và nó rộng nên cùng một bảng tốn nhiều chiều ngang hơn hẳn, đúng chỗ console này đã chật ở màn 390px.</p>
+  </div>
+
+      <div class="spec">
+        <div class="r"><span class="k">Tiêu đề</span><span class="d">Hai nguồn đang bị giữ.</span></div>
+        <div class="r"><span class="k">Thân</span><span class="t">Sigma là khoảng cách khỏi ngày thường của chính bạn. Số 0 là giống hệt bạn. Càng lớn càng lạ, và bạn chọn xa tới đâu thì đáng hành động.</span></div>
+        <div class="r"><span class="k">Số lớn</span><span class="fg">6.41 &nbsp; 4.28 &nbsp; 184,220</span></div>
+        <div class="r"><span class="k">Cột số</span><span class="col">203.0.113.44<br>198.51.100.07<br>&nbsp;&nbsp;10.0.0.255</span></div>
+        <div class="r"><span class="k">0 so O</span><span class="oo">0O &nbsp; 1lI &nbsp; 5S &nbsp; 8B &nbsp; 2Z &nbsp; 6G</span></div>
+      </div>
+
+  <div class="demo">
+    <div class="scr">
+      <div class="scr-top"><span class="b">Traffic Shaper</span><span class="m">acme-prod &middot; owner@acme.example</span></div>
+      <div class="scr-body">
+        <nav class="scr-nav">
+          <div class="gp">Control</div>
+          <a href="#" class="on">Gate</a><a href="#">History</a><a href="#">Allowed</a>
+          <div class="gp">System</div>
+          <a href="#">Agents</a><a href="#">Model</a>
+        </nav>
+        <div class="scr-main">
+          <h3 class="scr-h1">Hai nguồn đang bị giữ.</h3>
+          <p class="scr-lead">Đo được <b>184,220</b> request trong 24 giờ qua, từ 5 agent, lần báo gần nhất 8 giây trước.</p>
+          <div class="scr-stats">
+            <div><div class="v">5</div><div class="k">agents reporting</div></div>
+            <div><div class="v">184,220</div><div class="k">requests / 24h</div></div>
+            <div><div class="v">4.00&#963;</div><div class="k">slow gate</div></div>
+            <div><div class="v">$0.00</div><div class="k">cost today</div></div>
+          </div>
+          <div class="scr-lab"><span>Distribution by distance</span><span>24 hours</span></div>
+          <svg class="plot" viewBox="0 0 880 150" role="img" aria-label="Phan bo nguon theo khoang cach">
+            <defs><linearGradient id="g-martianmono" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#eceefa"/><stop offset=".33" stop-color="#ccd1f0"/>
+              <stop offset=".58" stop-color="#9aa3e0"/><stop offset=".80" stop-color="#5f6cc4"/>
+              <stop offset="1" stop-color="#2f3a90"/></linearGradient></defs>
+            <path class="ridge" d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122 L880,122 L0,122 Z" fill="url(#g-martianmono)" opacity=".55"/>
+            <path d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122" fill="none" stroke="#2f3a90" stroke-width="1.1" opacity=".4"/>
+            <g class="dot">
+              <circle cx="182" cy="98" r="3.4" fill="#ccd1f0"/><circle cx="239" cy="88" r="3.4" fill="#ccd1f0"/>
+              <circle cx="297" cy="74" r="3.4" fill="#9aa3e0"/><circle cx="349" cy="86" r="3.4" fill="#9aa3e0"/>
+              <circle cx="396" cy="66" r="3.4" fill="#9aa3e0"/><circle cx="459" cy="80" r="3.4" fill="#5f6cc4"/>
+              <circle cx="502" cy="90" r="3.4" fill="#5f6cc4"/><circle cx="537" cy="70" r="3.4" fill="#5f6cc4"/>
+              <circle cx="565" cy="86" r="3.4" fill="#2f3a90"/>
+            </g>
+            <g class="dot">
+              <circle cx="629" cy="56" r="6.5" fill="#0c0e12"/>
+              <text x="629" y="40" fill="#0c0e12" font-size="10" font-family="MartianMono" text-anchor="middle" letter-spacing="1">SLOWED</text>
+              <circle cx="818" cy="44" r="6.5" fill="#0c0e12"/>
+              <text x="818" y="28" fill="#0c0e12" font-size="10" font-family="MartianMono" text-anchor="middle" letter-spacing="1">BLOCKED</text>
+            </g>
+            <line x1="587" y1="6" x2="587" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="733" y1="6" x2="733" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="0" y1="122" x2="880" y2="122" stroke="#0c0e12" stroke-width="1"/>
+          </svg>
+          <div class="scr-scale"><span>0&#963;</span><span>1&#963;</span><span>2&#963;</span><span>3&#963;</span><span>4&#963; slow</span><span>5&#963; block</span><span>6&#963;</span></div>
+          <div class="scr-split">
+            <div>
+              <div class="scr-lab"><span>Where you slow</span><span>13 positions</span></div>
+              <div class="scr-row"><span>3.50&#963;</span><span class="bar"><i style="width:100%;background:#2f3a90"></i></span><span class="n">1482</span></div>
+              <div class="scr-row"><span>3.75&#963;</span><span class="bar"><i style="width:63%;background:#5f6cc4"></i></span><span class="n">940</span></div>
+              <div class="scr-row" aria-current="true"><span>4.00&#963;</span><span class="bar"><i style="width:25%;background:#9aa3e0"></i></span><span class="n">371</span></div>
+              <div class="scr-row"><span>4.25&#963;</span><span class="bar"><i style="width:11%;background:#ccd1f0"></i></span><span class="n">164</span></div>
+              <div class="scr-row"><span>4.50&#963;</span><span class="bar"><i style="width:4%;background:#eceefa"></i></span><span class="n">61</span></div>
+            </div>
+            <div>
+              <div class="scr-lab"><span>Being acted on</span><span>2</span></div>
+              <table class="scr-tbl">
+                <thead><tr><th>Source</th><th>Distance</th><th>At your servers</th><th></th></tr></thead>
+                <tbody>
+                  <tr><td><span class="ip">203.0.113.44</span><br><span class="mark"><i></i>blocked</span></td>
+                      <td><span class="fig">6.41</span></td><td class="l">3 / 3 written</td>
+                      <td><button class="btn">Allow</button></td></tr>
+                  <tr><td><span class="ip">198.51.100.7</span><br><span class="mark open"><i></i>slowed</span></td>
+                      <td><span class="fig">4.28</span></td><td class="l">1 / 3 behind</td>
+                      <td><button class="btn">Allow</button></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="opt" id="archivo" style="--f: Archivo, sans-serif; --w: 700; --h: 34px;">
+  <p class="eyebrow">Phương án 4</p>
+  <div class="opt-head">
+    <h2>Archivo</h2>
+    <p class="facts">34KB &middot; cột số: <b>bật tnum</b> &middot;
+       0 so O: <b>0.74</b> &middot; wght 100-900 &middot; OFL</p>
+    <p>Grotesque đặc, chắc, dải trọng lượng đầy đủ từ 100 tới 900. Tách 0 khỏi O tốt nhất trong bảy, 0.74.</p>
+    <p class="risk"><b>Đánh đổi:</b> Trung tính. Nếu bạn muốn người ta nhớ mặt sản phẩm thì đây không phải họ làm được việc đó.</p>
+  </div>
+
+      <div class="spec">
+        <div class="r"><span class="k">Tiêu đề</span><span class="d">Hai nguồn đang bị giữ.</span></div>
+        <div class="r"><span class="k">Thân</span><span class="t">Sigma là khoảng cách khỏi ngày thường của chính bạn. Số 0 là giống hệt bạn. Càng lớn càng lạ, và bạn chọn xa tới đâu thì đáng hành động.</span></div>
+        <div class="r"><span class="k">Số lớn</span><span class="fg">6.41 &nbsp; 4.28 &nbsp; 184,220</span></div>
+        <div class="r"><span class="k">Cột số</span><span class="col">203.0.113.44<br>198.51.100.07<br>&nbsp;&nbsp;10.0.0.255</span></div>
+        <div class="r"><span class="k">0 so O</span><span class="oo">0O &nbsp; 1lI &nbsp; 5S &nbsp; 8B &nbsp; 2Z &nbsp; 6G</span></div>
+      </div>
+
+  <div class="demo">
+    <div class="scr">
+      <div class="scr-top"><span class="b">Traffic Shaper</span><span class="m">acme-prod &middot; owner@acme.example</span></div>
+      <div class="scr-body">
+        <nav class="scr-nav">
+          <div class="gp">Control</div>
+          <a href="#" class="on">Gate</a><a href="#">History</a><a href="#">Allowed</a>
+          <div class="gp">System</div>
+          <a href="#">Agents</a><a href="#">Model</a>
+        </nav>
+        <div class="scr-main">
+          <h3 class="scr-h1">Hai nguồn đang bị giữ.</h3>
+          <p class="scr-lead">Đo được <b>184,220</b> request trong 24 giờ qua, từ 5 agent, lần báo gần nhất 8 giây trước.</p>
+          <div class="scr-stats">
+            <div><div class="v">5</div><div class="k">agents reporting</div></div>
+            <div><div class="v">184,220</div><div class="k">requests / 24h</div></div>
+            <div><div class="v">4.00&#963;</div><div class="k">slow gate</div></div>
+            <div><div class="v">$0.00</div><div class="k">cost today</div></div>
+          </div>
+          <div class="scr-lab"><span>Distribution by distance</span><span>24 hours</span></div>
+          <svg class="plot" viewBox="0 0 880 150" role="img" aria-label="Phan bo nguon theo khoang cach">
+            <defs><linearGradient id="g-archivo" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#eceefa"/><stop offset=".33" stop-color="#ccd1f0"/>
+              <stop offset=".58" stop-color="#9aa3e0"/><stop offset=".80" stop-color="#5f6cc4"/>
+              <stop offset="1" stop-color="#2f3a90"/></linearGradient></defs>
+            <path class="ridge" d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122 L880,122 L0,122 Z" fill="url(#g-archivo)" opacity=".55"/>
+            <path d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122" fill="none" stroke="#2f3a90" stroke-width="1.1" opacity=".4"/>
+            <g class="dot">
+              <circle cx="182" cy="98" r="3.4" fill="#ccd1f0"/><circle cx="239" cy="88" r="3.4" fill="#ccd1f0"/>
+              <circle cx="297" cy="74" r="3.4" fill="#9aa3e0"/><circle cx="349" cy="86" r="3.4" fill="#9aa3e0"/>
+              <circle cx="396" cy="66" r="3.4" fill="#9aa3e0"/><circle cx="459" cy="80" r="3.4" fill="#5f6cc4"/>
+              <circle cx="502" cy="90" r="3.4" fill="#5f6cc4"/><circle cx="537" cy="70" r="3.4" fill="#5f6cc4"/>
+              <circle cx="565" cy="86" r="3.4" fill="#2f3a90"/>
+            </g>
+            <g class="dot">
+              <circle cx="629" cy="56" r="6.5" fill="#0c0e12"/>
+              <text x="629" y="40" fill="#0c0e12" font-size="10" font-family="Archivo" text-anchor="middle" letter-spacing="1">SLOWED</text>
+              <circle cx="818" cy="44" r="6.5" fill="#0c0e12"/>
+              <text x="818" y="28" fill="#0c0e12" font-size="10" font-family="Archivo" text-anchor="middle" letter-spacing="1">BLOCKED</text>
+            </g>
+            <line x1="587" y1="6" x2="587" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="733" y1="6" x2="733" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="0" y1="122" x2="880" y2="122" stroke="#0c0e12" stroke-width="1"/>
+          </svg>
+          <div class="scr-scale"><span>0&#963;</span><span>1&#963;</span><span>2&#963;</span><span>3&#963;</span><span>4&#963; slow</span><span>5&#963; block</span><span>6&#963;</span></div>
+          <div class="scr-split">
+            <div>
+              <div class="scr-lab"><span>Where you slow</span><span>13 positions</span></div>
+              <div class="scr-row"><span>3.50&#963;</span><span class="bar"><i style="width:100%;background:#2f3a90"></i></span><span class="n">1482</span></div>
+              <div class="scr-row"><span>3.75&#963;</span><span class="bar"><i style="width:63%;background:#5f6cc4"></i></span><span class="n">940</span></div>
+              <div class="scr-row" aria-current="true"><span>4.00&#963;</span><span class="bar"><i style="width:25%;background:#9aa3e0"></i></span><span class="n">371</span></div>
+              <div class="scr-row"><span>4.25&#963;</span><span class="bar"><i style="width:11%;background:#ccd1f0"></i></span><span class="n">164</span></div>
+              <div class="scr-row"><span>4.50&#963;</span><span class="bar"><i style="width:4%;background:#eceefa"></i></span><span class="n">61</span></div>
+            </div>
+            <div>
+              <div class="scr-lab"><span>Being acted on</span><span>2</span></div>
+              <table class="scr-tbl">
+                <thead><tr><th>Source</th><th>Distance</th><th>At your servers</th><th></th></tr></thead>
+                <tbody>
+                  <tr><td><span class="ip">203.0.113.44</span><br><span class="mark"><i></i>blocked</span></td>
+                      <td><span class="fig">6.41</span></td><td class="l">3 / 3 written</td>
+                      <td><button class="btn">Allow</button></td></tr>
+                  <tr><td><span class="ip">198.51.100.7</span><br><span class="mark open"><i></i>slowed</span></td>
+                      <td><span class="fig">4.28</span></td><td class="l">1 / 3 behind</td>
+                      <td><button class="btn">Allow</button></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="opt" id="golos" style="--f: Golos, sans-serif; --w: 600; --h: 34px;">
+  <p class="eyebrow">Phương án 5</p>
+  <div class="opt-head">
+    <h2>Golos Text</h2>
+    <p class="facts">37KB &middot; cột số: <b>bật tnum</b> &middot;
+       0 so O: <b>0.84</b> &middot; wght 400-900 &middot; OFL</p>
+    <p>Grotesque vẽ cho giao diện, hơi ấm, thân rộng nên đọc tốt ở cỡ nhỏ. Cân bằng giữa trung tính và có mặt riêng.</p>
+    <p class="risk"><b>Đánh đổi:</b> Không có trọng lượng dưới 400, nên phần chữ mờ phải xử bằng màu chứ không xử được bằng nét mảnh.</p>
+  </div>
+
+      <div class="spec">
+        <div class="r"><span class="k">Tiêu đề</span><span class="d">Hai nguồn đang bị giữ.</span></div>
+        <div class="r"><span class="k">Thân</span><span class="t">Sigma là khoảng cách khỏi ngày thường của chính bạn. Số 0 là giống hệt bạn. Càng lớn càng lạ, và bạn chọn xa tới đâu thì đáng hành động.</span></div>
+        <div class="r"><span class="k">Số lớn</span><span class="fg">6.41 &nbsp; 4.28 &nbsp; 184,220</span></div>
+        <div class="r"><span class="k">Cột số</span><span class="col">203.0.113.44<br>198.51.100.07<br>&nbsp;&nbsp;10.0.0.255</span></div>
+        <div class="r"><span class="k">0 so O</span><span class="oo">0O &nbsp; 1lI &nbsp; 5S &nbsp; 8B &nbsp; 2Z &nbsp; 6G</span></div>
+      </div>
+
+  <div class="demo">
+    <div class="scr">
+      <div class="scr-top"><span class="b">Traffic Shaper</span><span class="m">acme-prod &middot; owner@acme.example</span></div>
+      <div class="scr-body">
+        <nav class="scr-nav">
+          <div class="gp">Control</div>
+          <a href="#" class="on">Gate</a><a href="#">History</a><a href="#">Allowed</a>
+          <div class="gp">System</div>
+          <a href="#">Agents</a><a href="#">Model</a>
+        </nav>
+        <div class="scr-main">
+          <h3 class="scr-h1">Hai nguồn đang bị giữ.</h3>
+          <p class="scr-lead">Đo được <b>184,220</b> request trong 24 giờ qua, từ 5 agent, lần báo gần nhất 8 giây trước.</p>
+          <div class="scr-stats">
+            <div><div class="v">5</div><div class="k">agents reporting</div></div>
+            <div><div class="v">184,220</div><div class="k">requests / 24h</div></div>
+            <div><div class="v">4.00&#963;</div><div class="k">slow gate</div></div>
+            <div><div class="v">$0.00</div><div class="k">cost today</div></div>
+          </div>
+          <div class="scr-lab"><span>Distribution by distance</span><span>24 hours</span></div>
+          <svg class="plot" viewBox="0 0 880 150" role="img" aria-label="Phan bo nguon theo khoang cach">
+            <defs><linearGradient id="g-golos" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#eceefa"/><stop offset=".33" stop-color="#ccd1f0"/>
+              <stop offset=".58" stop-color="#9aa3e0"/><stop offset=".80" stop-color="#5f6cc4"/>
+              <stop offset="1" stop-color="#2f3a90"/></linearGradient></defs>
+            <path class="ridge" d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122 L880,122 L0,122 Z" fill="url(#g-golos)" opacity=".55"/>
+            <path d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122" fill="none" stroke="#2f3a90" stroke-width="1.1" opacity=".4"/>
+            <g class="dot">
+              <circle cx="182" cy="98" r="3.4" fill="#ccd1f0"/><circle cx="239" cy="88" r="3.4" fill="#ccd1f0"/>
+              <circle cx="297" cy="74" r="3.4" fill="#9aa3e0"/><circle cx="349" cy="86" r="3.4" fill="#9aa3e0"/>
+              <circle cx="396" cy="66" r="3.4" fill="#9aa3e0"/><circle cx="459" cy="80" r="3.4" fill="#5f6cc4"/>
+              <circle cx="502" cy="90" r="3.4" fill="#5f6cc4"/><circle cx="537" cy="70" r="3.4" fill="#5f6cc4"/>
+              <circle cx="565" cy="86" r="3.4" fill="#2f3a90"/>
+            </g>
+            <g class="dot">
+              <circle cx="629" cy="56" r="6.5" fill="#0c0e12"/>
+              <text x="629" y="40" fill="#0c0e12" font-size="10" font-family="Golos" text-anchor="middle" letter-spacing="1">SLOWED</text>
+              <circle cx="818" cy="44" r="6.5" fill="#0c0e12"/>
+              <text x="818" y="28" fill="#0c0e12" font-size="10" font-family="Golos" text-anchor="middle" letter-spacing="1">BLOCKED</text>
+            </g>
+            <line x1="587" y1="6" x2="587" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="733" y1="6" x2="733" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="0" y1="122" x2="880" y2="122" stroke="#0c0e12" stroke-width="1"/>
+          </svg>
+          <div class="scr-scale"><span>0&#963;</span><span>1&#963;</span><span>2&#963;</span><span>3&#963;</span><span>4&#963; slow</span><span>5&#963; block</span><span>6&#963;</span></div>
+          <div class="scr-split">
+            <div>
+              <div class="scr-lab"><span>Where you slow</span><span>13 positions</span></div>
+              <div class="scr-row"><span>3.50&#963;</span><span class="bar"><i style="width:100%;background:#2f3a90"></i></span><span class="n">1482</span></div>
+              <div class="scr-row"><span>3.75&#963;</span><span class="bar"><i style="width:63%;background:#5f6cc4"></i></span><span class="n">940</span></div>
+              <div class="scr-row" aria-current="true"><span>4.00&#963;</span><span class="bar"><i style="width:25%;background:#9aa3e0"></i></span><span class="n">371</span></div>
+              <div class="scr-row"><span>4.25&#963;</span><span class="bar"><i style="width:11%;background:#ccd1f0"></i></span><span class="n">164</span></div>
+              <div class="scr-row"><span>4.50&#963;</span><span class="bar"><i style="width:4%;background:#eceefa"></i></span><span class="n">61</span></div>
+            </div>
+            <div>
+              <div class="scr-lab"><span>Being acted on</span><span>2</span></div>
+              <table class="scr-tbl">
+                <thead><tr><th>Source</th><th>Distance</th><th>At your servers</th><th></th></tr></thead>
+                <tbody>
+                  <tr><td><span class="ip">203.0.113.44</span><br><span class="mark"><i></i>blocked</span></td>
+                      <td><span class="fig">6.41</span></td><td class="l">3 / 3 written</td>
+                      <td><button class="btn">Allow</button></td></tr>
+                  <tr><td><span class="ip">198.51.100.7</span><br><span class="mark open"><i></i>slowed</span></td>
+                      <td><span class="fig">4.28</span></td><td class="l">1 / 3 behind</td>
+                      <td><button class="btn">Allow</button></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="opt" id="sourceserif" style="--f: SourceSerif, sans-serif; --w: 600; --h: 36px;">
+  <p class="eyebrow">Phương án 6</p>
+  <div class="opt-head">
+    <h2>Source Serif 4</h2>
+    <p class="facts">119KB &middot; cột số: <b>đã đều sẵn</b> &middot;
+       0 so O: <b>0.71</b> &middot; wght 200-900, opsz 8-60 &middot; OFL</p>
+    <p>Họ có chân duy nhất qua được bài kiểm. Chữ số đều bề rộng sẵn, tách 0 khỏi O tốt thứ nhì, có trục quang học thật nên cỡ nhỏ và cỡ lớn là hai bản vẽ khác nhau.</p>
+    <p class="risk"><b>Đánh đổi:</b> 119KB. Và một giao diện điều khiển toàn chữ có chân là một lựa chọn táo bạo: nó đọc như tài liệu chứ không như thiết bị.</p>
+  </div>
+
+      <div class="spec">
+        <div class="r"><span class="k">Tiêu đề</span><span class="d">Hai nguồn đang bị giữ.</span></div>
+        <div class="r"><span class="k">Thân</span><span class="t">Sigma là khoảng cách khỏi ngày thường của chính bạn. Số 0 là giống hệt bạn. Càng lớn càng lạ, và bạn chọn xa tới đâu thì đáng hành động.</span></div>
+        <div class="r"><span class="k">Số lớn</span><span class="fg">6.41 &nbsp; 4.28 &nbsp; 184,220</span></div>
+        <div class="r"><span class="k">Cột số</span><span class="col">203.0.113.44<br>198.51.100.07<br>&nbsp;&nbsp;10.0.0.255</span></div>
+        <div class="r"><span class="k">0 so O</span><span class="oo">0O &nbsp; 1lI &nbsp; 5S &nbsp; 8B &nbsp; 2Z &nbsp; 6G</span></div>
+      </div>
+
+  <div class="demo">
+    <div class="scr">
+      <div class="scr-top"><span class="b">Traffic Shaper</span><span class="m">acme-prod &middot; owner@acme.example</span></div>
+      <div class="scr-body">
+        <nav class="scr-nav">
+          <div class="gp">Control</div>
+          <a href="#" class="on">Gate</a><a href="#">History</a><a href="#">Allowed</a>
+          <div class="gp">System</div>
+          <a href="#">Agents</a><a href="#">Model</a>
+        </nav>
+        <div class="scr-main">
+          <h3 class="scr-h1">Hai nguồn đang bị giữ.</h3>
+          <p class="scr-lead">Đo được <b>184,220</b> request trong 24 giờ qua, từ 5 agent, lần báo gần nhất 8 giây trước.</p>
+          <div class="scr-stats">
+            <div><div class="v">5</div><div class="k">agents reporting</div></div>
+            <div><div class="v">184,220</div><div class="k">requests / 24h</div></div>
+            <div><div class="v">4.00&#963;</div><div class="k">slow gate</div></div>
+            <div><div class="v">$0.00</div><div class="k">cost today</div></div>
+          </div>
+          <div class="scr-lab"><span>Distribution by distance</span><span>24 hours</span></div>
+          <svg class="plot" viewBox="0 0 880 150" role="img" aria-label="Phan bo nguon theo khoang cach">
+            <defs><linearGradient id="g-sourceserif" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#eceefa"/><stop offset=".33" stop-color="#ccd1f0"/>
+              <stop offset=".58" stop-color="#9aa3e0"/><stop offset=".80" stop-color="#5f6cc4"/>
+              <stop offset="1" stop-color="#2f3a90"/></linearGradient></defs>
+            <path class="ridge" d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122 L880,122 L0,122 Z" fill="url(#g-sourceserif)" opacity=".55"/>
+            <path d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122" fill="none" stroke="#2f3a90" stroke-width="1.1" opacity=".4"/>
+            <g class="dot">
+              <circle cx="182" cy="98" r="3.4" fill="#ccd1f0"/><circle cx="239" cy="88" r="3.4" fill="#ccd1f0"/>
+              <circle cx="297" cy="74" r="3.4" fill="#9aa3e0"/><circle cx="349" cy="86" r="3.4" fill="#9aa3e0"/>
+              <circle cx="396" cy="66" r="3.4" fill="#9aa3e0"/><circle cx="459" cy="80" r="3.4" fill="#5f6cc4"/>
+              <circle cx="502" cy="90" r="3.4" fill="#5f6cc4"/><circle cx="537" cy="70" r="3.4" fill="#5f6cc4"/>
+              <circle cx="565" cy="86" r="3.4" fill="#2f3a90"/>
+            </g>
+            <g class="dot">
+              <circle cx="629" cy="56" r="6.5" fill="#0c0e12"/>
+              <text x="629" y="40" fill="#0c0e12" font-size="10" font-family="SourceSerif" text-anchor="middle" letter-spacing="1">SLOWED</text>
+              <circle cx="818" cy="44" r="6.5" fill="#0c0e12"/>
+              <text x="818" y="28" fill="#0c0e12" font-size="10" font-family="SourceSerif" text-anchor="middle" letter-spacing="1">BLOCKED</text>
+            </g>
+            <line x1="587" y1="6" x2="587" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="733" y1="6" x2="733" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="0" y1="122" x2="880" y2="122" stroke="#0c0e12" stroke-width="1"/>
+          </svg>
+          <div class="scr-scale"><span>0&#963;</span><span>1&#963;</span><span>2&#963;</span><span>3&#963;</span><span>4&#963; slow</span><span>5&#963; block</span><span>6&#963;</span></div>
+          <div class="scr-split">
+            <div>
+              <div class="scr-lab"><span>Where you slow</span><span>13 positions</span></div>
+              <div class="scr-row"><span>3.50&#963;</span><span class="bar"><i style="width:100%;background:#2f3a90"></i></span><span class="n">1482</span></div>
+              <div class="scr-row"><span>3.75&#963;</span><span class="bar"><i style="width:63%;background:#5f6cc4"></i></span><span class="n">940</span></div>
+              <div class="scr-row" aria-current="true"><span>4.00&#963;</span><span class="bar"><i style="width:25%;background:#9aa3e0"></i></span><span class="n">371</span></div>
+              <div class="scr-row"><span>4.25&#963;</span><span class="bar"><i style="width:11%;background:#ccd1f0"></i></span><span class="n">164</span></div>
+              <div class="scr-row"><span>4.50&#963;</span><span class="bar"><i style="width:4%;background:#eceefa"></i></span><span class="n">61</span></div>
+            </div>
+            <div>
+              <div class="scr-lab"><span>Being acted on</span><span>2</span></div>
+              <table class="scr-tbl">
+                <thead><tr><th>Source</th><th>Distance</th><th>At your servers</th><th></th></tr></thead>
+                <tbody>
+                  <tr><td><span class="ip">203.0.113.44</span><br><span class="mark"><i></i>blocked</span></td>
+                      <td><span class="fig">6.41</span></td><td class="l">3 / 3 written</td>
+                      <td><button class="btn">Allow</button></td></tr>
+                  <tr><td><span class="ip">198.51.100.7</span><br><span class="mark open"><i></i>slowed</span></td>
+                      <td><span class="fig">4.28</span></td><td class="l">1 / 3 behind</td>
+                      <td><button class="btn">Allow</button></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="opt" id="bricolage" style="--f: Bricolage, sans-serif; --w: 700; --h: 36px;">
+  <p class="eyebrow">Phương án 7</p>
+  <div class="opt-head">
+    <h2>Bricolage Grotesque</h2>
+    <p class="facts">128KB &middot; cột số: <b>bật tnum</b> &middot;
+       0 so O: <b>0.90</b> &middot; wght 200-800, opsz 12-96, wdth 75-100 &middot; OFL</p>
+    <p>Đặc trưng nhất trong bảy, và là họ duy nhất có cả trục quang học lẫn trục bề rộng. Nghĩa là tiêu đề có thể bóp hẹp lại mà không cần thêm file nào.</p>
+    <p class="risk"><b>Đánh đổi:</b> 128KB, nặng nhất. Và cá tính của nó khá lớn tiếng cho một sản phẩm bảo mật doanh nghiệp, chỗ mà trông đáng tin quan trọng hơn trông thú vị.</p>
+  </div>
+
+      <div class="spec">
+        <div class="r"><span class="k">Tiêu đề</span><span class="d">Hai nguồn đang bị giữ.</span></div>
+        <div class="r"><span class="k">Thân</span><span class="t">Sigma là khoảng cách khỏi ngày thường của chính bạn. Số 0 là giống hệt bạn. Càng lớn càng lạ, và bạn chọn xa tới đâu thì đáng hành động.</span></div>
+        <div class="r"><span class="k">Số lớn</span><span class="fg">6.41 &nbsp; 4.28 &nbsp; 184,220</span></div>
+        <div class="r"><span class="k">Cột số</span><span class="col">203.0.113.44<br>198.51.100.07<br>&nbsp;&nbsp;10.0.0.255</span></div>
+        <div class="r"><span class="k">0 so O</span><span class="oo">0O &nbsp; 1lI &nbsp; 5S &nbsp; 8B &nbsp; 2Z &nbsp; 6G</span></div>
+      </div>
+
+  <div class="demo">
+    <div class="scr">
+      <div class="scr-top"><span class="b">Traffic Shaper</span><span class="m">acme-prod &middot; owner@acme.example</span></div>
+      <div class="scr-body">
+        <nav class="scr-nav">
+          <div class="gp">Control</div>
+          <a href="#" class="on">Gate</a><a href="#">History</a><a href="#">Allowed</a>
+          <div class="gp">System</div>
+          <a href="#">Agents</a><a href="#">Model</a>
+        </nav>
+        <div class="scr-main">
+          <h3 class="scr-h1">Hai nguồn đang bị giữ.</h3>
+          <p class="scr-lead">Đo được <b>184,220</b> request trong 24 giờ qua, từ 5 agent, lần báo gần nhất 8 giây trước.</p>
+          <div class="scr-stats">
+            <div><div class="v">5</div><div class="k">agents reporting</div></div>
+            <div><div class="v">184,220</div><div class="k">requests / 24h</div></div>
+            <div><div class="v">4.00&#963;</div><div class="k">slow gate</div></div>
+            <div><div class="v">$0.00</div><div class="k">cost today</div></div>
+          </div>
+          <div class="scr-lab"><span>Distribution by distance</span><span>24 hours</span></div>
+          <svg class="plot" viewBox="0 0 880 150" role="img" aria-label="Phan bo nguon theo khoang cach">
+            <defs><linearGradient id="g-bricolage" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#eceefa"/><stop offset=".33" stop-color="#ccd1f0"/>
+              <stop offset=".58" stop-color="#9aa3e0"/><stop offset=".80" stop-color="#5f6cc4"/>
+              <stop offset="1" stop-color="#2f3a90"/></linearGradient></defs>
+            <path class="ridge" d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122 L880,122 L0,122 Z" fill="url(#g-bricolage)" opacity=".55"/>
+            <path d="M0,122 L59,118 L137,108 L215,84 L293,54 L372,42 L440,54 L508,80 L567,102 L625,114 L704,120 L802,122 L880,122" fill="none" stroke="#2f3a90" stroke-width="1.1" opacity=".4"/>
+            <g class="dot">
+              <circle cx="182" cy="98" r="3.4" fill="#ccd1f0"/><circle cx="239" cy="88" r="3.4" fill="#ccd1f0"/>
+              <circle cx="297" cy="74" r="3.4" fill="#9aa3e0"/><circle cx="349" cy="86" r="3.4" fill="#9aa3e0"/>
+              <circle cx="396" cy="66" r="3.4" fill="#9aa3e0"/><circle cx="459" cy="80" r="3.4" fill="#5f6cc4"/>
+              <circle cx="502" cy="90" r="3.4" fill="#5f6cc4"/><circle cx="537" cy="70" r="3.4" fill="#5f6cc4"/>
+              <circle cx="565" cy="86" r="3.4" fill="#2f3a90"/>
+            </g>
+            <g class="dot">
+              <circle cx="629" cy="56" r="6.5" fill="#0c0e12"/>
+              <text x="629" y="40" fill="#0c0e12" font-size="10" font-family="Bricolage" text-anchor="middle" letter-spacing="1">SLOWED</text>
+              <circle cx="818" cy="44" r="6.5" fill="#0c0e12"/>
+              <text x="818" y="28" fill="#0c0e12" font-size="10" font-family="Bricolage" text-anchor="middle" letter-spacing="1">BLOCKED</text>
+            </g>
+            <line x1="587" y1="6" x2="587" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="733" y1="6" x2="733" y2="122" stroke="#0c0e12" stroke-width="1" stroke-dasharray="3 4" opacity=".45"/>
+            <line x1="0" y1="122" x2="880" y2="122" stroke="#0c0e12" stroke-width="1"/>
+          </svg>
+          <div class="scr-scale"><span>0&#963;</span><span>1&#963;</span><span>2&#963;</span><span>3&#963;</span><span>4&#963; slow</span><span>5&#963; block</span><span>6&#963;</span></div>
+          <div class="scr-split">
+            <div>
+              <div class="scr-lab"><span>Where you slow</span><span>13 positions</span></div>
+              <div class="scr-row"><span>3.50&#963;</span><span class="bar"><i style="width:100%;background:#2f3a90"></i></span><span class="n">1482</span></div>
+              <div class="scr-row"><span>3.75&#963;</span><span class="bar"><i style="width:63%;background:#5f6cc4"></i></span><span class="n">940</span></div>
+              <div class="scr-row" aria-current="true"><span>4.00&#963;</span><span class="bar"><i style="width:25%;background:#9aa3e0"></i></span><span class="n">371</span></div>
+              <div class="scr-row"><span>4.25&#963;</span><span class="bar"><i style="width:11%;background:#ccd1f0"></i></span><span class="n">164</span></div>
+              <div class="scr-row"><span>4.50&#963;</span><span class="bar"><i style="width:4%;background:#eceefa"></i></span><span class="n">61</span></div>
+            </div>
+            <div>
+              <div class="scr-lab"><span>Being acted on</span><span>2</span></div>
+              <table class="scr-tbl">
+                <thead><tr><th>Source</th><th>Distance</th><th>At your servers</th><th></th></tr></thead>
+                <tbody>
+                  <tr><td><span class="ip">203.0.113.44</span><br><span class="mark"><i></i>blocked</span></td>
+                      <td><span class="fig">6.41</span></td><td class="l">3 / 3 written</td>
+                      <td><button class="btn">Allow</button></td></tr>
+                  <tr><td><span class="ip">198.51.100.7</span><br><span class="mark open"><i></i>slowed</span></td>
+                      <td><span class="fig">4.28</span></td><td class="l">1 / 3 behind</td>
+                      <td><button class="btn">Allow</button></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="opt">
+  <p class="eyebrow">So trực tiếp</p>
+  <div class="opt-head">
+    <h2>Bảy họ, cùng những con số</h2>
+    <p>
+      Đây là phép thử thật. Cột giữa là cột số như trong bảng của sản phẩm;
+      cột phải là các cặp ký tự dễ nhầm nhất trong một địa chỉ IP.
+    </p>
+  </div>
+  <table class="cmp">
+    <thead><tr><th>Họ</th><th>Dung lượng</th><th>Cột số</th><th>Ký tự dễ nhầm</th></tr></thead>
+    <tbody>
+      <tr>
+        <th>Familjen Grotesk</th>
+        <td class="num">18KB<br>0/O 0.86</td>
+        <td><span class="samp" style="font-family:Familjen,sans-serif">203.0.113.44<br>198.51.100.07<br>&nbsp;&nbsp;10.0.0.255</span></td>
+        <td><span class="oo" style="font-family:Familjen,sans-serif">0O 1lI 5S 8B 2Z 6G</span></td>
+      </tr>
+      <tr>
+        <th>Space Grotesk</th>
+        <td class="num">22KB<br>0/O 0.96</td>
+        <td><span class="samp" style="font-family:SpaceGrotesk,sans-serif">203.0.113.44<br>198.51.100.07<br>&nbsp;&nbsp;10.0.0.255</span></td>
+        <td><span class="oo" style="font-family:SpaceGrotesk,sans-serif">0O 1lI 5S 8B 2Z 6G</span></td>
+      </tr>
+      <tr>
+        <th>Martian Mono</th>
+        <td class="num">23KB<br>0/O 1.00</td>
+        <td><span class="samp" style="font-family:MartianMono,sans-serif">203.0.113.44<br>198.51.100.07<br>&nbsp;&nbsp;10.0.0.255</span></td>
+        <td><span class="oo" style="font-family:MartianMono,sans-serif">0O 1lI 5S 8B 2Z 6G</span></td>
+      </tr>
+      <tr>
+        <th>Archivo</th>
+        <td class="num">34KB<br>0/O 0.74</td>
+        <td><span class="samp" style="font-family:Archivo,sans-serif">203.0.113.44<br>198.51.100.07<br>&nbsp;&nbsp;10.0.0.255</span></td>
+        <td><span class="oo" style="font-family:Archivo,sans-serif">0O 1lI 5S 8B 2Z 6G</span></td>
+      </tr>
+      <tr>
+        <th>Golos Text</th>
+        <td class="num">37KB<br>0/O 0.84</td>
+        <td><span class="samp" style="font-family:Golos,sans-serif">203.0.113.44<br>198.51.100.07<br>&nbsp;&nbsp;10.0.0.255</span></td>
+        <td><span class="oo" style="font-family:Golos,sans-serif">0O 1lI 5S 8B 2Z 6G</span></td>
+      </tr>
+      <tr>
+        <th>Source Serif 4</th>
+        <td class="num">119KB<br>0/O 0.71</td>
+        <td><span class="samp" style="font-family:SourceSerif,sans-serif">203.0.113.44<br>198.51.100.07<br>&nbsp;&nbsp;10.0.0.255</span></td>
+        <td><span class="oo" style="font-family:SourceSerif,sans-serif">0O 1lI 5S 8B 2Z 6G</span></td>
+      </tr>
+      <tr>
+        <th>Bricolage Grotesque</th>
+        <td class="num">128KB<br>0/O 0.90</td>
+        <td><span class="samp" style="font-family:Bricolage,sans-serif">203.0.113.44<br>198.51.100.07<br>&nbsp;&nbsp;10.0.0.255</span></td>
+        <td><span class="oo" style="font-family:Bricolage,sans-serif">0O 1lI 5S 8B 2Z 6G</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note" style="margin-top:32px;max-width:none">
+    <p>
+      <b>Với một họ duy nhất, phân cấp phải đến từ đâu?</b> Không còn tương
+      phản có chân / không chân để phân biệt lời với số. Nghĩa là phân cấp
+      chỉ còn ba nguồn: cỡ chữ, trọng lượng, và chữ hoa nhỏ giãn cách. Đó là
+      lý do dải trọng lượng trở nên quan trọng hơn bình thường, và là lý do
+      Familjen (chỉ 400 tới 700) yếu hơn Archivo (100 tới 900) ở đúng chỗ đó.
+    </p>
+    <p>
+      <b>Nếu cần một ý kiến:</b> <b>Archivo</b> là lựa chọn ít rủi ro nhất,
+      vì nó tách 0 khỏi O tốt nhất (0.74) và có dải trọng lượng đầy đủ, nhưng
+      nó trung tính. <b>Space Grotesk</b> mang đúng chất kỹ thuật mà sản phẩm
+      muốn nhưng có tỉ lệ 0 so O tệ nhất (0.96), đáng nhìn kỹ trước khi chọn.
+      <b>Source Serif 4</b> là phương án táo bạo nhất còn hợp lệ. <b>Martian
+      Mono</b> là cách hiểu thẳng nhất yêu cầu của bạn, đổi lại chiều ngang.
+    </p>
+  </div>
+</section>
+
+</div>
+</body>
+</html>

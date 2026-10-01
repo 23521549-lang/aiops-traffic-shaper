@@ -35,20 +35,31 @@ def test_record_batch_issues_one_write_per_unique_ip_not_per_log_line(dynamo_res
     assert call_count["n"] == 2
 
 
+# A pinned clock. Both calls below take `now` from the real one by default,
+# and the bucket is five seconds wide, so a write and a read either side of a
+# boundary read different buckets and the test fails for a reason that has
+# nothing to do with what it is checking. It surfaced under coverage, which
+# is slow enough to make the crossing likely rather than rare.
+NOW = 1_700_000_002.0
+
+
 def test_compute_features_below_threshold_returns_none(dynamo_resource):
     create_all_tables(dynamo_resource)
-    record_batch(dynamo_resource, "t-1", [_Log("1.2.3.4")], bucket_seconds=5)
+    record_batch(dynamo_resource, "t-1", [_Log("1.2.3.4")], bucket_seconds=5,
+                 now=NOW)
     vector = compute_features_for_ip(dynamo_resource, "t-1", "1.2.3.4",
-                                      bucket_seconds=5, min_requests_threshold=3)
+                                      bucket_seconds=5, min_requests_threshold=3,
+                                      now=NOW)
     assert vector is None
 
 
 def test_compute_features_above_threshold(dynamo_resource):
     create_all_tables(dynamo_resource)
     logs = [_Log("1.2.3.4", status="500")] * 2 + [_Log("1.2.3.4", status="200")]
-    record_batch(dynamo_resource, "t-1", logs, bucket_seconds=5)
+    record_batch(dynamo_resource, "t-1", logs, bucket_seconds=5, now=NOW)
     vector = compute_features_for_ip(dynamo_resource, "t-1", "1.2.3.4",
-                                      bucket_seconds=5, min_requests_threshold=3)
+                                      bucket_seconds=5, min_requests_threshold=3,
+                                      now=NOW)
     assert vector is not None
     assert vector.sample_size == 3
     assert round(vector.error_ratio, 3) == round(2 / 3, 3)
@@ -74,7 +85,7 @@ def test_collect_training_vectors_across_ips_and_buckets(dynamo_resource):
     record_batch(dynamo_resource, "t-1", [_Log("9.9.9.9")] * 4, bucket_seconds=5, now=2000.0)
     record_batch(dynamo_resource, "t-2", [_Log("5.5.5.5")] * 10, bucket_seconds=5, now=1000.0)
 
-    vectors = collect_training_vectors(dynamo_resource, "t-1", bucket_seconds=5, min_requests_threshold=3)
+    vectors = collect_training_vectors(dynamo_resource, "t-1", bucket_seconds=5, min_requests_threshold=3).vectors
     # Two buckets across two different IPs for t-1 — t-2's data must not leak in.
     assert len(vectors) == 2
     for v in vectors:
@@ -84,10 +95,10 @@ def test_collect_training_vectors_across_ips_and_buckets(dynamo_resource):
 def test_collect_training_vectors_filters_below_threshold(dynamo_resource):
     create_all_tables(dynamo_resource)
     record_batch(dynamo_resource, "t-1", [_Log("1.2.3.4")], bucket_seconds=5, now=1000.0)  # only 1 request
-    vectors = collect_training_vectors(dynamo_resource, "t-1", bucket_seconds=5, min_requests_threshold=3)
+    vectors = collect_training_vectors(dynamo_resource, "t-1", bucket_seconds=5, min_requests_threshold=3).vectors
     assert vectors == []
 
 
 def test_collect_training_vectors_empty_tenant(dynamo_resource):
     create_all_tables(dynamo_resource)
-    assert collect_training_vectors(dynamo_resource, "no-such-tenant") == []
+    assert collect_training_vectors(dynamo_resource, "no-such-tenant").vectors == []

@@ -77,3 +77,27 @@ jobs:
           URL=$(terraform output -raw cloudfront_url)
           echo "deployed at: $URL"
           bash ../scripts/smoke-test.sh "$URL"
+
+      # An alarm that fires into a topic nobody is subscribed to is the same
+      # failure as no alarm, and it looks exactly like success from every
+      # other angle: Terraform holds the subscription in state whether AWS
+      # still has it or not. SNS deletes a subscription left unconfirmed for
+      # 72 hours, which is how six alarms went blind for five days without a
+      # single thing reporting it.
+      #
+      # Placed AFTER the smoke test on purpose. By this point the deployment
+      # itself is live and verified, so a red run here cannot be mistaken for
+      # a bad deploy - it means the deploy worked and the alerting does not.
+      - name: Alerting reaches somebody
+        if: github.event.inputs.apply == 'apply'
+        working-directory: terraform
+        run: |
+          TOPIC=$(terraform output -raw alerts_topic_arn)
+          CONFIRMED=$(aws sns list-subscriptions-by-topic --topic-arn "$TOPIC" \
+            --query "length(Subscriptions[?SubscriptionArn!='PendingConfirmation' && SubscriptionArn!='Deleted'])" \
+            --output text)
+          echo "confirmed subscriptions on $TOPIC: $CONFIRMED"
+          if [ "${CONFIRMED:-0}" -lt 1 ]; then
+            echo "::error title=Alarms have no destination::Every CloudWatch alarm delivers to $TOPIC and it has no confirmed subscriber. Someone must click the confirmation link SNS emails to the address in terraform.tfvars; AWS discards it after 72 hours. Until then the alarms fire and nobody is told."
+            exit 1
+          fi

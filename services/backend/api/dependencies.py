@@ -15,17 +15,26 @@ def hash_api_key(raw_key: str) -> str:
     return hashlib.sha256(raw_key.encode()).hexdigest()
 
 
-def assert_tenant_active(resource, tenant_id: str) -> None:
+def assert_tenant_active(resource, tenant_id: str) -> dict:
     """Phase 4 / H3. Fails closed on a MISSING tenant record too, not just a
     suspended one: an agent whose owning tenant does not exist is not a
     tenant this platform should be serving either."""
+    # Allow-list, not deny-list. This used to refuse exactly
+    # status == "suspended", so any other value — a half-created tenant, a
+    # mistyped status, a state added later — was served as though healthy.
+    # A check whose entire job is refusing service must fail closed.
     tenant = TenantsTable(resource).get(tenant_id=tenant_id)
-    if tenant is None or tenant.get("status") == "suspended":
+    if tenant is None or tenant.get("status") != "active":
         raise HTTPException(status_code=403, detail="Tenant is not active")
+    # Returned rather than discarded. This read happens on every authenticated
+    # agent request whatever else is true, and the item carries the tenant's
+    # enforcement gates - so the scoring path can judge by the value of record
+    # instead of by the copy last night's retrain left on the model.
+    return tenant
 
 
-def agent_auth(x_agent_key: str | None = Header(default=None),
-               resource=Depends(get_dynamo_resource)) -> str:
+def authenticated_agent(x_agent_key: str | None = Header(default=None),
+                        resource=Depends(get_dynamo_resource)) -> dict:
     """A plain FastAPI dependency, not a closure factory over a fixed
     `resource` — found during Stage 4 design review: the plan's original
     `agent_auth(resource)` factory pattern closes over whatever `resource`
@@ -52,14 +61,35 @@ def agent_auth(x_agent_key: str | None = Header(default=None),
     # hash_api_key() existed but was never actually called.
     # H3: checked BEFORE the agent lookup — a suspended tenant is refused
     # regardless of how healthy its individual agent records look.
-    assert_tenant_active(resource, tenant_id)
+    tenant = assert_tenant_active(resource, tenant_id)
 
     key_hash = hash_api_key(raw_key)
     agents = AgentsTable(resource).query_by_tenant(tenant_id)
     for agent in agents:
         if agent.get("api_key_hash") == key_hash and agent.get("status") == "active":
-            return tenant_id
+            # The fleet-health view is derived from this timestamp, and it
+            # used to be written once at registration and never again — so
+            # the Control Platform's "which agents are alive" card could
+            # never change. The write is conditional (see AgentsTable.touch)
+            # because last_seen_at is a GSI sort key; the agent item was
+            # already read above, so this costs no extra read.
+            AgentsTable(resource).touch(tenant_id, agent["agent_id"])
+            # The tenant item rides along on the agent item rather than in a
+            # second dependency, because a second dependency would be a
+            # second read of a row this function has already paid for.
+            return {**agent, "_tenant": tenant}
     raise HTTPException(status_code=401, detail="Invalid agent key")
+
+
+def agent_auth(agent: dict = Depends(authenticated_agent)) -> str:
+    """The tenant id, for the many callers that need only that.
+
+    A thin wrapper so `authenticated_agent` can hand the whole item to the
+    one route that needs more. FastAPI caches a dependency's result within a
+    request, so depending on both costs one lookup, not two - which is the
+    same property the comment on enforce_tenant_quota already relies on.
+    """
+    return agent["tenant_id"]
 
 
 def enforce_usage_ceiling(resource=Depends(get_dynamo_resource)) -> None:

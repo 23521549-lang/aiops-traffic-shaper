@@ -1,0 +1,99 @@
+<aside class="sec" aria-label="Chi tiết khách hàng">
+  <div class="sec-h">
+    <div class="src-ip">{{ selected.tenant.tenant_id }}</div>
+    <div>
+      {% if selected.tenant.status == "suspended" %}
+      <span class="verdict">Đã tạm ngưng</span>
+      {% elif selected.tenant.status == "active" %}
+      <span class="verdict open">Đang hoạt động</span>
+      {% else %}
+      <span class="verdict open">{{ selected.tenant.status }}</span>
+      {% endif %}
+      <span class="one">{{ selected.tenant.name or "chưa đặt tên" }}</span>
+    </div>
+  </div>
+
+  <div class="kv">
+    <div>
+      <div class="sec-t">Chi tiết khách hàng</div>
+      <dl class="kv">
+        <dt>Tên</dt><dd>{{ selected.tenant.name or "chưa đặt" }}</dd>
+        <dt>Đăng ký</dt><dd>{{ selected.registered.label }}</dd>
+        <dt>Request hôm nay</dt><dd>{{ selected.used }}</dd>
+        <dt>Agent</dt><dd>{{ selected.live_agents }} trên {{ selected.agent_count }} đang báo về</dd>
+      </dl>
+    </div>
+
+    <div>
+      <div class="sec-t">Bảo vệ</div>
+      {# The consequence of the button below, stated before it is pressed.
+         Suspension revokes every key this tenant holds, and the console
+         used to offer that while showing how many keys that was nowhere. #}
+      {% if selected.agent_count == 0 %}
+      <p class="one">
+        Chưa có agent nào đăng ký cho khách hàng này, nên không có gì của họ
+        đang được kiểm. Tạm ngưng họ không đổi điều gì mà họ nhận ra.
+      </p>
+      {% elif selected.live_agents == 0 %}
+      <p class="one">
+        {% if selected.agent_count == 1 -%}
+        Agent duy nhất của họ không báo về trong năm phút qua,
+        {%- else -%}
+        Không agent nào trong {{ selected.agent_count }} agent của họ báo về trong năm phút qua,
+        {%- endif %}
+        nên ngay lúc này khách hàng này <strong>không được bảo vệ</strong>,
+        bất kể trạng thái ở trên nói gì.
+      </p>
+      {% else %}
+      <p class="one">
+        {{ selected.live_agents }} agent đang báo về. Tạm ngưng khách hàng này
+        làm họ ngưng được phục vụ ngay lập tức.
+      </p>
+      {% endif %}
+
+      {% if selected.agents %}
+      <div class="tbl-wrap" tabindex="0" role="region"
+           aria-label="Agent đã đăng ký cho khách hàng này">
+        <table class="tbl">
+          <caption class="sr-only">Agent đã đăng ký cho khách hàng này</caption>
+          <thead>
+            <tr>
+              <th scope="col">Agent</th>
+              <th scope="col">Trạng thái</th>
+              <th scope="col">Thấy lần cuối</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in selected.agents %}
+            <tr>
+              <th scope="row" title="{{ a.agent_id }}">{{ a.label }}</th>
+              <td><span class="verdict verdict--{{ a.state }}">{{ a.state_label }}</span></td>
+              <td class="d" title="{{ a.last_seen_exact }}">{{ a.last_seen }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="ctl-b">
+    {% if selected.tenant.status == "suspended" %}
+    <button type="button" class="btn btn--p"
+            hx-post="/admin/ui/tenants/{{ selected.tenant.tenant_id }}/reactivate?back=detail"
+            hx-target="body" hx-swap="none"
+            hx-confirm="Mở lại {{ selected.tenant.tenant_id }}? Khoá agent của họ vẫn bị thu hồi, nên các agent phải đăng ký lại mới được phục vụ.">
+      Bật lại
+    </button>
+    {% else %}
+    <button type="button" class="btn btn--d"
+            hx-post="/admin/ui/tenants/{{ selected.tenant.tenant_id }}/suspend?back=detail"
+            hx-target="body" hx-swap="none"
+            hx-confirm="Tạm ngưng {{ selected.tenant.tenant_id }}? Các agent của họ ngưng được phục vụ ngay lập tức và {{ selected.agent_count }} khoá agent sẽ bị thu hồi.">
+      Tạm ngưng khách hàng
+    </button>
+    {% endif %}
+    <a class="btn" href="/admin/ui/tenants" data-key="Escape">Đóng <kbd class="kbd">Esc</kbd></a>
+  </div>
+</aside>

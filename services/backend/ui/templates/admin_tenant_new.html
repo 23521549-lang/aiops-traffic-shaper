@@ -1,0 +1,58 @@
+{% extends "app_shell.html" %}
+{% block title %}Thêm khách hàng · Traffic Shaper{% endblock %}
+{% block page_title %}Thêm khách hàng{% endblock %}
+{% block page_summary %}
+tạo hồ sơ khách hàng và người dùng đầu tiên · Cognito gửi email mật khẩu tạm dùng được ba ngày
+{% endblock %}
+{% block page_content %}
+
+<div >
+  <div id="tenants-table"></div>
+
+  <div class="sec">
+    {# A real body, not a query string. This form carries another person's
+       email address, and moving its values into the query string would
+       write them into CloudFront
+       access logs, Referer headers and browser history - which spec 12.8
+       refuses and which signed-post.js was built to avoid.
+
+       The cost is that it does not swap a fragment: it redirects, and the
+       confirmation comes back as ?created=<tenant id>, which is a value
+       already in every URL on this screen. #}
+    <div class="alert alert-danger" data-post-error role="alert" tabindex="-1"
+         hidden></div>
+    <form class="c-form-stack" method="post" action="/admin/ui/tenants"
+          data-signed-post>
+      {# Minted server-side and carried here so a double submit collides on
+         attribute_not_exists and reads as "already exists" rather than
+         quietly creating a second tenant. No idempotency-key table. #}
+      <input type="hidden" name="tenant_id" value="{{ new_tenant_id }}">
+
+      <div class="field">
+        <label for="t-name">Tên</label>
+        <input type="text" id="t-name" name="name" required aria-describedby="t-name-hint">
+        <span class="field-hint" id="t-name-hint">Hiển thị trong console này và trong danh sách khách hàng.</span>
+      </div>
+
+      <div class="field">
+        <label for="t-email">Email người dùng đầu tiên</label>
+        <input type="text" id="t-email" name="contact_email" required aria-describedby="t-email-hint">
+        <span class="field-hint" id="t-email-hint">
+          Sẽ thành tên đăng nhập của họ. Họ tự đặt mật khẩu thật ở lần đăng nhập đầu.
+        </span>
+      </div>
+
+      <div class="field">
+        <span class="field-label">Mã khách hàng</span>
+        <code class="field-static">{{ new_tenant_id }}</code>
+        <span class="field-hint">Hệ thống sinh sẵn. Agent dùng mã này khi đăng ký.</span>
+      </div>
+
+      <div class="c-form-actions">
+        <button type="submit" class="btn btn--p">Tạo khách hàng</button>
+        <a href="/admin/ui/tenants" class="btn">Huỷ</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,468 @@
+/* The landing page, and nothing else.
+ *
+ * Spec 9 already split the sheets by which surface loads them: tokens and
+ * app everywhere, console only in the console. The file that was missing is
+ * this one, so every console reader was downloading sixty-five rules for a
+ * page they are already past, and every visitor to the front door was
+ * downloading the console's components.
+ *
+ * The 80KB ceiling is about what one reader fetches, so it is measured per
+ * surface now rather than as the sum of every sheet - which overstates it
+ * for both of them once the sheets are surface-specific.
+ */
+
+.btn-sm { padding: 4px 10px; font-size: var(--text-sm); }
+
+/* --- ink field -------------------------------------------------------- */
+
+/* Where the product argues for itself: the hero, the sigma explanation, the
+ * login card. The console never uses it, so the two read as different
+ * places rather than one long page. */
+.on-ink {
+  background: var(--ink); color: var(--ink-fg);
+
+  /* An ink field is a dark surface, so the tier ramp on it is the dark
+   * ramp. Without this the sigma band rendered its pale light-theme
+   * backgrounds on near-black, and the marker - `background: var(--text)`,
+   * which is #111823 here - disappeared entirely along with its label.
+   *
+   * These are the values already measured for [data-theme="dark"], against
+   * --surface #131b24, and --ink is #0d1b26: darker, so every ratio below
+   * is a floor rather than an estimate. test_contrast.py measures them, and
+   * a test asserts this list and the dark block stay identical. */
+  --t1: #1b2040;
+  --t2: #2c3565;
+  --t3: #4d5aa8;
+  --t4: #8b95dd;
+  --t5: #c3caf5;
+  --tier-normal: #8b95dd;
+  --tier-limited: #a7b1f0;
+  --tier-blocked: #c3caf5;
+  --tier-field: #1b2040;
+  --tier-blocked-edge: #c3caf5;
+
+  /* The marker and its reading. --text is the page's text colour and the
+   * page around this band is light. */
+  --text: var(--ink-fg);
+  --text-muted: var(--ink-muted);
+}
+
+.on-ink .muted { color: var(--ink-muted); }
+
+.on-ink a { color: var(--brand-cyan); }
+
+/* --- landing ---------------------------------------------------------- */
+
+/* The band spans the window; what is in it sits on the page's one rail, so
+ * the wordmark lines up with every heading below it. */
+.lp-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s4); padding-block: var(--s4); flex-wrap: wrap;
+  row-gap: var(--s2);
+}
+
+.lp-brand { color: inherit; text-decoration: none; }
+
+.lp-nav { display: flex; align-items: center; gap: var(--s5); font-size: var(--text-base); }
+
+.lp-nav a { color: var(--ink-muted); }
+
+.lp-nav a:hover { color: var(--ink-fg); }
+
+/* Same rail as every section below it. The hero used to run full-bleed
+ * while the body sat in a 1120px container, so the page opened on one left
+ * edge and then moved to another at the first heading. It is the first
+ * misalignment a reader meets and the one they cannot help noticing. */
+.lp-hero {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s7);
+  padding-block: var(--s8) var(--s9);
+  align-items: center;
+}
+
+/* The ink band reaches both window edges; its CONTENTS sit on the rail.
+ *
+ * Constraining the elements themselves turned the hero and the top bar into
+ * floating boxes with light margins either side, while the sigma section
+ * kept bleeding - one page, two answers to the same question. The padding
+ * does the centring instead, so the background stays full width and the
+ * text lands at the same x as every heading below it. Below 1120px the
+ * max() falls back to the ordinary gutter. */
+.lp-topbar, .lp-hero {
+  padding-inline: max(var(--s5), calc((100% - 1120px) / 2 + var(--s5)));
+}
+
+/* The measure belongs to each block, not to the column.
+ *
+ * `.lp-hero-copy` used to carry `max-width: 62ch`, and ch is measured in the
+ * element's OWN font: 62ch of body text is about 496px, which the headline
+ * then inherited as a hard cap at three times the font size. The result was
+ * four lines where two were written, ending on an orphaned "it." on a line
+ * of its own. The headline gets its own measure, in its own size. */
+.lp-hero h1 {
+  font-size: var(--text-hero); line-height: 1.08; letter-spacing: -.02em;
+  margin: 0 0 var(--s5);
+  max-width: 26ch;
+}
+
+.lp-lead { font-size: var(--text-lg); line-height: 1.55; max-width: 62ch; }
+
+.lp-hero-copy > p { max-width: 62ch; }
+
+.lp-cta { display: flex; gap: var(--s3); flex-wrap: wrap; margin: var(--s6) 0 var(--s4); }
+
+.lp-fineprint { font-size: var(--text-base); max-width: 56ch; }
+
+.btn-ghost { background: transparent; color: inherit; border-color: currentColor; }
+
+/* One rail, one rhythm.
+ *
+ * The left edge used to land at three different x positions down the page:
+ * 184 for an ordinary section, 364 for a narrow one, 160 for a full-bleed
+ * one, because each constrained a different box. A reader notices a moving
+ * left edge without being able to name it. Every section now shares the
+ * container, and what varies is the measure of the text inside it.
+ *
+ * And 64px rather than 96px. Adjacent sections add their padding, so 96
+ * meant 192px of nothing at every boundary and nine sections of that is
+ * most of a screen height spent on air. The boundary is carried by tone
+ * instead, which costs no height at all. */
+.lp-section { padding: var(--s8) var(--s5); max-width: 1120px; margin: 0 auto; }
+
+.lp-section > h2 {
+  font-size: var(--text-3xl); line-height: 1.15; letter-spacing: -.015em;
+  margin: 0 0 var(--s4); max-width: 24ch;
+}
+
+.lp-section > h3 { font-size: var(--text-xl); margin: var(--s6) 0 var(--s3); }
+
+.lp-section p { max-width: 68ch; }
+
+/* Narrow is about the text, not about the column it sits in. */
+.lp-narrow > * { max-width: 760px; }
+
+/* A section with its own background has to bleed to the window edge, so the
+ * container moves inside it. Same numbers as an ordinary section, so the
+ * left edge does not move. */
+.on-ink.lp-section, .lp-section--panel { max-width: none; }
+
+/* Both selectors carry two classes deliberately. `.lp-section > h2` sets
+ * `margin: 0 0 24px`, and that shorthand also sets margin-inline to 0, so a
+ * single-class rule here loses and every heading in a panel jumped to the
+ * window edge while the plain sections stayed on the rail. */
+.on-ink.lp-section > *, .lp-section--panel.lp-section > * {
+  max-width: 1120px; margin-inline: auto;
+  padding-inline: var(--s5); box-sizing: border-box;
+}
+
+.lp-section--panel { background: var(--surface-sunken); }
+
+.lp-kicker {
+  font-size: var(--text-xs);
+  text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted);
+  display: block; margin-bottom: var(--s2);
+}
+
+.lp-grid-3 { display: grid; gap: var(--s5); margin-top: var(--s7); }
+
+.lp-col { border-top: 1px solid var(--border-interactive); padding-top: var(--s3); }
+
+.lp-col p { font-size: var(--text-base); color: var(--text-muted); }
+
+.lp-steps { list-style: none; padding: 0; display: grid; gap: var(--s5); margin: var(--s6) 0; }
+
+.lp-steps li { border-top: 1px solid var(--border-interactive); padding-top: var(--s3); }
+
+.lp-flow { margin-top: var(--s7); }
+
+.c-enclosure { fill: none; stroke: var(--border-interactive); stroke-dasharray: 4 4; }
+
+.c-enclosure-label {
+  fill: var(--text-muted); font-size: 10px;}
+
+.c-node { fill: var(--surface); stroke: var(--border-interactive); stroke-width: 1.5; }
+
+.c-node--ours { fill: var(--accent-subtle); stroke: var(--accent); }
+
+.c-node-label { fill: var(--text); font-size: 12px; font-family: var(--font-sans); }
+
+.c-arrow { stroke: var(--accent); stroke-width: 1.5; }
+
+.c-arrow-label {
+  fill: var(--text-muted); font-size: 10px;}
+
+.lp-row-chosen th, .lp-row-chosen td { font-weight: 700; }
+
+.lp-gaps { list-style: none; padding: 0; display: grid; gap: var(--s4); }
+
+.lp-gaps li { max-width: 68ch; }
+
+/* The one block on the page that is a claim rather than a section, so it is
+ * the one that gets emphasis - by tint and an accent edge, the same device
+ * the console uses for the sigma explainer. A border round it would just be
+ * the frame every other section on this page stopped drawing. */
+.lp-price {
+  max-width: 560px; padding: var(--s4) var(--s5);
+  background: var(--accent-subtle); border-left: 3px solid var(--accent);
+  border-radius: 0 var(--r2) var(--r2) 0;
+}
+
+.lp-features { list-style: none; padding: 0; margin: 0 0 var(--s4); display: grid; gap: var(--s1); }
+
+.lp-features li { color: var(--text-muted); font-size: var(--text-base); }
+
+.lp-code {
+  background: var(--surface-sunken);
+  border-radius: var(--r3); padding: var(--s4); overflow-x: auto;
+  font-size: var(--text-base); line-height: 1.7;
+}
+
+.lp-section details {
+  border-top: 1px solid var(--border); padding: var(--s3) 0;
+}
+
+.lp-section summary {
+  cursor: pointer; font-weight: 600; padding: var(--s1) 0;
+}
+
+.lp-section summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+.lp-section details p { margin: var(--s2) 0 0; color: var(--text-muted); }
+
+.lp-footer {
+  background: var(--surface); border-top: 1px solid var(--border);
+  padding: var(--s7) var(--s5) var(--s5);
+}
+
+.lp-footer-grid { display: grid; gap: var(--s5); max-width: 1120px; margin: 0 auto; }
+
+.lp-footer h4 {
+  font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-muted); margin: 0 0 var(--s2);
+}
+
+.lp-footer-grid a {
+  display: block; font-size: var(--text-base); padding: 3px 0; color: var(--text);
+}
+
+.lp-footer-rule {
+  max-width: 1120px; margin: var(--s6) auto 0; padding-top: var(--s4);
+  border-top: 1px solid var(--border); font-size: var(--text-base);
+  display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap;
+}
+
+.lp-hero { grid-template-columns: 1.05fr .95fr; }
+
+.lp-grid-3 { grid-template-columns: repeat(3, 1fr); }
+
+.lp-steps { grid-template-columns: repeat(3, 1fr); }
+
+.lp-footer-grid { grid-template-columns: 1.4fr 1fr 1fr 1fr; }
+
+.lp-hero h1 { font-size: var(--text-2xl); }
+
+.lp-section > h2 { font-size: var(--text-xl); }
+
+.lp-hero, .lp-section { padding-left: var(--s4); padding-right: var(--s4); }
+
+.lp-section { padding-top: var(--s7); padding-bottom: var(--s7); }
+
+.lp-nav { gap: var(--s3); }
+
+/* An illustration has to be labelled where a reader who reads nothing else
+ * still sees it, which is on the chart and not under it. */
+.lp-example-tag {
+  font-size: var(--text-xs);
+  letter-spacing: .04em; color: var(--text-muted); margin-bottom: var(--space-2);
+}
+
+/* =======================================================================
+ * MOVED OUT OF app.css.
+ *
+ * Every rule below styles the sigma axis and the chart macros in
+ * templates/shared/, and this page is the only one that renders them: the
+ * console's own screens draw their distances with the `.pipe` and `.gate`
+ * vocabulary in console.css instead. app.css is loaded by BOTH surfaces, so
+ * while these lived there every console reader downloaded a chart they
+ * never see, and the console's 80,000 byte budget paid for it. That is the
+ * same split that created this file.
+ * ===================================================================== */
+
+/* --- the sigma axis ---------------------------------------------------- */
+
+/* Both layers occupy the same grid cell and both are full width with zero
+ * inline padding, so sigma s lands at s/6 x 100% in each of them. Padding on
+ * either one breaks that mapping and nothing would report it.
+ *
+ * This is what replaced 202 enumerated rules - 101 for a flex ratio and 101
+ * for a marker position, about 9KB, rounding real percentages to the nearest
+ * 5. Arbitrary positions moved into SVG presentation attributes, which CSP
+ * does not govern and which cost no stylesheet at all; the labels moved to
+ * integer sigma, where a grid column is the whole answer. */
+.c-axis { display: grid; grid-template-columns: 1fr; }
+.c-axis > * { grid-area: 1 / 1; inline-size: 100%; padding-inline: 0; }
+/* Height follows width instead of being pinned, so the box keeps its own
+ * ratio and a circle in it stays a circle. Pinning the height forced
+ * preserveAspectRatio="none", which turned every source dot into an
+ * ellipse. */
+.c-axis-plot { display: block; inline-size: 100%; block-size: auto; }
+
+.c-axis-labels,
+.c-axis-ticks {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  font-size: var(--text-xs);
+  pointer-events: none;
+}
+/* Flex, not the six-column grid above. The ticks run 0 to 6 inclusive,
+ * which is SEVEN items, so the seventh wrapped onto a second row and 6 sigma
+ * printed underneath 0 sigma. space-between puts the first at the left edge
+ * and the last at the right, which is where those two sigma values are. */
+.c-axis-ticks {
+  display: flex; justify-content: space-between;
+  align-self: end; color: var(--text-muted);
+}
+.c-axis-band-label { padding: 0 6px; align-self: center; color: var(--text); }
+/* Enumerated rather than an inline style, for the same reason as everywhere
+ * else on this page: `style-src 'self'` blocks the style ATTRIBUTE. A band
+ * covers whole sigma, and the scale is six sigma wide, so six rules cover
+ * every gate a customer can set. */
+.c-axis-band-label[data-cols="1"] { grid-column: span 1; }
+.c-axis-band-label[data-cols="2"] { grid-column: span 2; }
+.c-axis-band-label[data-cols="3"] { grid-column: span 3; }
+.c-axis-band-label[data-cols="4"] { grid-column: span 4; }
+.c-axis-band-label[data-cols="5"] { grid-column: span 5; }
+.c-axis-band-label[data-cols="6"] { grid-column: span 6; }
+
+/* Written in the case they are read in. No rule here may uppercase them:
+ * CSS uppercases Greek, and "4 sigma slowed" reached an incident screen as
+ * summation. */
+.c-axis-short { display: none; }
+@media (max-width: 860px) {
+  .c-axis-long { display: none; }
+  .c-axis-short { display: inline; }
+}
+
+.c-gate { stroke: var(--text); stroke-width: 2; }
+.c-gate--2 { stroke-dasharray: 4 3; }
+/* fill, not stroke. These used to be vertical rules and are circles now; a
+ * stroke rule on a circle leaves it unfilled, which is an invisible source
+ * on the one chart that exists to show sources. */
+.c-mark--normal { fill: var(--tier-normal); }
+.c-mark--limited { fill: var(--tier-limited); }
+.c-mark--blocked { fill: var(--tier-blocked); }
+
+/* No feed, no reading. The bands drop to hairlines and the macro emits no
+ * mark at all, so there is nothing on screen to misread. */
+.c-axis[data-plot="outline"] .c-seg { fill: none; stroke: var(--border); stroke-width: 1; }
+.c-axis[data-plot="frozen"] .c-seg { opacity: .55; }
+
+.c-axis-caption {
+  font-size: var(--text-xs);
+  color: var(--text-muted); margin: 6px 0 0;
+}
+
+/* --- the gate control -------------------------------------------------- */
+/* Thirteen rows in the same panel as the axis they move. A slider would show
+ * one outcome at a time and hide the other twelve behind a gesture. */
+
+.c-gate { margin-top: var(--space-5); }
+@keyframes c-gate-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+.c-why-act .c-btn { font-size: var(--text-xs); padding: 2px var(--space-2); }
+
+/* Which end of the scale is the good one. The ticks are numbers and numbers
+ * do not answer that. */
+.c-axis-ends {
+  display: flex; justify-content: space-between;
+  font-size: var(--text-xs); color: var(--text-muted); margin-top: 2px;
+}
+@keyframes c-flow {
+  0%   { transform: translateX(-100%); }
+  45%  { transform: translateX(100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* --- the field ---------------------------------------------------------- */
+/* One dot per identified source, on a ridge of everything below the gate.
+ * The motion runs once, on first paint, and says one thing each: the ridge
+ * ACCUMULATED, and the dots were PLACED by measurement. Nothing here asks
+ * the server for anything - a console that polled would spend the write
+ * budget its own telemetry needs. */
+
+.c-ridge-line { stroke: var(--tier-normal); stroke-width: 2; opacity: .75; }
+.c-ridge-fill { fill: var(--tier-normal); opacity: .14; }
+.c-grows { transform-origin: 50% 100%; animation: c-grow .8s cubic-bezier(.16,1,.3,1) both; }
+@keyframes c-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+
+/* Staggered so the field fills as one gesture rather than every dot landing
+ * at once. Enumerated rather than computed from a custom property, because
+ * setting one needs a style ATTRIBUTE and CSP here is style-src 'self',
+ * which blocks exactly that. Eight steps then a repeat: the mitigation list
+ * is small and bounded, and past eight nobody is counting. */
+.c-settles { animation: c-settle .7s cubic-bezier(.16,1,.3,1) both; }
+.c-settles:nth-child(8n+2) { animation-delay: 45ms; }
+.c-settles:nth-child(8n+3) { animation-delay: 90ms; }
+.c-settles:nth-child(8n+4) { animation-delay: 135ms; }
+.c-settles:nth-child(8n+5) { animation-delay: 180ms; }
+.c-settles:nth-child(8n+6) { animation-delay: 225ms; }
+.c-settles:nth-child(8n+7) { animation-delay: 270ms; }
+.c-settles:nth-child(8n+0) { animation-delay: 315ms; }
+@keyframes c-settle { from { opacity: 0; transform: translateY(-14px); }
+                      to   { opacity: 1; transform: translateY(0); } }
+
+.c-dot { stroke: var(--surface); stroke-width: 1.5; }
+.c-dot--on { stroke: var(--text); stroke-width: 2.5; }
+/* A held source is not a past event. The halo breathes because the block is
+ * still in force; when it expires the agent removes the rule and the dot
+ * goes with it. */
+.c-halo { opacity: .18; animation: c-breathe 4s ease-in-out infinite; }
+@keyframes c-breathe { 0%, 100% { opacity: .1; } 50% { opacity: .3; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .c-grows, .c-settles, .c-halo { animation: none; }
+}
+
+/* The chart macros in templates/shared/, moved here for the same reason as
+ * the axis above: `shared/_charts.html` is imported by this page and by
+ * nothing else. `.c-spark` deliberately stayed in app.css, because the admin
+ * tenant table draws a sparkline with it and that IS a console screen. */
+.c-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+.c-band { fill: var(--t1); }
+.c-rule { stroke: var(--border-interactive); stroke-width: 1; stroke-dasharray: 3 3; }
+.c-axis-label {
+  fill: var(--text-muted); font-size: 10px;}
+.c-empty { fill: var(--text-muted); font-size: 12px; font-family: var(--font-sans); }
+
+.c-bar--normal { fill: var(--tier-normal); opacity: .55; }
+.c-bar--limited { fill: var(--tier-limited); }
+.c-bar--blocked { fill: var(--tier-blocked); }
+.c-overflow { fill: var(--tier-blocked); }
+
+.c-hatch-bg { fill: var(--t2); }
+.c-hatch-line { stroke: var(--tier-limited); stroke-width: 2; }
+.c-cross-bg { fill: var(--t3); }
+.c-cross-line { stroke: var(--tier-blocked); stroke-width: 1.5; }
+/* Three steps of the one ramp, so a stacked bar still reads as a
+ * quantity. They used to take the chip fields, which are all one pale
+ * value now - the bar would have come out as a single flat block. */
+.c-seg--normal { fill: var(--t2); }
+.c-seg--limited { fill: var(--t3); }
+.c-seg--blocked { fill: var(--t5); }/* --- stacked bar ------------------------------------------------------ */
+
+.c-stackbar { width: 100%; height: 10px; border-radius: var(--r-pill); overflow: hidden; }
+.c-stack--normal { fill: var(--tier-normal); }
+.c-stack--limited { fill: var(--tier-limited); }
+.c-stack--blocked { fill: var(--tier-blocked); }
+.c-legend {
+  list-style: none; padding: 0; margin: var(--s2) 0 0;
+  display: flex; gap: var(--s4); flex-wrap: wrap;
+  font-size: var(--text-sm); color: var(--text-muted);
+}
+.c-legend li { display: flex; align-items: center; gap: var(--s1); }
+.c-swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.c-swatch.c-stack--normal { background: var(--tier-normal); }
+.c-swatch.c-stack--limited { background: var(--tier-limited); }
+.c-swatch.c-stack--blocked { background: var(--tier-blocked); }
+.on-ink .c-axis-label, .on-ink .c-empty { fill: var(--ink-muted); }
+.on-ink .c-rule { stroke: var(--ink-muted); }

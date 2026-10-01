@@ -1,0 +1,276 @@
+{% extends "app_shell.html" %}
+{% import "_pipe.html" as pipe %}
+{% import "_gate.html" as gate_macro %}
+{% block title %}Cổng · Traffic Shaper{% endblock %}
+{% block page_title %}Cổng{% endblock %}
+{% block page_summary %}
+{%- if health.state == 'healthy' -%}
+{{ health.reporting }} agent · báo gần nhất {{ health.last_seen_label }}
+{%- elif health.state == 'degraded' -%}
+không có telemetry từ {{ health.last_seen_label }}
+{%- else -%}
+chưa agent nào báo về
+{%- endif -%}
+{%- if measured %} · <b>{{ "{:,}".format(measured).replace(",", ".") }}</b> request trong 24 giờ{% endif %} · {{ mitigations|length }} nguồn đang bị giữ
+{% endblock %}
+{% block page_actions %}
+{% if mitigations %}
+<a class="btn" href="/dashboard/ui/mitigations.csv" download>Xuất CSV</a>
+{% endif %}
+<a class="btn" href="/dashboard/ui/history">Lịch sử</a>
+{% endblock %}
+{% block page_content %}
+
+{% if outcome %}
+{# Carried back as two integers through the redirect, because the action that
+   produced it posts with hx-swap="none" from a page it then leaves. It
+   reports what went through, never what was asked for. #}
+<div class="alert {{ 'alert-warning' if outcome.skipped else 'alert-ok' }}" role="status">
+  {% if outcome.allowed %}
+  <strong>Đã cho qua {{ outcome.allowed }} nguồn.</strong>
+  {% else %}
+  <strong>Không nguồn nào được cho qua.</strong>
+  {% endif %}
+  {% if outcome.skipped %}{{ outcome.skipped }} mục không phải địa chỉ hợp lệ nên được để nguyên.{% endif %}
+</div>
+{% endif %}
+
+{% if health.state != 'healthy' %}
+<div class="alert alert-warning">
+  {% if health.state == 'degraded' %}
+  <strong>Không có telemetry từ {{ health.last_seen_label }}.</strong>
+  Không có gì đang được kiểm, nên danh sách rỗng bên dưới không có nghĩa là
+  traffic của bạn sạch.
+  {% else %}
+  <strong>Chưa có agent nào kết nối.</strong>
+  Cài agent lên máy chủ bạn muốn bảo vệ rồi đăng ký nó. Bảo vệ bắt đầu ngay
+  khi agent đầu tiên báo về.
+  {% endif %}
+</div>
+{% endif %}
+
+{# A Greek letter does not explain itself, and this one carries the whole
+   argument of the product. Said before the first number that uses it,
+   because a definition underneath the thing it defines has already failed
+   the reader who needed it.
+
+   Only when there is a reading on screen: teaching a unit on a scale that is
+   showing nothing is a lesson about nothing. #}
+{% if axis_state.gates_armed %}
+<p class="plain">
+  <b>Sigma là mức khác thường của một nguồn</b> so với traffic của chính
+  bạn, không phải của ai khác. Số 0 trông giống hệt ngày thường của bạn.
+  Càng ra xa thì càng ít giống bạn, và bạn chọn xa tới đâu là đủ để hành động.
+</p>
+{% endif %}
+
+{# ---- đường đi của traffic --------------------------------------------- #}
+<section class="sec" data-plot="{{ axis_state.plot }}">
+  <div class="sec-h">
+    <h2 class="sec-t">Một request đi đâu</h2>
+    <div class="sec-m">chạy thật · chu kỳ 6 giây · 0 request tới máy chủ</div>
+  </div>
+  {# Principle 1.2: an instrument that has lost its feed shows no reading.
+     This sentence is the product saying WHY there is nothing, and the
+     distinction it draws is the one that matters at 3am - a throttled
+     account and a dead agent look identical on a chart, and only one of them
+     is fixed by restarting anything. It was dropped when this screen was
+     rebuilt, which is exactly the kind of loss a chart cannot report. #}
+  {% if axis_state.sentence %}
+  <p class="one">{{ axis_state.sentence }}</p>
+  {% endif %}
+  {{ pipe.render(flow, axis.gate1_sigma, axis.gate2_sigma) }}
+  <div class="pipe-ctl">
+    <div><span class="label">Traffic</span>
+      <span class="pill {{ 'off' if paused else 'on' }}"><i></i>{{ 'đã dừng' if paused else 'đang chảy' }}</span></div>
+    <div><span class="label">Đọc log</span>
+      <span class="pill on"><i></i>{{ health.reporting }} agent</span></div>
+    <div><span class="label">Đếm</span>
+      <span class="pill on"><i></i>7 / 7</span></div>
+    <div><span class="label">Chấm điểm</span>
+      <a class="btn btn--sm" href="/dashboard/ui/model">Mô hình</a></div>
+    <div><span class="label">Thi hành</span>
+      {% if paused %}
+      <button type="button" class="btn btn--sm btn--p"
+              hx-post="/dashboard/ui/enforcement?on=1" hx-target="body" hx-swap="none"
+              hx-confirm="Bật lại bảo vệ? Máy chủ của bạn bắt đầu áp quyết định ở lần thu kế tiếp.">Bật lại</button>
+      <span class="pill off"><i></i>chỉ theo dõi</span>
+      {% else %}
+      <button type="button" class="btn btn--sm"
+              hx-post="/dashboard/ui/enforcement?on=0" hx-target="body" hx-swap="none"
+              hx-confirm="Tắt thi hành? Máy chủ của bạn nhả mọi luật trong khoảng năm giây.">Chỉ theo dõi</button>
+      <span class="pill on"><i></i>đang thi hành</span>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{# ---- đang bị giữ ------------------------------------------------------ #}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">
+      {% if mitigations %}Đang bị giữ{% else %}Không có nguồn nào bị giữ{% endif %}
+    </h2>
+    <div class="sec-m">
+      {% if mitigations %}{{ mitigations|length }} nguồn · bấm một dòng để xem vì sao{% endif %}
+    </div>
+  </div>
+
+  {% if mitigations %}
+  {# A real form, submitted by a real button. The selection UI on top of it is
+     progressive: without bulk-select.js the checkboxes and the submit still
+     work, they just do not count themselves. The values ride into the query
+     string, so this POST has no body and needs no CloudFront payload hash. #}
+  <form data-bulk-form data-params-in-url
+        hx-post="/dashboard/ui/allowed/bulk" hx-target="body" hx-swap="none"
+        hx-confirm="Cho qua mọi nguồn đã chọn? Chúng thôi bị làm chậm hoặc chặn ngay lập tức, và bị loại khỏi các lần huấn luyện sau.">
+  {# A link that names a source OPENS that source. `?ip=` is how the history
+     page, the audit log and the command palette all point at one address,
+     and landing on a page where the reason is still folded away makes the
+     reader hunt for the row they were just sent to. It is also what keeps
+     the Escape binding honest: the key exists on this page exactly when a
+     pane is open, because both come from the same condition. #}
+  {% for m in mitigations %}
+  {% set is_open = (selected and selected.ip == m.ip) %}
+  <div class="src">
+    <button type="button" class="src-h" data-why-toggle
+            aria-expanded="{{ 'true' if is_open else 'false' }}"
+            aria-controls="why-{{ loop.index }}">
+      <span>
+        <span class="src-ip">{{ m.ip }}</span>
+        <span class="src-sub">{{ m.severity }} · kết thúc {{ m.expires_label }}</span>
+      </span>
+      <span class="src-fig">{{ m.sigma_short }}</span>
+      {# The verdict is an ink mark plus a word: filled for blocked, hollow
+         for slowed. One hue means it can no longer be a colour. #}
+      <span class="verdict{{ '' if m.tier >= 2 else ' open' }}"><i></i>{{ m.tier_label }}</span>
+      {# Principle 1.5. The agent is asynchronous by architecture, so
+         "decided" and "in effect" are two facts, and a column showing one of
+         them is wrong about the other half the time it matters. #}
+      <span title="{{ m.reach.detail }}">{{ m.reach.label }}</span>
+      <span class="src-chev">▸ vì sao</span>
+    </button>
+
+    <div class="src-why" id="why-{{ loop.index }}" {% if not is_open %}hidden{% endif %}>
+      {% if m.features_breakdown %}
+      {# The one thing no competitor can show. A rule engine answers with a
+         rule id; an IP-reputation service answers with an opinion about
+         someone else's traffic. Neither has a per-customer baseline. #}
+      {% for f in m.features_breakdown %}
+      <div class="why-row">
+        <span class="why-n">{{ f.label }}</span>
+        <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+          <rect width="300" height="12" rx="2" fill="var(--surface-sunken)"/>
+          <rect class="grow" width="{{ f.width }}" height="12" rx="2" fill="var(--{{ f.tint }})"/>
+        </svg>
+        <span class="why-v">{{ f.value }} <span class="c-dim">so với {{ f.normal }}</span></span>
+        <span class="why-d{{ ' drives' if f.drives }}">{{ f.display }}</span>
+        {# The verb ON the evidence line, and on EVERY line that drives the
+           decision. Offering it only beside the strongest one makes an
+           operator scroll back to a button that belongs to a different
+           reason; offering it beside a feature sitting at +0.2 sigma would
+           invite them to attribute their reasoning to a line that had
+           nothing to do with it. #}
+        <span class="why-act-cell">
+          {% if f.drives %}
+          <button type="button" class="btn btn--sm"
+                  hx-post="/dashboard/ui/allowed/{{ m.ip }}?back=status&because={{ f.name }}"
+                  hx-target="body" hx-swap="none"
+                  hx-confirm="Cho qua {{ m.ip }} vì {{ f.label|lower }} của nó giải thích được? Nó thôi bị làm chậm hoặc chặn ngay, và bị loại khỏi các lần huấn luyện sau."
+                  aria-label="Cho qua {{ m.ip }} vì {{ f.label|lower }} giải thích được">
+            Giải thích được
+          </button>
+          {% endif %}
+        </span>
+      </div>
+      {% endfor %}
+      <p class="why-raw">
+        Điểm thô {{ "%.4f"|format(m.score) }} · {{ m.reason }} · {{ m.reach.detail }}
+      </p>
+      {% else %}
+      <p class="why-raw">
+        Phần tách theo đặc trưng cần những con số mà mô hình của bạn chưa
+        mang. Nó xuất hiện sau lần huấn luyện đêm kế tiếp.
+      </p>
+      {% endif %}
+      <div class="why-act">
+        {# data-key is the binding and it sits ON the control, so the key
+           does exactly what the button does, confirmation included. A hint
+           printed with no handler behind it teaches an operator to stop
+           trusting every other hint on the screen. #}
+        <button type="button" class="btn btn--p" {% if loop.first %}data-key="a"{% endif %}
+                hx-post="/dashboard/ui/allowed/{{ m.ip }}?back=status"
+                hx-target="body" hx-swap="none"
+                hx-confirm="Cho qua {{ m.ip }}? Nó thôi bị làm chậm hoặc chặn ngay lập tức, và bị loại khỏi các lần huấn luyện sau.">
+          Cho qua{% if loop.first %} <kbd>A</kbd>{% endif %}
+        </button>
+        <a class="btn" href="/dashboard/ui/history?ip={{ m.ip }}">Mọi đợt của nguồn này</a>
+        {# The hint and the binding are the same edit, and both are
+           conditional: a pane opened by script is closed by Escape through
+           why.js, but nothing is PRINTED about a key until the server has
+           actually rendered a pane open. A console that advertises a
+           shortcut for a state the page is not in teaches an operator to
+           stop trusting every other hint on the screen. #}
+        <button type="button" class="btn" data-why-toggle
+                {% if is_open %}data-key="Escape"{% endif %}
+                aria-expanded="true" aria-controls="why-{{ loop.index }}">
+          Đóng{% if is_open %} <kbd>Esc</kbd>{% endif %}
+        </button>
+        <label class="btn">
+          <input type="checkbox" name="ip" value="{{ m.ip }}" data-bulk-row
+                 aria-label="Chọn {{ m.ip }}"> Chọn
+        </label>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  {# Sticky, so selecting a row near the bottom of a long list does not push
+     that row out from under the pointer that just selected it. #}
+  <div class="c-bulkbar" data-bulk-bar hidden>
+    <span class="c-bulkbar-count" data-bulk-count aria-live="polite"></span>
+    <button type="submit" class="btn btn--p">Cho qua các nguồn đã chọn</button>
+  </div>
+  </form>
+  {% else %}
+  <p class="one">
+    {% if health.state == 'healthy' %}
+    Không có gì vượt cổng của bạn. Thang đo bên dưới cho biết sản phẩm hành
+    động ở đâu, nên một danh sách yên tĩnh là bằng chứng chứ không phải sự
+    vắng mặt của nó.
+    {% else %}
+    Không nguồn nào đang bị làm chậm hoặc bị chặn.
+    {% endif %}
+  </p>
+  {% endif %}
+</section>
+
+{# ---- cổng làm chậm ---------------------------------------------------- #}
+{% if axis_state.gates_armed %}
+{# Directly under the thing it moves, deliberately. The spec has one
+   non-negotiable here: the explanation and the control are the same object.
+   A settings page elsewhere would throw away the only thing this product
+   owns, which is that its explanation is already a coordinate on a scale,
+   and a coordinate can be moved. #}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Cổng làm chậm</h2>
+    <div class="sec-m">13 vị trí · bấm là dời</div>
+  </div>
+  <p class="one">
+    Mỗi dòng là <b>hệ quả</b> của việc chọn nó: bao nhiêu nguồn trong 24 giờ
+    qua đã ở tại hoặc vượt đường đó. Đặt thấp thì bắt được nhiều hơn, và từ
+    chối nhầm khách thật nhiều hơn.
+  </p>
+  {{ gate_macro.render(curve, 1, "Cổng làm chậm nằm ở đâu") }}
+  {% if pending %}
+  <p class="one" role="status">
+    Áp dụng từ lô telemetry kế tiếp của bạn. Mô hình vẫn đang mang
+    {{ "%.2f"|format(enforced_sigma)|replace(".", ",") }} sigma từ lần huấn
+    luyện gần nhất, và lần chạy đêm nay sẽ chép giá trị của bạn lên nó.
+  </p>
+  {% endif %}
+</section>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% import "_brand.html" as brand %}
+{% block title %}{{ code }} · Traffic Shaper{% endblock %}
+{% block body %}
+<div class="login-page">
+  <div class="card login-card err-card">
+    {{ brand.lockup(24, stacked=true) }}
+    <p class="err-code" aria-hidden="true">{{ code }}</p>
+    <h1>{{ heading }}</h1>
+    <p class="card-sub">{{ detail }}</p>
+    <p class="err-actions">
+      <a href="{{ back_url }}" class="btn btn-primary">{{ back_label }}</a>
+      <a href="/" class="btn">Home</a>
+    </p>
+    {% if request_id %}
+    {# Not decoration: this is the string a person can quote when asking
+       what happened, and the one that finds the invocation in CloudWatch. #}
+    <p class="field-hint">Reference: <code>{{ request_id }}</code></p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

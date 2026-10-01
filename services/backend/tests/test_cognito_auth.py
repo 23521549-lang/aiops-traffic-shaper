@@ -1,7 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
-from services.backend.api.cognito_auth import admin_auth, dashboard_auth
+from services.backend.api.cognito_auth import admin_claims, dashboard_auth
 from services.backend.tests.conftest import sign_test_token
 
 
@@ -69,13 +69,13 @@ def test_dashboard_auth_wrong_signing_key_is_401(cognito_test_keys):
 def test_admin_auth_requires_admin_group(cognito_test_keys):
     token = sign_test_token(cognito_test_keys["private_pem"], {"cognito:groups": ["user"]})
     with pytest.raises(HTTPException) as exc:
-        admin_auth(authorization=f"Bearer {token}", jwks=cognito_test_keys["jwks"])
+        admin_claims(authorization=f"Bearer {token}", jwks=cognito_test_keys["jwks"])
     assert exc.value.status_code == 403
 
 
 def test_admin_auth_passes_for_admin_group(cognito_test_keys):
     token = sign_test_token(cognito_test_keys["private_pem"], {"cognito:groups": ["admin"]})
-    admin_auth(authorization=f"Bearer {token}", jwks=cognito_test_keys["jwks"])  # no raise
+    admin_claims(authorization=f"Bearer {token}", jwks=cognito_test_keys["jwks"])  # no raise
 
 
 # --- Phase 4 findings H1 / L9: token confusion --------------------------
@@ -90,7 +90,7 @@ def test_admin_auth_rejects_cognito_access_token(cognito_test_keys):
     token = sign_test_token(cognito_test_keys["private_pem"],
                             {"token_use": "access", "cognito:groups": ["admin"]})
     with pytest.raises(HTTPException) as exc:
-        admin_auth(authorization=f"Bearer {token}", jwks=cognito_test_keys["jwks"])
+        admin_claims(authorization=f"Bearer {token}", jwks=cognito_test_keys["jwks"])
     assert exc.value.status_code == 401
 
 
@@ -162,9 +162,11 @@ def test_dashboard_auth_accepts_x_id_token_header(cognito_test_keys):
 def test_admin_auth_accepts_x_id_token_header(cognito_test_keys):
     token = sign_test_token(cognito_test_keys["private_pem"],
                             {"custom:tenant_id": "t-1", "cognito:groups": ["admin"]})
-    # admin_auth returns None and signals failure by raising; not raising IS
-    # the assertion.
-    admin_auth(x_id_token=token, jwks=cognito_test_keys["jwks"])
+    # It signals failure by raising; not raising IS the assertion.
+    # Called on admin_claims rather than admin_auth: the group check and the
+    # header reading live there now, and admin_auth is a thin wrapper that
+    # takes the claims it has already verified.
+    admin_claims(x_id_token=token, jwks=cognito_test_keys["jwks"])
 
 
 def test_a_real_bearer_header_still_wins_when_both_are_sent(cognito_test_keys):

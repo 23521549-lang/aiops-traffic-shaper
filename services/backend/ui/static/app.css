@@ -1,0 +1,394 @@
+/* AI Traffic Shaper — portal stylesheet.
+ *
+ * Extracted from a 116-line inline <style> in base.html. That block was the
+ * only reason main.py's CSP carried `style-src 'unsafe-inline'`; with it out
+ * here the directive tightens to `style-src 'self'` (ADR-007).
+ *
+ * Every colour is a token on :root. That is load-bearing, not tidiness: a
+ * dark theme is then a ~20-line override of :root alone, with no component
+ * touched.
+ *
+ * The tokens this file depends on now live in tokens.css, which base.html
+ * loads first. Nothing below declares a colour; every one is a var().
+ *
+ * This header used to end "dark is deliberately NOT shipped yet". Dark has
+ * shipped, with measured ratios and a regression test, and the sentence was
+ * left standing. A comment contradicted by the code beside it is the same
+ * defect as a screen contradicted by the product.
+ */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--text-body);
+  line-height: 1.55;
+  /* Set once, here. The product used to get equal-width digits for free by
+   * putting every number in a second, monospaced family; there is one
+   * family now, so the property has to be asked for - and there is nowhere
+   * in this product that wants proportional figures. */
+  font-variant-numeric: tabular-nums;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* One visible focus style for everything focusable. .btn and .nav-link
+ * previously had none at all, so a keyboard user could not see which
+ * destructive button they were about to activate. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* `clip` is deprecated and, more to the point, a <table> does not clip the
+ * way a block does: the sr-only tables that carry every chart's numbers
+ * were laying out at their full min-content width and pushing the page
+ * 45px past a 390px viewport. Found with a browser, not a test. Both
+ * properties are kept so the rule works either way, and the accompanying
+ * .sr-only-wrap puts a clipping BLOCK around any table that needs it. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%);
+  white-space: nowrap; border: 0;
+}
+.sr-only table { width: 1px; }
+
+/* Keyboard users land here first; it stays hidden until focused. */
+.skip-link {
+  position: absolute; left: 8px; top: -48px; z-index: 10;
+  background: var(--surface); color: var(--text);
+  padding: 10px 16px; border-radius: 8px; font-weight: 600;
+  border: 1px solid var(--border-interactive);
+  transition: top 120ms ease-out;
+}
+.skip-link:focus { top: 8px; text-decoration: none; }
+.sidebar {
+  width: 220px; flex-shrink: 0; background: var(--surface);
+  border-right: 1px solid var(--border); padding: 20px 16px;
+}
+.brand {
+  font-weight: 700; font-size: 15px; margin-bottom: 24px;
+  display: flex; align-items: center; gap: 8px;
+}
+/* Non-colour cue as well as colour: WCAG 1.4.1. The old .active was a
+ * #eef2ff fill at 1.12:1 against white — a cue only in theory. */
+.nav-link[aria-current="page"] {
+  background: var(--accent-subtle); color: var(--accent);
+  border-left-color: var(--accent); font-weight: 600;
+}
+.main { flex: 1; min-width: 0; }
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 16px 28px; border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.topbar h1 { font-size: var(--text-xl); line-height: 1.25; margin: 0; }
+.content { padding: 28px; max-width: 1180px; }
+
+/* --- cards ------------------------------------------------------------ */
+
+.card {
+  padding: 0; margin-bottom: 44px;
+  /* No fill, no border, no radius: the page is one surface, and a section is
+   * its heading plus the space around it. See the note on `.console`.
+   *
+   * Contains absolutely positioned descendants, notably `.sr-only`, which
+   * would otherwise anchor to the initial containing block and widen the
+   * page. See test_contrast.py. */
+  position: relative;
+}
+.card h2 { font-size: var(--text-lg); line-height: 1.25; margin: 0 0 4px; }
+.card .card-sub { color: var(--text-muted); font-size: var(--text-base); margin-bottom: 14px; }
+/* --- tables ----------------------------------------------------------- */
+
+/* WCAG 1.4.10: at 320px a 5-column table of IPs and timestamps is wider
+ * than the viewport. The data-table exception lets the TABLE scroll; it
+ * does not let the page scroll. tabindex makes it reachable by keyboard,
+ * which an overflow container otherwise is not. */
+/* position: relative is load-bearing, not tidiness. `.sr-only` is
+ * absolutely positioned, and with no positioned ancestor it anchors to the
+ * initial containing block instead of the scroll container: the hidden
+ * "Actions" label in a table header was landing at x=450 on a 390px screen
+ * and dragging the whole page sideways with it. Found with a browser
+ * walking the rendered box tree; no unit test can see this. */
+.table-scroll { overflow-x: auto; position: relative; }
+.table-scroll:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+table { width: 100%; border-collapse: collapse; }
+th {
+  text-align: left; font-size: var(--text-sm); text-transform: uppercase;
+  letter-spacing: .03em; color: var(--text-muted);
+  padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+th[scope="row"] {
+  text-transform: none; letter-spacing: normal; font-size: var(--text-base);
+  color: var(--text); font-weight: 500; padding: 7px 10px;
+}
+tr:last-child td, tr:last-child th[scope="row"] { border-bottom: none; }
+tbody tr:hover { background: var(--bg); }
+
+/* Third redundant channel for a blocked row, after the badge word and the
+ * sigma figure. Survives greyscale, screenshots, and red-green deficiency. */
+tbody tr[data-tier="2"] th[scope="row"] { border-left: 3px solid var(--tier-blocked-edge); }
+tbody tr[data-tier="1"] th[scope="row"] { border-left: 3px solid var(--tier-limited); }
+
+.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* --- badges ----------------------------------------------------------- */
+
+.badge {
+  display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: var(--text-sm); font-weight: 600; white-space: nowrap;
+}
+.badge-blocked { background: var(--tier-field); color: var(--tier-blocked); }
+.badge-slowed { background: var(--tier-field); color: var(--tier-limited); }/* --- buttons ---------------------------------------------------------- */
+
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--border-interactive);
+  background: var(--surface); color: var(--text); padding: 7px 14px; border-radius: 8px;
+  font-size: var(--text-base); font-weight: 600; cursor: pointer;
+}
+.btn:hover { background: var(--bg); text-decoration: none; }
+.btn[disabled], .btn[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+/* Dark flips the accent from a deep teal to a bright cyan, so the label on
+ * a filled control has to flip too: white on #38bfd4 is 1.88:1, ink on it
+ * is 7.96:1. The token system handles every other colour automatically;
+ * this is the one pairing that genuinely inverts. */
+[data-theme="dark"] .btn-primary { color: var(--ink); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .btn-primary { color: var(--ink); }
+}
+.btn-primary:hover { background: var(--accent-hover); }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: var(--text-sm); font-weight: 600; color: var(--text-muted); }
+.field-hint { font-size: var(--text-sm); color: var(--text-muted); }.req { color: var(--danger); font-weight: 700; }
+
+input[type=text], input[type=password], select {
+  padding: 8px 10px; border: 1px solid var(--border-interactive); border-radius: 8px;
+  font-size: var(--text-base); min-width: 200px;
+  background: var(--surface); color: var(--text);
+}
+
+/* --- states ----------------------------------------------------------- */
+
+.empty-state { text-align: center; padding: 36px 20px; color: var(--text-muted); }
+.empty-state h3 { color: var(--text); font-size: var(--text-lg); margin: 0 0 6px; }
+.empty-state p { margin: 0 auto; max-width: 52ch; }
+.empty-state .dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  margin-right: 7px; vertical-align: middle;
+}
+.alert {
+  padding: 12px 16px; border-radius: 8px; margin-bottom: 18px;
+  font-size: var(--text-base); font-weight: 500;
+}.alert-danger { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger-border); }.alert:empty { display: none; }
+
+/* --- sigma legend ----------------------------------------------------- */
+
+/* Renders in the empty state too, so a customer with zero mitigations still
+ * learns what the product will do before it does it. */
+
+/* --- htmx in-flight feedback ------------------------------------------ */
+
+/* htmx is configured with includeIndicatorStyles:false (ADR-007) so it does
+ * not inject an inline <style> — that injection is what would have forced
+ * style-src back open. These are the same class names it toggles. */
+.htmx-indicator { opacity: 0; transition: opacity 150ms ease-in; }
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }
+.htmx-request[aria-busy="true"] { cursor: progress; }
+/* Deliberately NOT an opacity fade on the content: fading a table to 0.4
+ * multiplies every contrast ratio in it against the backdrop and drops it
+ * to roughly 2:1 for as long as it is displayed. */
+.htmx-swapping { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* --- reflow ----------------------------------------------------------- */
+
+@media (max-width: 720px) {.sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
+  .content { padding: 16px; }
+  .topbar { padding: 14px 16px; flex-wrap: wrap; }
+}
+
+/* --- login ------------------------------------------------------------ */
+
+.login-page {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+/* The exception, and the only one. Everywhere else a card was a section of
+ * a page and the box around it drew a line the reader had to cross for
+ * nothing. Sign-in is not a section of anything: it is one task alone on an
+ * empty page, and the surface under it is what says where the task is. */
+.login-card, .err-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px;
+}
+.login-card { width: 100%; max-width: 380px; }
+.login-card .brand { margin-bottom: 18px; }
+.login-card h1 { font-size: var(--text-lg); line-height: 1.25; margin: 0 0 14px; }
+.login-field { margin-bottom: 14px; }
+.login-field input { width: 100%; min-width: 0; }
+.login-submit { width: 100%; justify-content: center; }
+.stack-sm { margin-top: 8px; }
+.progress {
+  height: 8px; border-radius: 999px; background: var(--bg);
+  overflow: hidden; margin: 10px 0 6px;
+}
+.progress > span { display: block; height: 100%; background: var(--accent); }/* Bar widths as data-attribute rules rather than inline style="width:..".
+ * CSP `style-src 'self'` blocks inline style attributes, and a width is the
+ * one thing a stylesheet genuinely cannot know ahead of time. Five-percent
+ * buckets are finer than the bar is readable. */
+.meter > span[data-width="0"], .progress > span[data-width="0"] { width: 0%; }
+.meter > span[data-width="5"], .progress > span[data-width="5"] { width: 5%; }
+.meter > span[data-width="10"], .progress > span[data-width="10"] { width: 10%; }
+.meter > span[data-width="15"], .progress > span[data-width="15"] { width: 15%; }
+.meter > span[data-width="20"], .progress > span[data-width="20"] { width: 20%; }
+.meter > span[data-width="25"], .progress > span[data-width="25"] { width: 25%; }
+.meter > span[data-width="30"], .progress > span[data-width="30"] { width: 30%; }
+.meter > span[data-width="35"], .progress > span[data-width="35"] { width: 35%; }
+.meter > span[data-width="40"], .progress > span[data-width="40"] { width: 40%; }
+.meter > span[data-width="45"], .progress > span[data-width="45"] { width: 45%; }
+.meter > span[data-width="50"], .progress > span[data-width="50"] { width: 50%; }
+.meter > span[data-width="55"], .progress > span[data-width="55"] { width: 55%; }
+.meter > span[data-width="60"], .progress > span[data-width="60"] { width: 60%; }
+.meter > span[data-width="65"], .progress > span[data-width="65"] { width: 65%; }
+.meter > span[data-width="70"], .progress > span[data-width="70"] { width: 70%; }
+.meter > span[data-width="75"], .progress > span[data-width="75"] { width: 75%; }
+.meter > span[data-width="80"], .progress > span[data-width="80"] { width: 80%; }
+.meter > span[data-width="85"], .progress > span[data-width="85"] { width: 85%; }
+.meter > span[data-width="90"], .progress > span[data-width="90"] { width: 90%; }
+.meter > span[data-width="95"], .progress > span[data-width="95"] { width: 95%; }
+.meter > span[data-width="100"], .progress > span[data-width="100"] { width: 100%; }
+
+/* --- charts ----------------------------------------------------------- */
+
+/* Colour lives here, geometry lives in the markup. SVG presentation
+ * attributes (x, y, width, points, d) are not CSS so CSP does not touch
+ * them; fill and stroke go through a class so every chart themes, prints
+ * and follows a future high-contrast mode instead of freezing a hex. */
+
+.chart { margin: 0; }
+.chart svg { width: 100%; height: auto; display: block; }
+.chart-caption {
+  font-size: var(--text-sm); color: var(--text-muted); margin-top: var(--s2);
+}
+
+.c-spark { width: 80px; height: 20px; }
+.c-spark-line { stroke: var(--accent); stroke-width: 1.5; }
+
+/* At phone width the per-bucket time labels are unreadable before they are
+ * unhelpful, so they go rather than being shrunk. The bars stay. */
+@media (max-width: 520px) {
+  .c-dense-only { display: none; }
+}
+
+/* --- brand ------------------------------------------------------------ */
+
+.mark { width: 20px; height: 20px; flex-shrink: 0; }
+.mark-baseline path, .mark-baseline rect { fill: currentColor; }
+/* The tip is the product: an anomaly separated from its baseline, drawn as
+ * an absence. It is brand, not status — the one place the "accent never
+ * carries state" rule is suspended, because the mark is not in the state
+ * machine. */
+.mark-tip path, .mark-tip rect { fill: var(--accent); }
+.on-ink .mark-tip path, .on-ink .mark-tip rect { fill: var(--brand-cyan); }
+
+.wordmark {
+  font: 600 15px/1 var(--font-sans);
+  letter-spacing: .10em; text-transform: uppercase; white-space: nowrap;
+}
+.wordmark span { font-weight: 400; color: var(--text-muted); }
+.on-ink .wordmark span { color: var(--ink-muted); }
+.lockup { display: flex; align-items: center; gap: 10px; }
+.lockup-stacked { flex-direction: column; gap: 14px; text-align: center; }
+.lockup-stacked .mark { width: 44px; height: 44px; }
+.lp-nav .btn {
+  background: transparent; color: var(--ink-fg); border-color: var(--ink-muted);
+}
+.lp-nav .btn:hover { background: rgba(255, 255, 255, .08); }.glyph-sigma { vertical-align: middle; }
+
+/* 320px: the hero headline is the one thing that must not wrap into a wall.
+ * Everything else stacks from the single-column defaults above. */
+.login-alt { margin-top: var(--s5); border-top: 1px solid var(--border); padding-top: var(--s3); }
+.login-alt summary {
+  cursor: pointer; font-size: var(--text-base); color: var(--text-muted);
+  font-weight: 600;
+}
+.login-alt summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.login-alt form { margin-top: var(--s3); }
+.login-card .lockup-stacked { margin-bottom: var(--s5); }
+
+/* --- error pages ------------------------------------------------------ */
+
+.err-card { text-align: center; max-width: 420px; }
+.err-code {
+  font-size: var(--text-3xl); font-weight: 700;
+  color: var(--text-muted); margin: 0; line-height: 1;
+}
+.err-card h1 { font-size: var(--text-xl); margin: var(--s3) 0 var(--s2); }
+.err-actions { display: flex; gap: var(--s2); justify-content: center; margin: var(--s5) 0 var(--s3); }
+
+/* --- corrections found by screenshot, not by test --------------------- */
+
+/* `.num` means "this cell holds numerals": tabular figures, right-aligned,
+ * never wrapped. A prose sentence was wearing that class, so
+ * "Far outside your normal · 6.4σ" could not wrap at ANY width and pushed
+ * the table past the viewport. On a 390px screen that carried the "Allow
+ * this IP" button off the right edge, which made the single most urgent
+ * action in the product unreachable on a phone. */
+.num { white-space: normal; }
+.severity { color: var(--text); }
+@media (max-width: 720px) { .severity { min-width: 14ch; } }
+
+/* A column flex container whose child has a min-content wider than the
+ * viewport produces page-level horizontal scroll. Block layout cannot. */
+@media (max-width: 720px) {.sidebar, .main, .content, .card, .table-scroll { min-width: 0; max-width: 100%; }
+}
+
+/* The cards barely existed: --border was 1.29:1 against --surface, so a card
+ * read as a floating rectangle rather than a bounded region. Still
+ * decorative, still far below the 3:1 that 1.4.11 asks of an interactive
+ * boundary, and test_contrast.py does not assert on it because it is never
+ * a foreground. */
+:root { --border: #d3dbe4; }
+
+/* Row hover was --bg on --surface: a 1.10:1 change. That is not a hover
+ * state, it is a rumour. --surface-sunken is already in the token set and
+ * already measured with --text-muted on it at 5.37:1. */
+tbody tr:hover { background: var(--surface-sunken); }
+tbody tr[aria-selected="true"] { background: var(--accent-subtle); }
+
+/* Carbon's md density is 40px with 14px text. The tables were at ~34px,
+ * denser than anything in Carbon except xs, on pages that were 70% empty.
+ * The problem was never density. */
+td, th[scope="row"], th { padding: 10px 12px; }
+
+/* Every console screenshot sits visibly off-centre: 28px from the sidebar
+ * and 69px from the right edge, because max-width had no auto margin. */
+.content { padding: 24px 32px 64px; max-width: 1440px; margin-inline: auto; }
+
+/* Email and Password rendered at different heights on the login card: no
+ * explicit height, so the 2px focus outline plus its offset changed the
+ * focused field's optical box. The min-width also belongs on the field, not
+ * the control, or the control cannot shrink inside a narrow form. */
+input[type=text], input[type=password], input[type=email], select {
+  height: 38px; padding: 0 12px; min-width: 0;
+}
+.field { min-width: 220px; }

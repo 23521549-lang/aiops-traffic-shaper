@@ -75,7 +75,7 @@ curl -X POST "$BASE/agent/v1/telemetry"   -H "content-type: application/json"   
 |---|---|---|---|---|---|---|
 | GET | /dashboard/v1/mitigations | Active rate-limit/block decisions for the caller's own tenant | Cognito JWT | — | `MitigationState[]` | 401 |
 | GET | /dashboard/v1/whitelist | List whitelisted IPs | Cognito JWT | — | `{"whitelisted_ips": str[]}` | 401 |
-| POST | /dashboard/v1/whitelist | Add IP to whitelist + training exclusion | Cognito JWT | `WhitelistRequest` | `{"message": str}` | 401, 422 |
+| POST | /dashboard/v1/whitelist | Add IP to whitelist, and clear any mitigation already in force for it | Cognito JWT | `WhitelistRequest` | `{"message": str}` | 401, 422 |
 | DELETE | /dashboard/v1/whitelist/{ip} | Remove IP from whitelist | Cognito JWT | — | `{"message": str}` | 401, 404 |
 | GET | /dashboard/v1/model/status | This tenant's own model metadata | Cognito JWT | — | `ModelStatus` | 401 |
 
@@ -206,10 +206,37 @@ Stage 9 added server-rendered HTML pages served by the same Lambda:
 `/admin/ui*`. They are listed here only so nobody mistakes them for missing
 API: they return HTML, authenticate via the `id_token` cookie, and their
 state-changing requests additionally require a CSRF double-submit token
-(`X-CSRF-Token` echoing the `csrf_token` cookie). The JSON API deliberately has
-no CSRF requirement — a cross-site form cannot set an `Authorization` header,
-and demanding a token there would break the agent CLI for no security gain.
+(`X-CSRF-Token` echoing the `csrf_token` cookie).
+
+The JSON API used to be described here as needing no CSRF requirement, because
+"a cross-site form cannot set an `Authorization` header". That was wrong:
+`dashboard_auth` and `admin_auth` also accept the `id_token` **cookie**, so a
+browser session authenticates against `/dashboard/v1/*` and `/admin/v1/*` too.
+State-changing JSON routes now use `verify_csrf_if_cookie_auth`, which exempts
+any caller presenting its credential in a header — the agent CLI, curl, and the
+portal's own `X-Id-Token` fetches — and requires the double-submit token from a
+caller authenticating by cookie alone.
 
 *Contract verified against the implementation on 2026-08-24 (Phase 6 gate row
 2). The four drifts found — telemetry 429/403, register 403, decisions 403, and
 suspend's `agents_revoked` — are corrected above.*
+
+
+## Correction, 2026-09-23
+
+This document described `POST /dashboard/v1/whitelist` as performing
+"whitelist + training exclusion", and explained elsewhere that the two older
+endpoints were merged precisely to remove the footgun of having one IP
+excluded from mitigation and not from training.
+
+The implementation never did the second half. `add_whitelist`
+(`services/backend/api/routes/dashboard.py`) writes the `Whitelist` row and
+deletes the `MitigationState` row, and `flag_all_for_ip` is called from
+exactly one place in the product: the admin-only
+`/admin/v1/tenants/{id}/training-exclude/{ip}` route. So the footgun the
+merge was meant to remove is still present, pointing the other way.
+
+The row above now says what the code does. Wiring training exclusion into
+the whitelist path is tracked separately, because `flag_all_for_ip` had to be
+bounded first — it wrote one `UpdateItem` per telemetry bucket with no limit,
+which for a continuously-active IP is ~18,000 synchronous writes.

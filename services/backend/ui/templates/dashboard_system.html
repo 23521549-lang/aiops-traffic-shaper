@@ -1,0 +1,86 @@
+{% extends "app_shell.html" %}
+{% import "_system.html" as system %}
+{% block title %}Cách hoạt động · Traffic Shaper{% endblock %}
+{% block page_title %}Cách hoạt động{% endblock %}
+{% block page_summary %}
+Agent chạy ở đâu, cái gì ghi luật, và vì sao tất cả tốn <b>0 đồng</b>
+{% endblock %}
+{% block page_content %}
+
+{% if sys %}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Vòng lặp, từ đầu tới cuối</h2>
+    <div class="sec-m">một chu kỳ là 5 giây · 0 request từ trang này</div>
+  </div>
+  <p class="one">
+    Một console hỏi máy chủ mỗi 5 giây sẽ ăn <b>52% trần request cả ngày của
+    toàn tài khoản</b>, và chạm trần thì nền tảng từ chối telemetry của mọi
+    khách hàng. Nên trang này không hỏi máy chủ điều gì.
+  </p>
+  {{ system.render(sys) }}
+</section>
+{% else %}
+<section class="sec">
+  <div class="sec-h"><h2 class="sec-t">Chưa có agent nào được cài</h2></div>
+  <p class="one">
+    Bốn cái hộp và một nhịp đập sẽ nói rằng bộ máy đang quay. Chưa có gì
+    được cài cả.
+  </p>
+</section>
+{% endif %}
+
+{# ---- nền tảng này điều khiển được gì ---------------------------------- #}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Nền tảng này điều khiển được những gì</h2>
+    <div class="sec-m">{{ caps|length }} mục · {{ caps|selectattr("state", "equalto", "có")|list|length }} đã có</div>
+  </div>
+  <p class="one">
+    Cột cuối là phần đáng đọc nhất: <b>một nền tảng miễn phí được định nghĩa
+    bằng thứ nó từ chối làm</b> nhiều hơn thứ nó làm.
+  </p>
+  <div class="tbl-wrap" tabindex="0" role="region" aria-label="Khả năng của nền tảng">
+  <table class="tbl tbl--notes">
+    <thead>
+      <tr><th>Nhóm</th><th>Điều khiển</th><th>Trạng thái</th><th>Ghi chú</th></tr>
+    </thead>
+    <tbody>
+      {% for c in caps %}
+      <tr>
+        <th scope="row">{{ c.group }}</th>
+        <td>{{ c.name }}</td>
+        <td>
+          {# The three states are an ink mark plus a word, like every other
+             verdict in this product. "Bị từ chối" is the one that earns the
+             page: a control we could add and will not, with the reason. #}
+          <span class="verdict{{ '' if c.state == 'có' else ' open' }}"><i></i>{{ c.state }}</span>
+        </td>
+        <td class="c-dim">{{ c.note }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+{# ---- ngân sách -------------------------------------------------------- #}
+{% if budget %}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Ngân sách hôm nay</h2>
+    <div class="sec-m">{{ "{:,}".format(budget.used).replace(",", ".") }} trên {{ "{:,}".format(budget.quota).replace(",", ".") }}</div>
+  </div>
+  <svg class="plot" viewBox="0 0 520 74" role="img"
+       aria-label="{{ budget.used }} trên phần {{ budget.quota }} request của bạn hôm nay">
+    <rect x="0" y="14" width="520" height="28" rx="3" fill="var(--t1)"/>
+    <rect class="grow" x="0" y="14" width="{{ budget.width }}" height="28" rx="3" fill="var(--t5)"/>
+    <text x="0" y="8" font-size="11" fill="var(--text-muted)">{{ "{:,}".format(budget.used).replace(",", ".") }} đã dùng</text>
+    <text x="520" y="8" font-size="11" fill="var(--text-muted)" text-anchor="end">{{ "{:,}".format(budget.quota).replace(",", ".") }} phần của bạn</text>
+    <text x="0" y="64" font-size="12" fill="var(--text-muted)">Chạm trần thì nền tảng
+      <tspan font-weight="600" fill="var(--text)">TỪ CHỐI việc, chứ không tính tiền.</tspan></text>
+  </svg>
+</section>
+{% endif %}
+
+{% endblock %}

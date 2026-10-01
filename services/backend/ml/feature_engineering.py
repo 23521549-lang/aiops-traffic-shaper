@@ -1,5 +1,5 @@
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from services.backend.core.tables import TelemetryEventsTable
 
@@ -141,10 +141,32 @@ def compute_features_for_ip(resource, tenant_id: str, ip: str, bucket_seconds: i
     )
 
 
+@dataclass
+class TrainingSet:
+    """What the walk produced, and what it left out.
+
+    The counts are the point. A whitelisted IP's buckets are dropped from the
+    definition of normal permanently, which is correct and is also a real
+    cost the customer pays: remove your largest traffic source from your own
+    baseline and sigma for everything that remains goes up. Counted here
+    because this is the one place that already knows, inside a job already
+    walking every bucket. Nothing downstream has to estimate it.
+
+    The two exclusions are counted separately and must stay separate: one is
+    the customer's own choice and the other is the system defending itself.
+    """
+    vectors: list[list[float]] = field(default_factory=list)
+    excluded_whitelist: int = 0
+    excluded_flagged: int = 0
+
+    def __len__(self) -> int:
+        return len(self.vectors)
+
+
 def collect_training_vectors(resource, tenant_id: str, bucket_seconds: int = BUCKET_SECONDS,
                               min_requests_threshold: int = 3, since_ts: int = 0,
                               exclude_ips: set[str] | frozenset[str] = frozenset(),
-                              ) -> list[list[float]]:
+                              ) -> TrainingSet:
     """Gathers this tenant's accumulated telemetry buckets (via the
     TenantIndex GSI, Stage 7) and turns each into one independent training
     sample — unlike compute_features_for_ip()'s real-time blended window,
@@ -152,7 +174,8 @@ def collect_training_vectors(resource, tenant_id: str, bucket_seconds: int = BUC
     existed to stop an attacker gaming a single live decision, not to
     describe training data)."""
     items = TelemetryEventsTable(resource).query_since(tenant_id, since_ts)
-    vectors: list[list[float]] = []
+    out = TrainingSet()
+    vectors = out.vectors
     for item in items:
         # Two exclusions, and both are about what "normal" is allowed to mean.
         #
@@ -168,8 +191,10 @@ def collect_training_vectors(resource, tenant_id: str, bucket_seconds: int = BUC
         # has been granted whitelist reads since Stage 7 for this. Only the
         # code was missing.
         if item.get("flagged"):
+            out.excluded_flagged += 1
             continue
         if item.get("ip", "") in exclude_ips:
+            out.excluded_whitelist += 1
             continue
         vec = _vector_from_counts(
             item.get("ip", ""), bucket_seconds, min_requests_threshold,
@@ -183,4 +208,4 @@ def collect_training_vectors(resource, tenant_id: str, bucket_seconds: int = BUC
         )
         if vec is not None:
             vectors.append(vec.to_list())
-    return vectors
+    return out

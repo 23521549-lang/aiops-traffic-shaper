@@ -1,0 +1,52 @@
+{# Swapped in by htmx. The summary sentence is what gets announced, not the
+   table: putting aria-live on the table makes every swap re-read every row. #}
+<p class="field-error" data-live role="alert">{{ error or "" }}</p>
+<p class="field-hint" data-live>{{ message or "" }}</p>
+
+{% if whitelist %}
+<div class="tbl-wrap" tabindex="0" role="region"
+     aria-label="Các địa chỉ được cho qua">
+  <table class="tbl">
+    <caption class="sr-only">Các địa chỉ được cho qua, mới nhất trước</caption>
+    <thead>
+      <tr>
+        <th scope="col">Địa chỉ</th>
+        <th scope="col">Lý do</th>
+        <th scope="col">Ai cho qua</th>
+        <th scope="col">Thêm lúc</th>
+        <th scope="col"><span class="sr-only">Thao tác</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in whitelist %}
+      <tr>
+        <th scope="row">{{ entry.ip }}</th>
+        {# The form has always collected a reason and stored it. Nothing read
+           it back, so the field hint promised a column that did not exist. #}
+        <td>{% if entry.reason %}{{ entry.reason }}{% else %}<span class="c-dim">không ghi</span>{% endif %}</td>
+        {# Written from the verified token since Phase 0 and never read back,
+           so "who let this address in" had no answer on any screen. #}
+        <td>{% if entry.added_by %}{{ entry.added_by }}{% else %}<span class="c-dim">không lưu lại</span>{% endif %}</td>
+        <td class="d" title="{{ entry.added_exact }}">{{ entry.added }}</td>
+        <td class="ctl-b">
+          <button type="button" class="btn btn--sm btn--d"
+                  hx-delete="/dashboard/ui/allowed/{{ entry.ip }}"
+                  hx-target="#whitelist-table" hx-swap="innerHTML"
+                  hx-confirm="Bỏ {{ entry.ip }} khỏi danh sách? Từ request kế tiếp nó được chấm như mọi địa chỉ khác, và có thể bị làm chậm hoặc chặn lại trong vài giây."
+                  aria-label="Bỏ {{ entry.ip }} khỏi danh sách cho qua">Bỏ</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="one">
+  <strong>Chưa cho qua địa chỉ nào</strong>
+  <p>
+    Bạn không cần có mục nào ở đây mới được bảo vệ. Thêm một mục khi bạn
+    nhận ra thứ vừa bị làm chậm hoặc chặn là của mình, hoặc để duyệt trước
+    máy giám sát uptime và các đợt test tải trước khi chúng chạm vào bộ đo.
+  </p>
+</div>
+{% endif %}

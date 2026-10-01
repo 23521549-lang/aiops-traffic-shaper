@@ -1,0 +1,44 @@
+{% macro render(curve, tier, title) %}
+{# Thirteen rows, not a slider.
+
+   A drag shows one outcome at a time and hides the other twelve behind a
+   gesture; the gate has exactly thirteen legal positions, so every answer is
+   on screen at once and the operator reads rather than hunts. It is also
+   keyboard-operable with no extra work, and at 390px it is a list rather
+   than a hit target on a thin axis.
+
+   Each row is a body-less POST: the values ride in the query string, so
+   CloudFront's OAC needs no x-amz-content-sha256 (ADR-005) and signed-post.js
+   keeps its single caller. The transport is htmx, the same as every other
+   mutation in this console - the CSRF token is inherited from the hx-headers
+   on the console wrapper, which a plain form has no way to send. #}
+<div class="gate" role="group" aria-label="{{ title }}">
+  {% for o in curve %}
+  <button type="button" class="gate-row"
+          {% if o.current %}aria-current="true"{% endif %}
+          hx-post="/dashboard/ui/gate?tier={{ tier }}&sigma={{ o.sigma }}"
+          hx-target="body" hx-swap="none"
+          hx-confirm="Dời cổng tới {{ '%.2f'|format(o.sigma) }} sigma? {{ '{:,}'.format(o.count) }} nguồn đo được trong 24 giờ qua đã ở tại hoặc vượt đường đó.">
+    <span>{{ "%.2f"|format(o.sigma)|replace(".", ",") }} sigma</span>
+    {# preserveAspectRatio="none" is safe here and nowhere near the sigma
+       field: this box holds two rectangles and no circle and no type, so
+       there is nothing in it a stretch can distort. #}
+    <svg class="gate-track" viewBox="0 0 100 8" preserveAspectRatio="none"
+         aria-hidden="true" focusable="false">
+      <rect class="gate-rail" x="0" y="0" width="100" height="8" rx="1"/>
+      <rect class="gate-bar grow" x="0" y="0" width="{{ (o.width * 100)|round(2) }}"
+            height="8" rx="1"/>
+    </svg>
+    <span class="gate-n">{{ "{:,}".format(o.count) }}</span>
+    {# The row already in force says so in words. Weight and an accent stroke
+       mark it as well, but neither of those can be read out to the person on
+       the other end of a phone call who actually owns the threshold. #}
+    {% if o.current %}
+    <span class="gate-note">đang dùng</span>
+    {% elif not o.recommended %}
+    <span class="gate-note">báo nhầm nhiều hơn</span>
+    {% endif %}
+  </button>
+  {% endfor %}
+</div>
+{% endmacro %}

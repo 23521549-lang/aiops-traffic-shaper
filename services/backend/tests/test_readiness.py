@@ -24,8 +24,15 @@ def test_ready_when_tables_exist_and_cognito_is_configured(dynamo_resource):
     create_all_tables(dynamo_resource)
     resp = _client(dynamo_resource).get("/ready")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ready",
-                           "checks": {"dynamodb": True, "cognito_config": True}}
+    body = resp.json()
+
+    assert body["status"] == "ready"
+    assert body["checks"] == {"dynamodb": True, "cognito_config": True}
+    # Reported separately and deliberately not gating: an unset contact
+    # address makes the landing page quieter, not broken, and taking a
+    # serving instance out of rotation over a marketing link would be the
+    # larger mistake. A deploy gate that wants to refuse it can read this.
+    assert "access_request_email" in body["warnings"]
 
 
 def test_not_ready_when_the_tables_have_never_been_created(dynamo_resource):

@@ -5,7 +5,10 @@ import numpy as np
 from sklearn.ensemble import IsolationForest
 
 from services.backend.ml.feature_engineering import FEATURE_NAMES
-from services.backend.ml.registry import ModelMetadata, save_model
+from services.backend.core.tables import TenantsTable
+from services.backend.ml.registry import (
+    TIER1_Z_DEFAULT, TIER2_Z_DEFAULT, ModelMetadata, save_model,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +24,8 @@ N_ESTIMATORS = 50  # ADR-002 measured constraint — do not raise without
 
 
 def train_and_save(resource, tenant_id: str, feature_vectors: list[list[float]],
-                    stage: str = "staging", contamination: float = 0.01) -> ModelMetadata | None:
+                    stage: str = "staging", contamination: float = 0.01,
+                    excluded_whitelist: int | None = None) -> ModelMetadata | None:
     if len(feature_vectors) < MIN_TRAINING_SAMPLES:
         logger.warning(
             "Insufficient training data for tenant=%s: have=%d need=%d",
@@ -39,6 +43,10 @@ def train_and_save(resource, tenant_id: str, feature_vectors: list[list[float]],
 
     scores = model.decision_function(X)
     version = datetime.now(timezone.utc).strftime("v%Y%m%d%H%M%S")
+    tenant = TenantsTable(resource).get(tenant_id=tenant_id) or {}
+    tier1_z = float(tenant.get("tier1_z", TIER1_Z_DEFAULT))
+    tier2_z = float(tenant.get("tier2_z", TIER2_Z_DEFAULT))
+
     metadata = ModelMetadata(
         version=version,
         trained_at=datetime.now(timezone.utc).isoformat(),
@@ -48,6 +56,22 @@ def train_and_save(resource, tenant_id: str, feature_vectors: list[list[float]],
         score_std=float(np.std(scores)),
         features=FEATURE_NAMES,
         stage=stage,
+        # Two numpy calls on an array that is already in memory and already
+        # fitted. Fourteen floats on a write that happens once per tenant
+        # per night.
+        feature_means=[float(v) for v in np.mean(X, axis=0)],
+        feature_stds=[float(v) for v in np.std(X, axis=0)],
+        # Copied from Tenants, which is where the operator's value of record
+        # lives. Storing it only here would mean this very function silently
+        # reverted it every night.
+        tier1_z=tier1_z,
+        tier2_z=tier2_z,
+        # How many measured buckets the allowed list kept out of this
+        # baseline. Counted in the walk that already happened, carried on an
+        # item already being written. None where the caller did not measure
+        # it, which the console reads as "not measured yet" rather than as
+        # zero: those are different claims and one of them is a lie.
+        excluded_whitelist_buckets=excluded_whitelist,
     )
 
     save_model(resource, tenant_id, model, metadata, stage=stage)

@@ -1,29 +1,58 @@
 {% extends "base.html" %}
-{% block title %}Log in — AI Traffic Shaper{% endblock %}
+{% import "_brand.html" as brand %}
+{% block title %}Đăng nhập · Traffic Shaper{% endblock %}
 {% block body %}
-<div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;">
-  <div class="card" style="width: 100%; max-width: 380px;">
-    <div class="brand" style="margin-bottom: 18px;"><span class="brand-dot"></span> AI Traffic Shaper</div>
-    <h2>Sign in</h2>
-    <p class="card-sub">Paste the Cognito ID token from your login session.</p>
+<div class="login-page">
+  <div class="card login-card">
+    {{ brand.lockup(24, stacked=true) }}
+    <h1>Đăng nhập</h1>
 
-    {% if error %}
-    <div class="alert alert-danger">{{ error }}</div>
-    {% endif %}
+    {# role="alert" AND tabindex="-1": the alert role announces it, and
+       signed-post.js moves focus here afterwards. A live region inserted
+       along with its own document is never announced, which is why the
+       previous version — which replaced document.documentElement on a
+       failed sign-in — produced complete silence for a screen-reader user
+       at the front door of the product. #}
+    <div class="alert alert-danger" data-post-error role="alert" tabindex="-1"
+         {% if not error %}hidden{% endif %}>{{ error or "" }}</div>
 
+    {# One of two POSTs in the product that must carry a real body: a token
+       in a query string lands in access logs, Referer headers and browser
+       history. The other is tenant creation, which carries somebody else's
+       email address. data-signed-post routes both through the shim that
+       computes the payload hash CloudFront's OAC requires. #}
     <form method="post" action="/ui/login" data-signed-post>
-      <div class="field" style="margin-bottom: 14px;">
-        <label for="id_token">ID token</label>
-        <input type="password" id="id_token" name="id_token" style="width: 100%; min-width: 0;" required autofocus>
+      <div class="field login-field">
+        <label for="email">Email <span class="req" aria-hidden="true">*</span></label>
+        <input type="email" id="email" name="email" autocomplete="username"
+               autofocus required>
       </div>
-      <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">Sign in</button>
+      <div class="field login-field">
+        <label for="password">Mật khẩu <span class="req" aria-hidden="true">*</span></label>
+        <input type="password" id="password" name="password"
+               autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="btn btn-primary login-submit">Đăng nhập</button>
     </form>
 
-    <p class="card-sub" style="margin-top: 16px; margin-bottom: 0;">
-      Known v1 gap: there is no Cognito Hosted UI redirect flow yet — this
-      is the same token-paste shortcut the agent CLI's <code>--token</code>
-      flag uses. A full OAuth login screen is future work.
-    </p>
+    {# Kept, not featured. The agent CLI's published `register --token`
+       workflow hands out an ID token, so removing this would break an
+       install flow that is already documented. #}
+    <details class="login-alt">
+      <summary>Đăng nhập bằng ID token</summary>
+      <form method="post" action="/ui/login" data-signed-post>
+        <div class="field login-field">
+          <label for="id_token">Cognito ID token</label>
+          <input type="password" id="id_token" name="id_token"
+                 autocomplete="off" aria-describedby="id_token-hint">
+          <span class="field-hint" id="id_token-hint">
+            Dành cho CLI của agent và cho truy cập bằng script.
+          </span>
+        </div>
+        <button type="submit" class="btn login-submit">Đăng nhập bằng token</button>
+      </form>
+    </details>
   </div>
 </div>
+<script src="/ui/static/signed-post.js" defer></script>
 {% endblock %}

@@ -1,0 +1,298 @@
+/* Colour, type and space. Nothing else.
+ *
+ * Split out of app.css so one rule becomes structural rather than a
+ * convention: EVERY surface loads tokens.css and app.css, and ONLY the
+ * console loads console.css. A class a shared macro emits must therefore be
+ * styled in app.css, because the landing page will never see the other one.
+ *
+ * That defect has shipped. The sigma band rendered as three lines of
+ * unstyled text on the public page, under a heading reading "sigma, in one
+ * screen", for the whole of the console rebuild.
+ * test_shared_chart_styles.py now forbids it rather than asking politely.
+ *
+ * `.on-ink` lives with the surface that uses it, which is landing.css
+ * since the sheets were split. It declares tokens, but it also sets
+ * background and color on an element, which makes it a component that
+ * carries a theme rather than a theme. Splitting it in half would put one
+ * rule in two files.
+ */
+
+/* --- type ---------------------------------------------------------------
+ *
+ * ONE FAMILY. Inter carries the words, the identifiers and every measured
+ * number, and there is no second face anywhere in the product.
+ *
+ * That is a constraint, not a saving. A product whose content is a column
+ * of numbers needs digits of EQUAL WIDTH, or the column jitters between
+ * rows; Inter has them under `tnum`, checked by reading the feature list
+ * and the advance widths out of the font's own tables rather than by
+ * believing a specification page. Two
+ * faces we liked more, Fraunces and Instrument Serif, were rejected on
+ * exactly that measurement: proportional digits, no `tnum` feature, so a
+ * list of sigma values would not line up.
+ *
+ * `--font-mono` is GONE, and so are its twenty-nine declarations. With one
+ * family they set the font to the font it already was: a declaration that
+ * changes nothing, repeated, is how a stylesheet gets fat without getting
+ * more capable. What the second family used to buy - digits of equal width -
+ * is now `font-variant-numeric: tabular-nums`, set once on body. The places
+ * that are SCANNED rather than read are still marked, by their class names.
+ *
+ * The family is Inter and not Golos Text, which this console shipped until
+ * the interface was translated. Golos Text has no Vietnamese: 102 of the
+ * codepoints this product now renders are absent from it, so every accented
+ * letter fell through to a system font and words changed typeface halfway
+ * through. Google serves Golos in four subsets and none of them is
+ * Vietnamese, so no amount of re-subsetting would have recovered it.
+ * Inter covers the whole range, carries `tnum`, and is the nearest match in
+ * width and weight to the screens that were approved, so the layout did not
+ * move when the file changed.
+ *
+ * SELF-HOSTED, because spec 12.9 refuses third-party resources of any kind:
+ * a font CDN is a third party that sees every request a customer makes to
+ * this console, and it is one more origin the CSP would have to open. One
+ * file, 54KB, latin plus Vietnamese, variable across 100-900, with the
+ * optical-size axis pinned because the console never varies it.
+ *
+ * `font-display: swap` and a real fallback stack, because a console that
+ * shows nothing until a font arrives is worse than one that reflows.
+ */
+@font-face {
+  font-family: Inter;
+  src: url("/ui/static/inter-vi.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* --- colour -------------------------------------------------------------
+ *
+ * ONE HUE, FIVE STEPS, and that is the whole palette for magnitude.
+ *
+ * The rule this replaces was "colour is the distance": mint for normal,
+ * amber for approaching, pink for past the gate. It read well and it cost
+ * something that was never stated - EVERY screen had colour on it, including
+ * the screens where nothing was happening. When colour is always present it
+ * cannot report anything, and the healthy state of this product is nothing
+ * happening.
+ *
+ * So: the ramp below says HOW FAR, by depth alone. A VERDICT is never a
+ * hue - it is an ink mark plus a word, filled for blocked and hollow for
+ * slowed, which survives a greyscale print, a screenshot pasted into a
+ * ticket, and the reader for whom two hues are one.
+ *
+ * Danger keeps a red, and only danger. It is the one signal that means
+ * something is wrong rather than something is large, it is rare on screen,
+ * and that rarity is what makes it work.
+ */
+/* LIGHT IS THE DEFAULT. The rule that made dark the landing place was
+ * written for a palette built out of three saturated hues, where a dark
+ * field held them apart. One hue in five steps separates on white, and the
+ * screens a buyer reads before they ever have an incident are the ones that
+ * should look like paper. Dark is still one click away and is measured to
+ * the same standard. */
+:root {
+  /* --- surfaces ------------------------------------------------------- */
+  /* Paper. `--bg` and `--surface` are the same white on purpose: the
+   * console is one plane, and the frames that used to need a second shade
+   * are gone. `--surface-sunken` is reserved for the places something goes
+   * INTO - inputs, code blocks - which is the one thing a recessed surface
+   * says well. */
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-sunken: #f7f8fa;
+  --surface-raised: #ffffff;
+  --border: #e8e9ed;
+  --border-interactive: #8a8d97;
+
+  /* --- text ----------------------------------------------------------- */
+  --text: #0c0e12;
+  --text-muted: #585c66;
+
+  /* --- the one hue, five steps ---------------------------------------- */
+  /* t1 is the lightest and means "close to your normal"; t5 is the deepest
+   * and means "furthest out". Nothing else in the product may introduce a
+   * sixth step, because five is the number a reader can order at a glance. */
+  --t1: #eceefa;
+  --t2: #ccd1f0;
+  --t3: #9aa3e0;
+  --t4: #5f6cc4;
+  --t5: #2f3a90;
+
+  /* --- interaction ---------------------------------------------------- */
+  /* --accent means "you can act on this" and nothing else. With one hue it
+   * is the deepest step of that hue, so an action and a large magnitude are
+   * the same colour - which is fine, because an action is always a control
+   * and a magnitude is always a chart, and neither ever appears as the
+   * other. */
+  --accent: #2f3a90;
+  --accent-hover: #232c73;
+  --accent-subtle: #eceefa;
+  --focus-ring: #2f3a90;
+
+  /* --- brand field ---------------------------------------------------- */
+  /* Where the product argues for itself: the landing hero, the sigma
+   * explanation, the login card. Deliberately not a surface the console
+   * uses, so the two read as different places. */
+  --ink: #0c0e12;
+  --ink-fg: #ffffff;
+  --ink-muted: #a3a6b4;
+  /* Unusable on white (2.2:1) ON PURPOSE. That constraint is what stops it
+   * ever becoming an interface colour: it can only appear on an ink field,
+   * so it reads as brand and can never be confused with the ramp.
+   * test_contrast.py asserts the failure. */
+  --brand-cyan: #9aa3e0;
+
+  /* --- axis A: how far from this tenant's own normal ------------------- */
+  /* Three steps of ONE hue, deepening outward. The names are kept because
+   * every chart, chip and band in the product already speaks them; what
+   * changed is that they no longer carry a verdict. The verdict is the word
+   * beside them and the ink dot in front of it. */
+  /* Three steps of one hue, deepening outward, and ALL THREE on the same
+   * palest field. Giving each step its own darker field read well and could
+   * not be made legible: text at 4.08:1 on its own background is a chip
+   * nobody can use, and the measurement is what caught it. Magnitude is
+   * carried by the ink getting darker, not by the field getting darker. */
+  --tier-normal: #4f5cbb;         /* 5.08:1 on the field, 5.86:1 on paper */
+  --tier-limited: #3e4aa5;        /* 6.66:1 on the field, 7.70:1 on paper */
+  --tier-blocked: #2f3a90;        /* 8.54:1 on the field, 9.86:1 on paper */
+  /* ONE field behind all three chips. Three names for one value is how two
+   * of them end up different after an edit that meant to touch one. */
+  --tier-field: #eceefa;
+  --tier-blocked-edge: #2f3a90;
+
+  /* --- axis B: is the product itself healthy -------------------------- */
+  /* Success and warning join the hue: they are statements about magnitude
+   * and progress, not about failure. Danger does not, and is the only
+   * colour in the product that is not this one hue. */
+  --success: #2f3a90;
+  --success-bg: #eceefa;
+  --warning: #45539f;
+  --warning-bg: #eceefa;
+  --danger: #a3232a;
+  --danger-bg: #fdeced;
+  --danger-border: #f0bcbf;
+
+  /* --- type scale -----------------------------------------------------
+   * Eight steps, and each one has a job written beside it. There is no
+   * ninth: a scale a designer can add to is a scale that stops being one. */
+  --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --text-xs: 10.5px;   /* small-caps labels, wide tracking */
+  --text-sm: 11.5px;   /* captions under a chart */
+  --text-base: 12.5px; /* cells in a table */
+  --text-body: 14px;   /* sentences */
+  --text-lg: 16px;     /* a section that opens a page */
+  --text-xl: 19px;     /* a figure inside a table row */
+  --text-2xl: 25px;    /* the page title */
+  --text-3xl: 34px;    /* landing sub-heads */
+  --text-hero: 46px;   /* landing hero, once */
+  --text-stat: 27px;   /* the number on a stat card */
+
+  /* --- space and shape ------------------------------------------------ */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px; --s9: 96px;
+  --r1: 4px;  --r2: 6px;  --r3: 8px;  --r4: 12px;  --r-pill: 999px;
+  --radius: var(--r4);
+}
+
+/* Dark is a token override and nothing else: no component rule below this
+ * point knows which theme is active. That only works because every colour
+ * in the file is a token.
+ *
+ * The theme comes from a cookie rendered into data-theme on <html> by the
+ * server. That is the only implementation possible under `script-src
+ * 'self'` with no inline script: the usual trick is a <script> in <head>
+ * that reads localStorage before first paint, and it is unavailable here.
+ * The server-rendered attribute has no flash of the wrong theme at all. */
+[data-theme="dark"] {
+  --bg: #0b0c10;
+  --surface: #0b0c10;
+  --surface-sunken: #14161d;
+  --surface-raised: #191c25;
+  --border: #23262f;
+  --border-interactive: #767a88;
+
+  /* Not #ffffff: pure white on a near-black field halates. */
+  --text: #ececed;
+  --text-muted: #9a9dab;
+
+  /* The ramp inverts: on ink, depth reads as BRIGHTNESS. t1 is still
+   * "closest to normal" and t5 still "furthest out", so every rule that
+   * orders them keeps its meaning without knowing which theme is live. */
+  --t1: #1b2040;
+  --t2: #2c3565;
+  --t3: #4d5aa8;
+  --t4: #8b95dd;
+  --t5: #c3caf5;
+
+  --accent: #a7b1f0;
+  --accent-hover: #c3caf5;
+  --accent-subtle: #1b2040;
+  --focus-ring: #a7b1f0;
+
+  --ink: #0b0c10;
+  --ink-fg: #ececed;
+  --ink-muted: #9a9dab;
+  --brand-cyan: #8b95dd;
+
+  --tier-normal: #8b95dd;         /* 5.61:1 on the field */
+  --tier-limited: #a7b1f0;        /* 7.68:1 on the field */
+  --tier-blocked: #c3caf5;        /* 9.86:1 on the field */
+  --tier-field: #1b2040;
+  --tier-blocked-edge: #c3caf5;
+
+  --success: #8b95dd;
+  --success-bg: #1b2040;
+  --warning: #a7b1f0;
+  --warning-bg: #1b2040;
+  --danger: #ff8f96;
+  --danger-bg: #2a1113;
+  --danger-border: #5e2327;
+}
+
+/* Chosen beats inherited: a reader who picked light gets light whatever
+ * their operating system says, which is why this is scoped away from an
+ * explicit choice. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b0c10;
+    --surface: #0b0c10;
+    --surface-sunken: #14161d;
+    --surface-raised: #191c25;
+    --border: #23262f;
+    --border-interactive: #767a88;
+
+    --text: #ececed;
+    --text-muted: #9a9dab;
+
+    --t1: #1b2040;
+    --t2: #2c3565;
+    --t3: #4d5aa8;
+    --t4: #8b95dd;
+    --t5: #c3caf5;
+
+    --accent: #a7b1f0;
+    --accent-hover: #c3caf5;
+    --accent-subtle: #1b2040;
+    --focus-ring: #a7b1f0;
+
+    --ink: #0b0c10;
+    --ink-fg: #ececed;
+    --ink-muted: #9a9dab;
+    --brand-cyan: #8b95dd;
+
+    --tier-normal: #8b95dd;
+    --tier-limited: #a7b1f0;
+    --tier-blocked: #c3caf5;
+    --tier-field: #1b2040;
+    --tier-blocked-edge: #c3caf5;
+
+    --success: #8b95dd;
+    --success-bg: #1b2040;
+    --warning: #a7b1f0;
+    --warning-bg: #1b2040;
+    --danger: #ff8f96;
+    --danger-bg: #2a1113;
+    --danger-border: #5e2327;
+  }
+}

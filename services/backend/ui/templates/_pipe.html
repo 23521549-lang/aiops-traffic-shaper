@@ -1,0 +1,101 @@
+{% macro render(flow, tier1_sigma, tier2_sigma) %}
+{# Where a request goes, and what decides.
+
+   Three lanes from one entry, splitting at the gate, with particles running
+   on the lanes themselves. It replaces three paragraphs that described the
+   same thing in words, and it is the reason the rule at the top of
+   console.css says text is the last resort.
+
+   Nothing here asks the server for anything. A console polling at this rate
+   would take 52% of the whole account's daily request ceiling, and at the
+   ceiling the platform refuses telemetry for every customer - so the
+   dashboard would be switching off the protection it reports on.
+
+   The particle counts are fixed at fourteen, three and one. They are a
+   PROPORTION, not a measurement: the measurement is the three figures at the
+   ends of the lanes, which come off the same history rows the shape below
+   the gate is drawn from. #}
+<svg class="pipe" viewBox="0 0 1150 232" role="img" aria-labelledby="pp-t pp-d">
+  <title id="pp-t">Một request đi đâu, và cái gì quyết định</title>
+  <desc id="pp-d">Request vào từ máy chủ của bạn, được đọc, đếm thành bảy đặc
+    trưng, chấm điểm so với bình thường của chính bạn, rồi gặp hai cổng bạn
+    đặt. Chỉ con số rời khỏi máy chủ của bạn, không bao giờ nội dung.
+    24 giờ qua: {{ "{:,}".format(flow.passed).replace(",", ".") }} đi thẳng,
+    {{ "{:,}".format(flow.slowed).replace(",", ".") }} bị làm chậm,
+    {{ "{:,}".format(flow.blocked).replace(",", ".") }} bị chặn.</desc>
+
+  <text class="pipe-z" x="14" y="42">TRAFFIC CỦA BẠN</text>
+  <text class="pipe-z" x="150" y="42">TRÊN MÁY CHỦ CỦA BẠN</text>
+  <text class="pipe-z" x="510" y="42">TRÊN NỀN TẢNG</text>
+  <text class="pipe-z" x="1040" y="18">KẾT CỤC</text>
+
+  <path class="pipe-lane" d="M26,112 L856,112 C898,112 896,36 938,36 L1024,36"/>
+  <path class="pipe-lane pipe-lane--hot" d="M26,112 L856,112 L1024,112"/>
+  <path class="pipe-lane pipe-lane--stop" d="M26,112 L856,112 C898,112 896,190 938,190 L1024,190"/>
+
+  {# The boxes straddle the lane: a particle passes THROUGH each stage at its
+     lower third, and the type sits above the line so nothing is drawn over
+     it. Getting that wrong put moving dots on top of the labels, and it was
+     invisible until somebody looked at a screenshot. #}
+  <rect class="pipe-stage" x="150" y="56" width="152" height="76" rx="5"/>
+  <text class="pipe-t" x="164" y="80">1 &middot; Đọc</text>
+  <text class="pipe-s" x="164" y="97">đọc log truy cập của bạn</text>
+  <rect class="pipe-stage" x="330" y="56" width="152" height="76" rx="5"/>
+  <text class="pipe-t" x="344" y="80">2 &middot; Đếm</text>
+  <text class="pipe-s" x="344" y="97">7 đặc trưng mỗi nguồn</text>
+  <rect class="pipe-stage" x="510" y="56" width="152" height="76" rx="5"/>
+  <text class="pipe-t" x="524" y="80">3 &middot; Chấm</text>
+  <text class="pipe-s" x="524" y="97">so với bình thường của bạn</text>
+  <rect class="pipe-stage pipe-stage--on" x="690" y="56" width="152" height="76" rx="5"/>
+  <text class="pipe-t" x="704" y="80">4 &middot; Cổng</text>
+  <text class="pipe-s" x="704" y="97">{{ "%.2f"|format(tier1_sigma)|replace(".", ",") }} chậm &middot; {{ "%.2f"|format(tier2_sigma)|replace(".", ",") }} chặn</text>
+
+  <line class="pipe-gate" x1="856" y1="18" x2="856" y2="214"/>
+
+  <circle cx="26" cy="112" r="5" fill="currentColor"/>
+  <text class="pipe-s" x="14" y="134">nginx</text>
+
+  <circle cx="1024" cy="36" r="5" class="p1"/>
+  <text class="pipe-n" x="1040" y="32">{{ "{:,}".format(flow.passed).replace(",", ".") }}</text>
+  <text class="pipe-s" x="1040" y="49">đi thẳng qua</text>
+  <circle cx="1024" cy="112" r="5" class="p3"/>
+  <text class="pipe-n" x="1040" y="108">{{ "{:,}".format(flow.slowed).replace(",", ".") }}</text>
+  <text class="pipe-s" x="1040" y="125">bị làm chậm</text>
+  <circle cx="1024" cy="190" r="5" class="pk"/>
+  <text class="pipe-n" x="1040" y="186">{{ "{:,}".format(flow.blocked).replace(",", ".") }}</text>
+  <text class="pipe-s" x="1040" y="203">bị chặn</text>
+
+  {# The stagger is enumerated because `style="animation-delay"` is an inline
+     style, and `style-src 'self'` blocks the ATTRIBUTE and not only the
+     block. SVG geometry is not CSS and is unaffected, which is why the paths
+     above carry their coordinates directly.
+
+     Each particle starts INVISIBLE and is switched on by its own <set>. An
+     animateMotion translates the element relative to its own position, so a
+     particle cannot simply be parked at the lane entry - it would run the
+     whole path offset by that much. With no position and no opacity it sits
+     at the SVG origin instead, and until its delay elapses all eighteen pile
+     into the top-left corner as one dark blob. The last delay is 5.46s, so
+     that blob was on screen for five and a half seconds of every page load.
+     `fill="freeze"` because a <set> otherwise reverts the moment it ends. #}
+  {% for d in [0.00, 0.42, 0.84, 1.26, 1.68, 2.10, 2.52, 2.94, 3.36, 3.78, 4.20, 4.62, 5.04, 5.46] %}
+  <circle class="p1 pm" r="3" opacity="0">
+    <set attributeName="opacity" to="1" begin="{{ d }}s" fill="freeze"/>
+    <animateMotion dur="6s" begin="{{ d }}s" repeatCount="indefinite"
+    path="M26,112 L856,112 C898,112 896,36 938,36 L1024,36"/>
+  </circle>
+  {% endfor %}
+  {% for d in [1.1, 3.0, 4.9] %}
+  <circle class="p3 pm" r="3.6" opacity="0">
+    <set attributeName="opacity" to="1" begin="{{ d }}s" fill="freeze"/>
+    <animateMotion dur="6s" begin="{{ d }}s" repeatCount="indefinite"
+    path="M26,112 L856,112 L1024,112"/>
+  </circle>
+  {% endfor %}
+  <circle class="pk pm" r="4.4" opacity="0">
+    <set attributeName="opacity" to="1" begin="2.6s" fill="freeze"/>
+    <animateMotion dur="6s" begin="2.6s" repeatCount="indefinite"
+    path="M26,112 L856,112 C898,112 896,190 938,190 L1024,190"/>
+  </circle>
+</svg>
+{% endmacro %}

@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cổng &middot; Traffic Shaper</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="mock"><span>Bản dựng xem thử</span>
+  <span class="key"><span class="key-s"></span>nét đứt = chưa có trong sản phẩm</span>
+  <span class="sp"></span><span><a href="index.html">Cổng</a> &middot; <a href="agents.html">Agent</a> &middot; <a href="history.html">Lịch sử</a> &middot; <a href="allowed.html">Cho qua</a> &middot; <a href="model.html">Mô hình</a> &middot; <a href="audit.html">Nhật ký</a> &middot; <a href="system.html">Cách hoạt động</a></span></div>
+<div class="app">
+  <header class="bar">
+    <span class="brand"><span class="beacon"></span>Traffic Shaper</span>
+    <span class="sp"></span>
+    <span class="who">acme-prod</span>
+    <span class="cost">Hôm nay <b>0 đồng</b></span>
+    <button class="btn" data-toggle="pl-top" data-alt="Bật lại bảo vệ">Chỉ theo dõi</button>
+    <button class="btn" data-new title="Chưa có trong sản phẩm" >Tạm dừng 30 phút</button>
+    <button class="btn" >Lệnh<kbd>K</kbd></button>
+    <button class="btn" >Đăng xuất</button>
+  </header>
+  <div class="body">
+    <nav class="nav">
+      <div class="gp">Điều khiển</div>
+      <a href="index.html" aria-current="page"><span>Cổng</span><span class="ct">2</span></a>
+      <a href="history.html"><span>Lịch sử</span></a>
+      <a href="allowed.html"><span>Cho qua</span><span class="ct">6</span></a>
+      <div class="gp">Hệ thống</div>
+      <a href="agents.html"><span>Agent</span><span class="ct">5</span></a>
+      <a href="model.html"><span>Mô hình</span></a>
+      <a href="system.html"><span>Cách hoạt động</span></a>
+      <div class="gp">Sổ sách</div>
+      <a href="audit.html"><span>Nhật ký</span></a>
+    </nav>
+    <main class="main">
+      <div class="head">
+        <div><h1 class="h1">Cổng</h1><p class="sub">5 agent &middot; báo gần nhất 8 giây trước &middot; <b>184.220</b> request trong 24 giờ</p></div>
+        <div class="head-act"><button class="btn" >Xuất CSV</button><button class="btn btn--d" data-new title="Chưa có trong sản phẩm" >Thả tất cả ngay</button></div>
+      </div>
+      <section class="sec">
+        <div class="sec-h"><h2 class="sec-t">Một request đi đâu</h2><div class="sec-m">chạy thật &middot; chu kỳ 6 giây &middot; 0 request tới máy chủ</div></div>
+        <svg class="pipe" viewBox="0 0 1150 232" role="img" aria-labelledby="pp-t pp-d">
+          <title id="pp-t">Một request đi đâu, và cái gì quyết định</title>
+          <desc id="pp-d">Request vào từ máy chủ của bạn, được đọc, đếm thành bảy đặc
+            trưng, chấm điểm so với bình thường của chính bạn, rồi gặp hai cổng bạn đặt.
+            24 giờ qua: 183.942 đi thẳng, 246 bị làm chậm, 32 bị chặn.</desc>
+          <text class="pipe-z" x="14" y="42">TRAFFIC CỦA BẠN</text>
+          <text class="pipe-z" x="150" y="42">TRÊN MÁY CHỦ CỦA BẠN</text>
+          <text class="pipe-z" x="510" y="42">TRÊN NỀN TẢNG</text>
+          <text class="pipe-z" x="1040" y="18">KẾT CỤC</text>
+          <path class="pipe-lane" d="M26,112 L856,112 C898,112 896,36 938,36 L1024,36"/>
+          <path class="pipe-lane pipe-lane--hot" d="M26,112 L856,112 L1024,112"/>
+          <path class="pipe-lane pipe-lane--stop" d="M26,112 L856,112 C898,112 896,190 938,190 L1024,190"/>
+    <rect class="pipe-stage" x="150" y="56" width="152" height="76" rx="5"/>
+    <text class="pipe-t" x="164" y="80">1 &middot; Đọc</text>
+    <text class="pipe-s" x="164" y="97">đọc log truy cập của bạn</text>
+    <rect class="pipe-stage" x="330" y="56" width="152" height="76" rx="5"/>
+    <text class="pipe-t" x="344" y="80">2 &middot; Đếm</text>
+    <text class="pipe-s" x="344" y="97">7 đặc trưng mỗi nguồn</text>
+    <rect class="pipe-stage" x="510" y="56" width="152" height="76" rx="5"/>
+    <text class="pipe-t" x="524" y="80">3 &middot; Chấm</text>
+    <text class="pipe-s" x="524" y="97">so với bình thường của bạn</text>
+    <rect class="pipe-stage pipe-stage--on" x="690" y="56" width="152" height="76" rx="5"/>
+    <text class="pipe-t" x="704" y="80">4 &middot; Cổng</text>
+    <text class="pipe-s" x="704" y="97">4.00 chậm &middot; 5.00 chặn</text>
+          <line class="pipe-gate" x1="856" y1="18" x2="856" y2="214"/>
+          <circle cx="26" cy="112" r="5" fill="#0c0e12"/>
+          <text class="pipe-s" x="14" y="134">nginx</text>
+          <circle cx="1024" cy="36" r="5" class="p1"/>
+          <text class="pipe-n" x="1040" y="32">183.942</text>
+          <text class="pipe-s" x="1040" y="49">đi thẳng qua</text>
+          <circle cx="1024" cy="112" r="5" class="p3"/>
+          <text class="pipe-n" x="1040" y="108">246</text>
+          <text class="pipe-s" x="1040" y="125">bị làm chậm 5 phút</text>
+          <circle cx="1024" cy="190" r="5" class="pk"/>
+          <text class="pipe-n" x="1040" y="186">32</text>
+          <text class="pipe-s" x="1040" y="203">bị chặn 1 giờ</text>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="0.00s" repeatCount="indefinite" path="M26,112 L856,112 C898,112 896,36 938,36 L1024,36"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="0.42s" repeatCount="indefinite" path="M26,112 L856,112 C898,112 896,36 938,36 L1024,36"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="0.84s" repeatCount="indefinite" path="M26,112 L856,112 C898,112 896,36 938,36 L1024,36"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="1.26s" repeatCount="indefinite" path="M26,112 L856,112 C898,112 896,36 938,36 L1024,36"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="1.68s" repeatCount="indefinite" path="M26,112 L856,112 C898,112 896,36 938,36 L1024,36"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="2.10s" repeatCount="indefinite" path="M26,112 L856,112 C898,112 896,36 938,36 L1024,36"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="2.52s" repeatCount="indefinite" path="M26,112 L856,112 C898,112 896,36 938,36 L1024,36"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="2.94s" repeatCount="indefinite" path="M26,112 L856,112 C898,112 896,36 938,36 L1024,36"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="3.36s" repeatCount="indefinite" path="M26,112 L856,112 C898,112 896,36 938,36 L1024,36"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="3.78s" repeatCount="indefinite" path="M26,112 L856,112 C898,112 896,36 938,36 L1024,36"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="4.20s" repeatCount="indefinite" path="M26,112 L856,112 C898,112 896,36 938,36 L1024,36"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="4.62s" repeatCount="indefinite" path="M26,112 L856,112 C898,112 896,36 938,36 L1024,36"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="5.04s" repeatCount="indefinite" path="M26,112 L856,112 C898,112 896,36 938,36 L1024,36"/></circle>
+    <circle class="p1" r="3"><animateMotion dur="6s" begin="5.46s" repeatCount="indefinite" path="M26,112 L856,112 C898,112 896,36 938,36 L1024,36"/></circle>
+    <circle class="p3" r="3.6"><animateMotion dur="6s" begin="1.10s" repeatCount="indefinite" path="M26,112 L856,112 L1024,112"/></circle>
+    <circle class="p3" r="3.6"><animateMotion dur="6s" begin="3.00s" repeatCount="indefinite" path="M26,112 L856,112 L1024,112"/></circle>
+    <circle class="p3" r="3.6"><animateMotion dur="6s" begin="4.90s" repeatCount="indefinite" path="M26,112 L856,112 L1024,112"/></circle>
+    <circle class="pk" r="4.4"><animateMotion dur="6s" begin="2.6s" repeatCount="indefinite" path="M26,112 L856,112 C898,112 896,190 938,190 L1024,190"/></circle>
+        </svg>
+
+        <div class="pipe-ctl">
+          <div><span class="label">Traffic</span>
+            <span class="pill on" id="pl-top"><i></i>đang chảy</span></div>
+          <div><span class="label">Đọc log</span>
+            <button class="btn" data-new title="Chưa có trong sản phẩm" >Tạm dừng đọc</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Đổi đường dẫn log</button></div>
+          <div><span class="label">Đếm</span>
+            <button class="btn" data-new title="Chưa có trong sản phẩm" >Xem 7 đặc trưng</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Bỏ qua một đặc trưng</button></div>
+          <div><span class="label">Chấm điểm</span>
+            <button class="btn" data-new title="Chưa có trong sản phẩm" >Quay lui v40</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Đóng băng mô hình</button></div>
+          <div><span class="label">Thi hành</span>
+            <button class="btn" data-toggle="pl-enf" data-alt="Thi hành lại">Chỉ theo dõi</button>
+            <span class="pill on" id="pl-enf"><i></i>đang thi hành</span></div>
+        </div>
+      </section>
+      <section class="sec">
+        <div class="sec-h"><h2 class="sec-t">Đang bị giữ</h2><div class="sec-m">2 nguồn &middot; bấm một dòng để xem vì sao</div></div>
+        <div class="src">
+          <button class="src-h" data-why-toggle aria-expanded="false" aria-controls="w-a">
+            <span><span class="src-ip">203.0.113.44</span><span class="src-sub">44 req/s lúc đỉnh &middot; giữ 11 phút</span></span>
+            <span class="src-fig">6,41</span>
+            <span class="verdict"><i></i>đang chặn</span>
+            <span>3/3 đã ghi luật</span>
+            <span class="src-chev">&#9656; vì sao</span>
+          </button>
+          <div class="src-why" id="w-a" hidden>
+            <div class="why-row">
+              <span class="why-n">Request mỗi phút</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="290" height="12" rx="2" fill="#2f3a90"/>
+              </svg>
+              <span class="why-v">412 <span style="color:#838794">so với 8,4</span></span>
+              <span class="why-d drives">+5.8 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Giãn cách giữa request</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="245" height="12" rx="2" fill="#2f3a90"/>
+              </svg>
+              <span class="why-v">0,14 s <span style="color:#838794">so với 7,2 s</span></span>
+              <span class="why-d drives">+4.9 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Số đường dẫn khác nhau</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="205" height="12" rx="2" fill="#2f3a90"/>
+              </svg>
+              <span class="why-v">1 <span style="color:#838794">so với 23</span></span>
+              <span class="why-d drives">+4.1 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Tỉ lệ không tìm thấy</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="185" height="12" rx="2" fill="#5f6cc4"/>
+              </svg>
+              <span class="why-v">0,94 <span style="color:#838794">so với 0,04</span></span>
+              <span class="why-d drives">+3.7 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Độ dài phiên</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="105" height="12" rx="2" fill="#5f6cc4"/>
+              </svg>
+              <span class="why-v">11 s <span style="color:#838794">so với 4 p 20 s</span></span>
+              <span class="why-d">+2.1 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Byte mỗi request</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="60" height="12" rx="2" fill="#ccd1f0"/>
+              </svg>
+              <span class="why-v">2 kB <span style="color:#838794">so với 14 kB</span></span>
+              <span class="why-d">+1.2 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Số user agent</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="20" height="12" rx="2" fill="#ccd1f0"/>
+              </svg>
+              <span class="why-v">1 <span style="color:#838794">so với 3,1</span></span>
+              <span class="why-d">+0.4 sigma</span>
+            </div>
+            <p class="why-raw">Điểm thô -0,412 &middot; mô hình v41 &middot; quyết định 11 phút trước, từ lô #88.204</p>
+            <div class="why-act"><button class="btn btn--p" >Cho qua<kbd>A</kbd></button><button class="btn" >Cho qua vì giải thích được</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Chặn 24 giờ</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Gia hạn thêm 1 giờ</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Thả ra ngay</button><button class="btn" >Mọi đợt của nguồn này</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Sao chép làm bằng chứng</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Không bao giờ xét lại</button></div>
+          </div>
+        </div>
+        <div class="src">
+          <button class="src-h" data-why-toggle aria-expanded="false" aria-controls="w-b">
+            <span><span class="src-ip">198.51.100.7</span><span class="src-sub">một đường dẫn, 71% không tìm thấy &middot; giữ 40 giây</span></span>
+            <span class="src-fig">4,28</span>
+            <span class="verdict open"><i></i>đang làm chậm</span>
+            <span>1/3 chưa nhận</span>
+            <span class="src-chev">&#9656; vì sao</span>
+          </button>
+          <div class="src-why" id="w-b" hidden>
+            <div class="why-row">
+              <span class="why-n">Tỉ lệ không tìm thấy</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="210" height="12" rx="2" fill="#2f3a90"/>
+              </svg>
+              <span class="why-v">0,71 <span style="color:#838794">so với 0,04</span></span>
+              <span class="why-d drives">+4.2 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Số đường dẫn khác nhau</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="195" height="12" rx="2" fill="#5f6cc4"/>
+              </svg>
+              <span class="why-v">2 <span style="color:#838794">so với 23</span></span>
+              <span class="why-d drives">+3.9 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Request mỗi phút</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="120" height="12" rx="2" fill="#5f6cc4"/>
+              </svg>
+              <span class="why-v">61 <span style="color:#838794">so với 8,4</span></span>
+              <span class="why-d">+2.4 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Giãn cách giữa request</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="110" height="12" rx="2" fill="#5f6cc4"/>
+              </svg>
+              <span class="why-v">0,98 s <span style="color:#838794">so với 7,2 s</span></span>
+              <span class="why-d">+2.2 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Số user agent</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="55" height="12" rx="2" fill="#ccd1f0"/>
+              </svg>
+              <span class="why-v">1 <span style="color:#838794">so với 3,1</span></span>
+              <span class="why-d">+1.1 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Byte mỗi request</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="35" height="12" rx="2" fill="#ccd1f0"/>
+              </svg>
+              <span class="why-v">9 kB <span style="color:#838794">so với 14 kB</span></span>
+              <span class="why-d">+0.7 sigma</span>
+            </div>
+            <div class="why-row">
+              <span class="why-n">Độ dài phiên</span>
+              <svg class="why-bar" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <rect width="300" height="12" rx="2" fill="#f7f8fa"/>
+                <rect class="grow" width="15" height="12" rx="2" fill="#ccd1f0"/>
+              </svg>
+              <span class="why-v">3 p 02 s <span style="color:#838794">so với 4 p 20 s</span></span>
+              <span class="why-d">+0.3 sigma</span>
+            </div>
+            <p class="why-raw">Điểm thô -0,208 &middot; mô hình v41 &middot; quyết định 40 giây trước, từ lô #88.207</p>
+            <div class="why-act"><button class="btn btn--p" >Cho qua<kbd>A</kbd></button><button class="btn" >Cho qua vì giải thích được</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Chặn 24 giờ</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Gia hạn thêm 1 giờ</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Thả ra ngay</button><button class="btn" >Mọi đợt của nguồn này</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Sao chép làm bằng chứng</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Không bao giờ xét lại</button></div>
+          </div>
+        </div>
+      </section>
+      <section class="sec">
+        <div class="sec-h"><h2 class="sec-t">Cổng làm chậm</h2><div class="sec-m">13 vị trí &middot; bấm là dời</div></div>
+        <div class="gate">
+          <button class="gate-row">
+            <span>3,50 sigma</span>
+            <svg class="gate-track" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true">
+              <rect class="gate-rail" width="100" height="8" rx="1"/>
+              <rect class="gate-bar grow" width="100" height="8" rx="1"/>
+            </svg>
+            <span class="gate-n">1.482</span>
+            <span class="gate-note">báo nhầm nhiều hơn</span>
+          </button>
+          <button class="gate-row">
+            <span>3,75 sigma</span>
+            <svg class="gate-track" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true">
+              <rect class="gate-rail" width="100" height="8" rx="1"/>
+              <rect class="gate-bar grow" width="63" height="8" rx="1"/>
+            </svg>
+            <span class="gate-n">940</span>
+            <span class="gate-note">báo nhầm nhiều hơn</span>
+          </button>
+          <button class="gate-row" aria-current="true">
+            <span>4,00 sigma</span>
+            <svg class="gate-track" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true">
+              <rect class="gate-rail" width="100" height="8" rx="1"/>
+              <rect class="gate-bar grow" width="25" height="8" rx="1"/>
+            </svg>
+            <span class="gate-n">371</span>
+            <span class="gate-note">đang dùng</span>
+          </button>
+          <button class="gate-row">
+            <span>4,25 sigma</span>
+            <svg class="gate-track" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true">
+              <rect class="gate-rail" width="100" height="8" rx="1"/>
+              <rect class="gate-bar grow" width="11" height="8" rx="1"/>
+            </svg>
+            <span class="gate-n">164</span>
+            <span class="gate-note"></span>
+          </button>
+          <button class="gate-row">
+            <span>4,50 sigma</span>
+            <svg class="gate-track" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true">
+              <rect class="gate-rail" width="100" height="8" rx="1"/>
+              <rect class="gate-bar grow" width="4" height="8" rx="1"/>
+            </svg>
+            <span class="gate-n">61</span>
+            <span class="gate-note"></span>
+          </button>
+        </div>
+        <div class="ctl-b" style="margin-top:14px"><button class="btn" data-new title="Chưa có trong sản phẩm" >Hẹn giờ đổi cổng</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Đặt cổng riêng cho giờ cao điểm</button><button class="btn" data-new title="Chưa có trong sản phẩm" >Về mặc định khuyến nghị</button></div>
+      </section>
+
+    </main>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

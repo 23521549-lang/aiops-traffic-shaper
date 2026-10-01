@@ -1,0 +1,147 @@
+{% macro render(a, label, caption="", plot="live") %}
+{# Two layers in one grid cell.
+
+   Layer A is SVG and holds everything at an arbitrary position and nothing
+   with text: bands, density, gates, source marks. preserveAspectRatio="none"
+   stretches it to any width, which is harmless because there is no type in
+   it to distort. That distortion is exactly why the strip this replaces was
+   flexbox.
+
+   Layer B is HTML and holds all the type. Its labels sit at INTEGER sigma,
+   so they are grid items in a six-column grid and need no computed position
+   at all. That is the whole trick, and it is why this replaces 202
+   enumerated CSS rules with none.
+
+   Neither layer may have inline padding. Sigma s lands at s/6 x 100% in
+   both, and padding on either one breaks that mapping silently.
+
+   `plot` is the state of this plot AREA, not a decoration on it. At
+   "outline" no mark is drawn and the bands drop to hairlines, so there is
+   no reading on screen to misread. An instrument with no feed does not show
+   a number with a warning beside it; it shows no number. #}
+<div class="c-axis" data-plot="{{ plot }}" role="img" aria-label="{{ label }}">
+  {# NOT preserveAspectRatio="none" any more. Stretching the box to an
+     arbitrary width turns every circle in it into an ellipse, and the field
+     below is made of circles - one per source. The viewBox keeps its own
+     ratio and CSS gives it width with height:auto, so a dot is a dot at any
+     screen size and sigma s still lands at s/6 of the width. #}
+  <svg class="c-axis-plot" viewBox="0 0 {{ a.width }} {{ a.height }}"
+       focusable="false" aria-hidden="true">
+    {# Colour is the DISTANCE, not the verdict.
+
+       The bands used to be three flat fills, which asserts that a source at
+       3.9 sigma and one at 4.1 are opposite kinds of thing. They are nearly
+       the same thing. What changes between them is the decision this customer
+       asked for, and a decision is a line laid over a scale rather than a
+       property of the scale - so the gates are drawn as lines and the scale
+       runs continuously underneath them.
+
+       Every stop is a tier token. A literal colour here would be a second
+       palette living where no stylesheet test would ever find it. #}
+    <defs>
+      <linearGradient id="ramp-{{ label|replace(' ','')|truncate(12,True,'') }}" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0"    stop-color="var(--tier-normal)"  stop-opacity=".30"/>
+        <stop offset="0.52" stop-color="var(--tier-normal)"  stop-opacity=".30"/>
+        <stop offset="0.68" stop-color="var(--tier-limited)" stop-opacity=".42"/>
+        <stop offset="0.86" stop-color="var(--tier-blocked)" stop-opacity=".46"/>
+        <stop offset="1"    stop-color="var(--tier-blocked)" stop-opacity=".62"/>
+      </linearGradient>
+    </defs>
+    {# Cac dai van o day, mo hon, vi nhan cua chung la thu song sot khi in
+       den trang - WCAG 1.4.1 khong duoc thoa man bang mot mau dep hon. #}
+    {% for b in a.bands %}
+    <rect class="{{ b.css }}" x="{{ b.x }}" y="0"
+          width="{{ b.width }}" height="{{ a.height }}" opacity=".35"/>
+    {% endfor %}
+    <rect x="0" y="0" width="{{ a.width }}" height="{{ a.height }}"
+          fill="url(#ramp-{{ label|replace(' ','')|truncate(12,True,'') }})"/>
+
+    {% if plot != "outline" %}
+    {# The shape below the gate, as ONE ridge. Thirteen separate bars say
+       that 3.00 and 3.25 sigma are two different worlds; they are two
+       readings on one continuous slope, and the eye should see the slope.
+       It grows from the baseline on first paint, which is the only thing
+       that motion says here: this accumulated. #}
+    {% if a.ridge %}
+    <path class="c-ridge-line" d="{{ a.ridge }}" fill="none"/>
+    <path class="c-ridge-fill c-grows" d="{{ a.ridge }} L{{ a.width }},{{ a.height }} L0,{{ a.height }} Z"/>
+    {% endif %}
+
+    {# One dot per identified source, at its own distance. A source that was
+       acted on also carries a slow halo: it is not a past event, it is
+       being held right now, and a static dot says the opposite. #}
+    {% for m in a.marks %}
+    {# No style attribute. CSP here is style-src 'self', which blocks the
+       ATTRIBUTE and not only style blocks, so the stagger is carried by
+       nth-child in the sheet instead of by a custom property set inline. #}
+    <g class="c-settles">
+      {% if m.sigma >= a.gate1_sigma %}
+      <circle class="{{ m.css }} c-halo" cx="{{ m.x }}" cy="{{ m.y }}" r="11"/>
+      {% endif %}
+      <circle class="{{ m.css }} c-dot{% if m.selected %} c-dot--on{% endif %}"
+              cx="{{ m.x }}" cy="{{ m.y }}" r="{{ 5 if m.sigma >= a.gate1_sigma else 3.2 }}"/>
+    </g>
+    {% endfor %}
+    {% endif %}
+
+    <line class="c-gate c-gate--1" x1="{{ a.gate1_x }}" y1="0"
+          x2="{{ a.gate1_x }}" y2="{{ a.height }}"/>
+    <line class="c-gate c-gate--2" x1="{{ a.gate2_x }}" y1="0"
+          x2="{{ a.gate2_x }}" y2="{{ a.height }}"/>
+  </svg>
+
+  <div class="c-axis-labels">
+    {% for b in a.bands %}
+    <span class="c-axis-band-label" data-cols="{{ b.cols }}">
+      <span class="c-axis-long">{{ b.label }}</span>
+      <span class="c-axis-short" aria-hidden="true">{{ b.short }}</span>
+    </span>
+    {% endfor %}
+  </div>
+
+  <div class="c-axis-ticks">
+    {% for value, text in a.ticks %}<span class="c-axis-tick">{{ text }}</span>{% endfor %}
+  </div>
+
+  {# The ticks read 0 to 6 and do not say which end is the good one. Two
+     words cost one line and remove the only question a first-time reader
+     has about this chart. #}
+  <div class="c-axis-ends">
+    <span>giống ngày thường của bạn</span><span>rất không giống bạn</span>
+  </div>
+
+  {# Colour is the distance, and this says so in words rather than leaving a
+     first-time reader to infer it from a gradient. Each key names what the
+     colour means HERE, at this tenant's own gate, so the legend moves when
+     the gate does instead of describing a default nobody is running. #}
+  <ul class="c-legend">
+    <li><span class="c-swatch c-stack--normal" aria-hidden="true"></span>
+      trông giống traffic bình thường của bạn</li>
+    <li><span class="c-swatch c-stack--limited" aria-hidden="true"></span>
+      sát cổng của bạn ở {{ "%.2f"|format(a.gate1_sigma) }} sigma</li>
+    <li><span class="c-swatch c-stack--blocked" aria-hidden="true"></span>
+      đã vượt qua, và đang bị xử lý</li>
+  </ul>
+</div>
+
+{% if caption %}<p class="c-axis-caption">{{ caption }}</p>{% endif %}
+
+{# Position on an axis is unreadable to a screen reader, so every axis
+   carries a table. A SUMMARY, not a matrix: thirteen bin counts read aloud
+   answer nothing, and the question this chart exists to answer is how much
+   is past the gate. #}
+<div class="sr-only">
+  <table>
+    <caption>{{ label }}</caption>
+    <thead>
+      <tr><th scope="col">Region</th><th scope="col">Sources</th></tr>
+    </thead>
+    <tbody>
+      <tr><th scope="row">Below {{ "%.1f"|format(a.gate1_sigma) }} sigma</th>
+          <td>{{ a.density|map(attribute="count")|sum }}</td></tr>
+      <tr><th scope="row">Past {{ "%.1f"|format(a.gate1_sigma) }} sigma</th>
+          <td>{{ a.marks|length }}</td></tr>
+    </tbody>
+  </table>
+</div>
+{% endmacro %}

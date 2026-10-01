@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How it works &middot; Traffic Shaper</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="mock"><span>Bản dựng xem thử</span><span class="sp"></span><span class="key"><span class="key-s"></span>nét đứt = chưa có trong sản phẩm</span><span><a href="index.html">index</a> &middot; <a href="agents.html">agents</a> &middot; <a href="history.html">history</a> &middot; <a href="allowed.html">allowed</a> &middot; <a href="system.html">system</a> &middot; <a href="model.html">model</a></span></div>
+<div class="app">
+  <header class="bar">
+    <span class="brand"><span class="beacon"></span>Traffic Shaper</span>
+    <span class="sp"></span>
+    <span class="who">acme-prod</span>
+    <span class="cost">Today <b>$0.00</b></span>
+    <button class="btn">Commands<kbd>K</kbd></button>
+    <button class="btn">Sign out</button>
+  </header>
+  <div class="body">
+    <nav class="nav">
+      <div class="gp">Control</div>
+      <a href="index.html"><span>Gate</span><span class="ct">2</span></a>
+      <a href="history.html"><span>History</span></a>
+      <a href="allowed.html"><span>Allowed</span><span class="ct">6</span></a>
+      <div class="gp">System</div>
+      <a href="agents.html"><span>Agents</span><span class="ct">5</span></a>
+      <a href="system.html" aria-current="page"><span>How it works</span></a>
+      <a href="model.html"><span>Model</span></a>
+    </nav>
+    <main class="main">
+      <div class="head">
+        <div>
+          <h1 class="h1">How it works</h1>
+          <p class="sub">Where the agent runs, what writes the rule, why it costs <b>$0.00</b></p>
+        </div>
+        <div class="head-act"><button class="btn" data-new title="Chưa có trong sản phẩm">Print this</button></div>
+      </div>
+      <section class="sec">
+        <div class="sec-h"><h2 class="sec-t">The loop</h2><div class="sec-m">one cycle is 5 seconds &middot; 0 requests from this page</div></div>
+        <p class="one">A console polling every 5 s would take <b>52% of the whole account ceiling</b>, and at the ceiling the platform refuses telemetry for everyone. So none of this asks the server anything.</p>
+        <svg class="plot" viewBox="0 0 1080 430" role="img"
+             aria-labelledby="ar-t ar-d">
+          <title id="ar-t">Agent, platform and memory</title>
+          <desc id="ar-d">Your agent reads your log and sends counted features every five
+            seconds. The platform scores and decides. Your agents collect the decision on
+            their next call and write the rule locally.</desc>
+          <rect class="sys-zone" x="14" y="40" width="322" height="300" rx="6"/>
+          <rect class="sys-edge" x="368" y="40" width="330" height="300" rx="6"/>
+          <rect class="sys-edge" x="730" y="40" width="336" height="300" rx="6"/>
+          <text class="sys-z" x="14" y="30">YOUR SERVER</text>
+          <text class="sys-z" x="368" y="30">THE PLATFORM</text>
+          <text class="sys-z" x="730" y="30">WHAT IT REMEMBERS</text>
+
+          <rect class="sys-box" x="40" y="62" width="270" height="46" rx="5"/>
+          <text class="sys-t" x="54" y="82">nginx or apache</text>
+          <text class="sys-s" x="54" y="98">writes its access log, as it already did</text>
+          <path class="sys-wire" d="M175,108 L175,138"/><polygon points="175,146 171,136 179,136" fill="#9aa3e0"/>
+          <rect class="sys-box sys-box--on" x="40" y="146" width="270" height="58" rx="5"/>
+          <text class="sys-t" x="54" y="166">aiops-agent</text>
+          <text class="sys-s" x="54" y="182">7 counted features per source</text>
+          <text class="sys-s" x="54" y="196">one batch every 5 seconds</text>
+          <path class="sys-wire" d="M175,204 L175,238"/><polygon points="175,246 171,236 179,236" fill="#9aa3e0"/>
+          <rect class="sys-box" x="40" y="246" width="270" height="70" rx="5"/>
+          <text class="sys-t" x="54" y="266">writes the rule</text>
+          <text class="sys-s" x="54" y="282">/etc/nginx/aiops-agent-deny.conf</text>
+          <text class="sys-s" x="54" y="296">nginx -s reload</text>
+          <text class="sys-s" x="54" y="310">or one iptables DROP per source</text>
+
+          <path class="sys-wire" d="M310,172 C340,172 340,104 396,104"/>
+          <text class="sys-s" x="318" y="96">counts only, never a body</text>
+          <circle class="p5" r="4"><animateMotion dur="5s" repeatCount="indefinite"
+            path="M310,172 C340,172 340,104 396,104"/></circle>
+
+          <rect class="sys-box" x="396" y="82" width="278" height="42" rx="5"/>
+          <text class="sys-t" x="410" y="101">1 &middot; Accept the batch</text>
+          <text class="sys-s" x="410" y="116">refuses at the ceiling, for everyone</text>
+          <rect class="sys-box" x="396" y="136" width="278" height="42" rx="5"/>
+          <text class="sys-t" x="410" y="155">2 &middot; Compare with your baseline</text>
+          <text class="sys-s" x="410" y="170">your own mean and spread</text>
+          <rect class="sys-box" x="396" y="190" width="278" height="42" rx="5"/>
+          <text class="sys-t" x="410" y="209">3 &middot; Put it on the scale</text>
+          <text class="sys-s" x="410" y="224">a distance in sigma, nothing else</text>
+          <rect class="sys-box sys-box--on" x="396" y="244" width="278" height="56" rx="5"/>
+          <text class="sys-t" x="410" y="264">4 &middot; Apply your gates</text>
+          <text class="sys-s" x="410" y="279">past 4.00 slow 5 min</text>
+          <text class="sys-s" x="410" y="293">past 5.00 block 1 h</text>
+
+          <path class="sys-wire" d="M674,158 C706,158 706,132 764,132"/>
+          <circle class="p5" r="3.5"><animateMotion dur="5s" begin="1.2s" repeatCount="indefinite"
+            path="M674,158 C706,158 706,132 764,132"/></circle>
+          <rect class="sys-box" x="764" y="108" width="280" height="48" rx="5"/>
+          <text class="sys-t" x="778" y="128">your baseline</text>
+          <text class="sys-s" x="778" y="144">retrained nightly, from your traffic only</text>
+
+          <path class="sys-wire" d="M674,270 C708,270 708,228 764,228"/>
+          <circle class="p5" r="3.5"><animateMotion dur="5s" begin="1.7s" repeatCount="indefinite"
+            path="M674,270 C708,270 708,228 764,228"/></circle>
+          <rect class="sys-box" x="764" y="204" width="280" height="48" rx="5"/>
+          <text class="sys-t" x="778" y="224">what is being held</text>
+          <text class="sys-s" x="778" y="240">the row expires by TTL</text>
+          <text class="sys-s" x="778" y="252">your agent must actively remove the local rule</text>
+
+          <path class="sys-wire sys-wire--back" d="M396,286 C346,286 358,366 190,366 L190,326"/>
+          <circle class="pk" r="4"><animateMotion dur="5s" begin="2.5s" repeatCount="indefinite"
+            path="M396,286 C346,286 358,366 190,366 L190,326"/></circle>
+          <text class="sys-s" x="222" y="382">your agents collect it on their next call</text>
+
+          <line x1="14" y1="398" x2="1066" y2="398" stroke="#e8e9ed"/>
+          <text class="sys-z" x="14" y="422">ONE SOURCE, EVERY SERVER</text>
+          <circle cx="188" cy="418" r="5" class="p5"/><circle cx="206" cy="418" r="5" class="p5"/>
+          <circle cx="224" cy="418" r="5" class="p5"/>
+          <text class="sys-s" x="244" y="422">caught at web-01, refused at all 3, because the decision is yours and not the machine's</text>
+          <text class="sys-n" x="1066" y="422" text-anchor="end">$0.00</text>
+        </svg>
+      </section>
+      <section class="sec">
+        <div class="sec-h"><h2 class="sec-t">Your budget today</h2><div class="sec-m">1,418 of 8,333</div></div>
+        <div class="wide-two">
+          <div>
+            <svg class="plot" viewBox="0 0 520 74" role="img"
+                 aria-label="1,418 of your 8,333 request share used today">
+              <rect x="0" y="14" width="520" height="28" rx="3" fill="#eceefa"/>
+              <rect class="grow" x="0" y="14" width="88" height="28" rx="3" fill="#2f3a90"/>
+              <text x="0" y="8" font-size="11" fill="#585c66">1,418 used</text>
+              <text x="520" y="8" font-size="11" fill="#838794" text-anchor="end">8,333 your share</text>
+              <text x="0" y="64" font-size="12" fill="#585c66">At the ceiling the platform
+                <tspan font-weight="600" fill="#0c0e12">refuses work rather than bills for it.</tspan></text>
+            </svg>
+          </div>
+          <div>
+            <span class="label">Controls</span>
+            <div class="ctl-b" style="margin-top:8px">
+              <button class="btn" data-new title="Chưa có trong sản phẩm">Alert me at 80%</button>
+              <button class="btn" data-new title="Chưa có trong sản phẩm">Lower my own cap</button>
+              <button class="btn" data-new title="Chưa có trong sản phẩm">Usage by agent</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <div class="sec-h"><h2 class="sec-t">Is this drawing true</h2>
+          <div class="sec-m">checked against the code, not remembered</div></div>
+        <p class="one">Every number on the diagram above was read back out of the
+        running code. <b>Here is where each one lives.</b></p>
+        <table class="tbl">
+          <thead><tr><th>Claim on the drawing</th><th>Verified in</th><th></th></tr></thead>
+          <tbody>
+            <tr><td>7 counted features</td><td class="sub">ml/feature_engineering.py FEATURE_NAMES</td>
+                <td><span class="verdict open"><i></i>true</span></td></tr>
+            <tr><td>one batch every 5 seconds</td><td class="sub">agent/collector.py flush_interval_seconds = 5.0</td>
+                <td><span class="verdict open"><i></i>true</span></td></tr>
+            <tr><td>slow 5 min, block 1 hour</td><td class="sub">api/routes/agent.py _TTL_SECONDS 300 / 3600</td>
+                <td><span class="verdict open"><i></i>true</span></td></tr>
+            <tr><td>gates at 4.00 and 5.00 sigma</td><td class="sub">ml/model.py TIER1_Z -4.0, TIER2_Z -5.0</td>
+                <td><span class="verdict open"><i></i>true</span></td></tr>
+            <tr><td>aiops-agent-deny.conf, nginx -s reload</td><td class="sub">agent/enforcer/nginx_adapter.py</td>
+                <td><span class="verdict open"><i></i>true</span></td></tr>
+            <tr><td>one iptables DROP per source</td><td class="sub">agent/enforcer/iptables_adapter.py</td>
+                <td><span class="verdict open"><i></i>true</span></td></tr>
+            <tr><td>decisions ride back to the agent</td><td class="sub">agent/runner.py, /agent/v1/decisions</td>
+                <td><span class="verdict open"><i></i>true</span></td></tr>
+            <tr><td>only counts leave your server</td><td class="sub">FeatureVector is seven floats</td>
+                <td><span class="verdict open"><i></i>true</span></td></tr>
+            <tr><td>the hold expires by itself</td>
+                <td class="sub">true of the stored row, <b>false of the rule on your machine</b>: DecisionStore.sweep_expired has to remove that one, so a dead agent leaves the block in place. Drawing corrected.</td>
+                <td><span class="verdict"><i></i>was wrong</span></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="sec">
+        <div class="sec-h"><h2 class="sec-t">Is this console real</h2>
+          <div class="sec-m">38 of 114 buttons</div></div>
+        <p class="one"><b>76 of the buttons in this mockup have no route behind them.</b>
+        They are drawn dashed. The drawing is honest; the control surface is not, yet.</p>
+        <div class="two">
+          <div>
+            <span class="label">Exists today</span>
+            <dl class="kv" style="margin-top:10px">
+              <dt>Allow</dt><dd>one source, or a selection</dd>
+              <dt>Allow as explainable</dt><dd>with the feature that drove it</dd>
+              <dt>Move a gate</dt><dd>13 positions, either gate</dd>
+              <dt>Register an agent</dt><dd>and see the fleet</dd>
+              <dt>Export</dt><dd>what is held, as CSV</dd>
+              <dt>History window</dt><dd>1 day or 7</dd>
+              <dt>Watch only</dt><dd>the off switch, on every page</dd>
+            </dl>
+          </div>
+          <div>
+            <span class="label">Worth building, in order</span>
+            <dl class="kv" style="margin-top:10px">
+              <dt>1. Watch only</dt><dd><b>Built.</b> POST /dashboard/ui/enforcement. The served set comes back empty, agents release every local rule within 5 s, and it works on agents installed before it existed.</dd>
+              <dt>2. Flush local rules</dt><dd>the undo for a bad block, on the host</dd>
+              <dt>3. Roll back the model</dt><dd>Models is already keyed by version</dd>
+              <dt>4. Copy as evidence</dt><dd>client side only, costs nothing</dd>
+              <dt>5. Lower my own cap</dt><dd>one field on an item already read</dd>
+              <dt>6. Block for 24 h</dt><dd>the mirror of Allow</dd>
+            </dl>
+          </div>
+        </div>
+        <p class="one" style="margin-top:20px"><b>Dropped as theatre:</b> Collect now
+        (the agent already calls every 5 s), Reload nginx (the adapter reloads on every
+        change), Retrain now (on-demand training costs compute and breaks the cost rule).</p>
+      </section>
+    </main>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+{% extends "app_shell.html" %}
+{% block title %}Cho qua · Traffic Shaper{% endblock %}
+{% block page_title %}Cho qua{% endblock %}
+{% block page_summary %}
+<b>{{ whitelist_count }}</b> địa chỉ
+{%- if cost and cost.state == "measured" %} · {{ cost.share }}% lượng đo được{% endif %}
+{% endblock %}
+{% block page_actions %}
+<a class="btn btn--p" href="#them-dia-chi">Cho qua một địa chỉ</a>
+{% endblock %}
+{% block page_content %}
+
+{# ---- cái giá ----------------------------------------------------------- #}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Danh sách này tốn gì</h2>
+    <div class="sec-m">
+      {% if cost and cost.state == "measured" %}{{ cost.share }}% lượng đo được{% endif %}
+    </div>
+  </div>
+  <p class="one">
+    Một địa chỉ được cho qua thì không bị làm chậm, không bị chặn, và
+    <b>vĩnh viễn không dạy gì cho baseline của bạn</b>. Vế thứ hai mới là
+    cái giá, và nó là vĩnh viễn:
+    mỗi địa chỉ ở đây là traffic mô hình không học được, nên danh sách càng
+    dài thì mô hình càng mô tả một lát cắt nhỏ hơn của chính bạn.
+  </p>
+
+  {% if cost and cost.state == "measured" %}
+  <svg class="plot" viewBox="0 0 520 74" role="img"
+       aria-label="{{ cost.share }}% lượng đo được bị loại khỏi huấn luyện">
+    <rect x="0" y="14" width="520" height="28" rx="3" fill="var(--t1)"/>
+    <rect class="grow" x="0" y="14" width="{{ cost.width }}" height="28" rx="3" fill="var(--t5)"/>
+    <text x="0" y="8" font-size="11" fill="var(--text-muted)">{{ cost.excluded_label }} bị loại</text>
+    <text x="520" y="8" font-size="11" fill="var(--text-muted)" text-anchor="end">{{ cost.total_label }} đo được</text>
+    <text x="0" y="64" font-size="12" fill="var(--text-muted)">Quá khoảng 20% thì mô hình bắt đầu lệch.</text>
+  </svg>
+  {% else %}
+  <p class="one">
+    Chưa được đo. Con số này được đếm trong lúc huấn luyện, không phải ước
+    lượng ở đây, nên nó xuất hiện sau lần chạy đêm kế tiếp. Cơ chế: mỗi
+    bucket traffic của một địa chỉ đã cho qua bị loại khỏi tập huấn luyện,
+    và baseline được dựng từ phần còn lại.
+  </p>
+  {% endif %}
+</section>
+
+{# ---- sổ đăng ký -------------------------------------------------------- #}
+<section class="sec">
+  <div class="sec-h">
+    <h2 class="sec-t">Sổ đăng ký</h2>
+    <div class="sec-m">{{ whitelist_count }} mục · mới nhất trước</div>
+  </div>
+  {% if whitelist %}
+  <div class="tbl-wrap" tabindex="0" role="region" aria-label="Các địa chỉ được cho qua">
+  <table class="tbl tbl--notes">
+    <caption class="sr-only">Các địa chỉ được cho qua</caption>
+    <thead>
+      <tr><th scope="col">Địa chỉ</th><th scope="col">Ai cho qua</th>
+        <th scope="col">Khi nào</th><th scope="col">Vì sao</th><th scope="col"></th></tr>
+    </thead>
+    <tbody>
+      {% for w in whitelist %}
+      <tr>
+        <th scope="row"><span class="src-ip">{{ w.ip }}</span></th>
+        <td>{{ w.added_by or "không rõ" }}</td>
+        <td title="{{ w.added_exact }}">{{ w.added }}</td>
+        <td>{{ w.reason or "không ghi lý do" }}</td>
+        <td>
+          <button type="button" class="btn btn--sm"
+                  hx-delete="/dashboard/v1/whitelist/{{ w.ip }}"
+                  hx-target="body" hx-swap="none"
+                  hx-confirm="Bỏ {{ w.ip }} khỏi danh sách cho qua? Nó sẽ được chấm điểm lại như mọi nguồn khác.">
+            Bỏ
+          </button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="one">
+    Chưa có địa chỉ nào được cho qua. Mọi nguồn đều đang được chấm điểm so
+    với bình thường của bạn.
+  </p>
+  {% endif %}
+  <p class="one one--gap">
+    Sổ này <b>chỉ ghi thêm</b>. Một mục bị bỏ vẫn nằm lại trong sổ cùng dòng
+    ghi việc bỏ, vì "ai cho địa chỉ này vào, và lúc nào" là câu hỏi mở đầu
+    của mọi buổi rà soát sau sự cố.
+  </p>
+</section>
+
+{# ---- thêm địa chỉ ------------------------------------------------------ #}
+<section class="sec" id="them-dia-chi">
+  <div class="sec-h">
+    <h2 class="sec-t">Cho qua một địa chỉ</h2>
+    <div class="sec-m">và một lý do sẽ còn hiểu được sau sáu tháng</div>
+  </div>
+  <form class="c-form-stack" method="post" action="/dashboard/ui/allowed">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="wl-ip">Địa chỉ IP</label>
+    <input id="wl-ip" name="ip" required maxlength="45" autocomplete="off"
+           placeholder="203.0.113.44">
+    <label for="wl-reason">Vì sao</label>
+    <input id="wl-reason" name="reason" maxlength="120" autocomplete="off"
+           placeholder="Bộ kiểm tra uptime của chúng tôi">
+    <p class="field-hint">
+      Người đọc sổ này sau sáu tháng sẽ không nhớ. Viết cho họ.
+    </p>
+    {% if error %}<p class="field-error" role="alert">{{ error }}</p>{% endif %}
+    <button type="submit" class="btn btn--p">Cho qua địa chỉ này</button>
+  </form>
+</section>
+
+{% endblock %}

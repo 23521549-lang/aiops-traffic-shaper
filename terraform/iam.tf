@@ -64,6 +64,14 @@ data "aws_iam_policy_document" "api_data" {
         aws_dynamodb_table.mitigation_state.arn,
         aws_dynamodb_table.telemetry_events.arn,
         aws_dynamodb_table.usage_counters.arn,
+        # Adding the table to locals.all_tables was NOT enough: that list
+        # feeds other policies, and this statement names its tables
+        # explicitly. The omission surfaced as a 500 on the history page
+        # while the history WRITES failed silently through the _try_history
+        # guard on the ingest path - no errors, no data, which is the worst
+        # shape a failure can have for a feature whose data cannot be
+        # backfilled.
+        aws_dynamodb_table.tenant_history.arn,
       ],
       [
         "${aws_dynamodb_table.agents.arn}/index/*",
@@ -85,6 +93,38 @@ data "aws_iam_policy_document" "api_data" {
     actions   = ["dynamodb:GetItem", "dynamodb:Query"]
     resources = [aws_dynamodb_table.models.arn]
   }
+}
+
+# The API Lambda had ZERO Cognito permissions until password login existed;
+# the only cognito-idp grant anywhere in this repo was in the CI OIDC module.
+#
+# Two actions, and the omissions are the point:
+#   NOT AdminSetUserPassword   - a compromised request-path Lambda could
+#                                then take over any account in the pool,
+#                                including the publisher's own admin.
+#   NOT AdminUpdateUserAttributes - the closest thing to a tenant-isolation
+#                                bypass in the Cognito API surface, since
+#                                custom:tenant_id is what every dashboard
+#                                query is scoped by.
+#   NOT AdminDeleteUser / AdminDisableUser - nothing needs them.
+#
+# Same least-privilege reasoning the DynamoDB policy already follows, where
+# DeleteItem is granted on exactly two tables and nothing else.
+data "aws_iam_policy_document" "api_cognito" {
+  statement {
+    sid = "SignInOnBehalfOfUsers"
+    actions = [
+      "cognito-idp:InitiateAuth",
+      "cognito-idp:RespondToAuthChallenge",
+    ]
+    resources = [aws_cognito_user_pool.main.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "api_cognito" {
+  name   = "${var.project_name}-api-cognito"
+  role   = aws_iam_role.api.id
+  policy = data.aws_iam_policy_document.api_cognito.json
 }
 
 resource "aws_iam_role_policy" "api_data" {

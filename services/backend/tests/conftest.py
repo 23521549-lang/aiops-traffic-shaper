@@ -22,6 +22,31 @@ TEST_ISSUER = f"https://cognito-idp.{TEST_REGION}.amazonaws.com/{TEST_POOL_ID}"
 
 
 @pytest.fixture(autouse=True)
+def _no_model_leaks_between_tests():
+    """`ModelManager._cache` is a CLASS attribute and outlives a test.
+
+    It is deliberately so in production - it is what stops every warm Lambda
+    invocation re-reading a 238KB blob - but in a suite it means any test
+    that loads a model for "t-1" silently hands it to every later test using
+    the same tenant id, against a DynamoDB fixture that has been thrown away
+    and rebuilt in between.
+
+    That is not hypothetical. `test_telemetry_normal_traffic_no_decisions`
+    asserts that untrained traffic produces no decisions; run on its own it
+    passed, run after its neighbours it received a tier-1 decision from a
+    model belonging to a different test entirely. The failure blamed the
+    wrong code, which is the expensive part.
+
+    Cleared on the way IN as well as out, so a test that leaks is caught by
+    its own next neighbour rather than by whatever ran first.
+    """
+    from services.backend.ml.model import ModelManager
+    ModelManager._cache.clear()
+    yield
+    ModelManager._cache.clear()
+
+
+@pytest.fixture(autouse=True)
 def _cognito_settings():
     """Phase 4 (H1): auth now fails closed when the Cognito pool/app-client
     are unconfigured, so tests must run against a CONFIGURED deployment —

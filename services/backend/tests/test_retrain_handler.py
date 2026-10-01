@@ -185,10 +185,13 @@ def test_one_tenant_failing_does_not_stop_the_others_retraining(dynamo_resource,
 
     real_train = retrain_handler.train_and_save
 
-    def train_that_breaks_for_one(resource, tenant_id, vectors, stage):
+    # **kwargs, not a fixed signature: a stand-in that has to be edited every
+    # time the real function gains an argument turns an unrelated change into
+    # a failure in a file about isolation between tenants.
+    def train_that_breaks_for_one(resource, tenant_id, vectors, **kwargs):
         if tenant_id == "t-bad":
             raise ValueError("corrupt feature vector")
-        return real_train(resource, tenant_id, vectors, stage=stage)
+        return real_train(resource, tenant_id, vectors, **kwargs)
 
     monkeypatch.setattr(retrain_handler, "train_and_save", train_that_breaks_for_one)
 

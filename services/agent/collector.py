@@ -1,7 +1,22 @@
+import logging
 import time
 from dataclasses import dataclass
 
 from services.agent.http_client import post_json
+
+logger = logging.getLogger(__name__)
+
+# `flush` clears its buffer only after a successful post, so a failed batch
+# is retried with the next one. That is the right behaviour and it needs a
+# ceiling: through a long backend outage a busy site would buffer every
+# request it serves, and the first batch to exceed the backend's own
+# 1000-record cap is refused with a 422 - permanently, because the buffer
+# only ever grows from there. The agent would wedge itself shut on the day
+# it is most needed, and take the machine's memory with it.
+#
+# Equal to TelemetryBatch's max_length, deliberately: one more than the
+# backend accepts is a batch that can never be delivered.
+MAX_BUFFERED_RECORDS = 1000
 
 
 @dataclass
@@ -32,9 +47,15 @@ class Collector:
 
     def __init__(self, backend_url: str, tenant_id: str, api_key: str,
                  batch_size: int = 100, flush_interval_seconds: float = 5.0,
-                 post_json_fn=post_json):
+                 post_json_fn=None, enforcers: list[str] | None = None):
         self._url = f"{backend_url.rstrip('/')}/agent/v1/telemetry"
         self._agent_key = f"{tenant_id}.{api_key}"
+        # What this machine can actually write a rule with. The CLI already
+        # prints a warning when it is empty, which is seen once, on the
+        # machine, by whoever ran the command - and the console, where the
+        # customer looks, said nothing at all. None means this agent does not
+        # report it, which the console shows as unknown rather than broken.
+        self._enforcers = enforcers
         self._batch_size = batch_size
         self._flush_interval = flush_interval_seconds
         self._post_json = post_json_fn
@@ -43,6 +64,15 @@ class Collector:
 
     def add(self, record: LogRecord) -> dict | None:
         self._buffer.append(record)
+        if len(self._buffer) > MAX_BUFFERED_RECORDS:
+            # Oldest first. During an outage the recent requests are the
+            # ones a decision still has any use for; a five-minute-old
+            # bucket has already been served.
+            dropped = len(self._buffer) - MAX_BUFFERED_RECORDS
+            del self._buffer[:dropped]
+            logger.warning("buffer full at %d records; dropped %d oldest. "
+                           "The backend has been unreachable for a while.",
+                           MAX_BUFFERED_RECORDS, dropped)
         if len(self._buffer) >= self._batch_size:
             return self.flush()
         return None
@@ -56,8 +86,15 @@ class Collector:
     def flush(self) -> dict | None:
         if not self._buffer:
             return None
-        payload = {"logs": [r.to_dict() for r in self._buffer]}
-        result = self._post_json(self._url, payload, headers={"X-Agent-Key": self._agent_key})
+        payload: dict = {"logs": [r.to_dict() for r in self._buffer]}
+        if self._enforcers is not None:
+            payload["enforcers"] = self._enforcers
+        # Resolved here rather than bound as a default argument. A default
+        # captures the function at import time, so substituting
+        # collector.post_json had no effect whatsoever and the CLI's own run
+        # path could not be tested without opening a real socket.
+        send = self._post_json or post_json
+        result = send(self._url, payload, headers={"X-Agent-Key": self._agent_key})
         self._buffer.clear()
         self._last_flush = time.time()
         return result

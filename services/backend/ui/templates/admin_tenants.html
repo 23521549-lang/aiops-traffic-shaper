@@ -1,0 +1,18 @@
+{% extends "app_shell.html" %}
+{% block title %}Khách hàng · Traffic Shaper{% endblock %}
+{% block page_title %}Khách hàng{% endblock %}
+{% block page_summary %}
+{{ tenant_count }} đã đăng ký · tạm ngưng một khách hàng là thu hồi mọi khoá agent họ đang giữ
+{% endblock %}
+{% block page_actions %}
+<a class="btn btn--p" href="/admin/ui/tenants/new">Thêm khách hàng</a>
+{% endblock %}
+{% block page_content %}
+<div  id="tenants-table">
+  {% include "_tenants_table.html" %}
+</div>
+
+{% if selected %}
+{% include "_tenant_detail.html" %}
+{% endif %}
+{% endblock %}

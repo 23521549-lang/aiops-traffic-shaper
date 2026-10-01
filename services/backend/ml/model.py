@@ -134,7 +134,23 @@ class ModelManager:
             return [(v, 0.0) for v in vectors]
 
 
-def classify(score: float, stats: ScoreStats | None) -> AnomalyTier:
+def z_score(score: float, stats: ScoreStats | None) -> float | None:
+    """How many standard deviations below this model's own training mean the
+    score sits — the quantity ADR-006 made the product tier on.
+
+    None when there is no usable spread (score_std <= 0, i.e. every training
+    bucket scored identically) or no statistics at all. Callers must render
+    that as "not measurable" rather than substituting a number: `classify`
+    falls back to the absolute thresholds in the same case, so a fabricated z
+    would not even describe the decision that was taken."""
+    if stats is None or stats.std <= 0:
+        return None
+    return (score - stats.mean) / stats.std
+
+
+def classify(score: float, stats: ScoreStats | None,
+             tier1_z: float | None = None,
+             tier2_z: float | None = None) -> AnomalyTier:
     """Tier a score by its distance, in standard deviations, from the mean of
     the training scores of the model that produced it.
 
@@ -142,12 +158,30 @@ def classify(score: float, stats: ScoreStats | None) -> AnomalyTier:
     score_std is zero only when every training bucket scored identically, and
     dividing by it on the request path would be a crash rather than a
     detection."""
-    if stats is None or stats.std <= 0:
+    z = z_score(score, stats)
+    if z is None:
         return classify_score(score)
-    z = (score - stats.mean) / stats.std
-    if z < TIER2_Z:
+    # The tenant's own gate, riding on the stats that are already cached for
+    # scoring. TIER1_Z/TIER2_Z are the default a tenant that never set one
+    # gets, not a global rule any more: a console that explains a decision
+    # and cannot change it is a dashboard, whatever it looks like.
+    #
+    # `tier1_z`/`tier2_z` override that copy with the value of record from the
+    # Tenants item, when the caller has one in hand. The copy on the stats is
+    # written by the nightly retrain, so without this a customer who lowered
+    # their gate during an attack waited up to a day for it to mean anything.
+    # The ingest path already reads that item, to refuse a suspended tenant,
+    # so the live value costs nothing to carry.
+    #
+    # Each gate falls back on its own. Defaulting a missing one to the shipped
+    # constant would move a gate the customer never touched.
+    tier2 = tier2_z if tier2_z is not None else (
+        stats.tier2_z if stats is not None else TIER2_Z)
+    tier1 = tier1_z if tier1_z is not None else (
+        stats.tier1_z if stats is not None else TIER1_Z)
+    if z < tier2:
         return AnomalyTier.HARD_BLOCK
-    if z < TIER1_Z:
+    if z < tier1:
         return AnomalyTier.RATE_LIMIT
     return AnomalyTier.NORMAL
 
