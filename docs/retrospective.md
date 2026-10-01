@@ -42,6 +42,38 @@ hour of deploying that no amount of local testing could have found (§3). The
 cost of carrying it was not the deployment work; it was that five phases of
 green tests described a system nobody had ever seen answer a request.
 
+## 1b. The defect only CI could see
+
+The test suite ran green on a developer machine for the whole of Phase 7 and
+went red the first time it ran in CI. The failing assertion was trivial -
+`/ui/static/../main.py` should answer 404 - and the reason it failed was not:
+
+    botocore.exceptions.NoCredentialsError: Unable to locate credentials
+
+That test builds a bare `TestClient` with no `get_dynamo_resource` override.
+The usage middleware wraps every request and resolves the resource itself, so
+with no override it reached for the real one. On a machine holding AWS
+credentials - which any machine that has run `terraform apply` does - boto3
+found them and the test passed. In CI there were none, and it did not.
+
+Underneath that was a product defect rather than a test defect. The path is
+normalised to `/ui/main.py` before the middleware sees it, which escapes every
+entry in `_UNMETERED_PATH_PREFIXES`, so a 404 for a path no route claims billed
+a DynamoDB write. The Function URL is public and has no edge rate limiting, so
+that is a lever an anonymous caller can pull as fast as they can open sockets,
+against the one budget the whole product is organised around. M8 had already
+found this shape once and fixed it for `/` alone, one URL at a time.
+
+The fix states the rule instead of listing the exceptions: a request that
+matched no route never reached the application, so it is not metered.
+
+Two things worth keeping from this. A test that needs the developer's AWS
+account to pass is not testing what it claims to, and nothing in the suite can
+tell you which tests those are - only an environment without the credentials
+can. The whole suite was re-run with them stripped afterwards: 1,049 passed,
+so this was the only one. And the fastest way to find a gap in a list of
+exempt paths is to stop maintaining the list.
+
 ## 2. Gate rows that did not pass cleanly
 
 **Substitutions (4):**
