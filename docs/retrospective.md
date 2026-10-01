@@ -159,17 +159,39 @@ Observed in this run only.
 - Whether per-IP edge rate limiting is worth leaving Always-Free for.
 
 **Engineering decides:**
-- No real traffic has been served: no tenant registered, no telemetry scored in
-  production, no nightly retrain on live data. **The largest remaining gap.**
-- The deploy workflow has never run; GitHub environment `production` and the
-  two repo variables are unconfigured.
-- Rollback is untested, and with no Lambda alias it is a re-apply from a tag
-  rather than a pointer flip.
-- Throttling is global, not per tenant. No un-suspend endpoint.
-- Nothing polls `/health` or `/ready`; no alarm on the free-tier ceiling.
-- The retrain loop walks tenants serially against a 15-minute Lambda ceiling.
-- Terraform and `create_all_tables()` both create the seven tables.
-- No supported local application run; no real nginx or iptables has ever been
-  driven by the agent's enforcers.
-- A stale `aiops-traffic-shaper-prod-terraform-lock` table from the old model
-  is still in the account.
+- No real traffic has been served: one demo tenant, three agents registered,
+  and `TelemetryEvents` empty. No telemetry has been scored in production and
+  no nightly retrain has run on live data. **The largest remaining gap, and
+  the only one on this list that engineering cannot close by itself.**
+- **The alert email is unconfirmed, so six armed alarms reach nobody.** AWS
+  deletes a pending SNS subscription after 72 hours; the one created on
+  2026-09-26 was never confirmed and had been silently removed by 2026-10-01.
+  Recreated on 2026-10-01 and pending again. Until somebody clicks the link in
+  the mail to the address in `terraform.tfvars`, every alarm below fires into
+  an empty topic. This is the same "instrumentation, not observability" shape
+  that `alarms.tf` was written to fix, one layer further out, and the comment
+  on `aws_sns_topic_subscription.email` had warned about it in advance.
+- The deploy workflow has never run. `AWS_DEPLOY_ROLE_ARN` and `AWS_REGION`
+  were set as repo variables on 2026-10-01; the `production` environment still
+  has **no required reviewers**, so the approval gate the workflow's header
+  describes does not exist yet. Deploys have been run from a developer machine
+  with Terraform instead.
+- No real nginx or iptables has ever been driven by the agent's enforcers.
+
+### Closed since this list was written, and left here because the list was wrong
+
+Seven items above were carried as open long after the work that closed them.
+They are recorded rather than deleted, because the failure worth remembering
+is not any one of them, it is that a document nobody re-read kept asserting
+them while the code disagreed.
+
+| Was listed as open | What is actually true |
+|---|---|
+| Rollback is a re-apply from a tag, no Lambda alias | Alias `live` exists and tracks a published version (19 at the time of writing), so rollback is a pointer flip. Still untested. |
+| Throttling is global, not per tenant | `enforce_tenant_quota` is a dependency on the telemetry route and refuses with 429 at 25% of the daily ceiling, per tenant. Six tests in `test_tenant_quota.py`. |
+| No un-suspend endpoint | `POST /admin/v1/tenants/{id}/reactivate`, plus the console equivalent. |
+| Nothing polls `/health` or `/ready` | The probe Lambda runs every five minutes on an EventBridge rule and checks `/ready` **through CloudFront**, which is the path a real agent takes. |
+| No alarm on the free-tier ceiling | `aiops-traffic-shaper-free-tier-80pct` fires on the probe's `DailyUsageRatio` at 0.8, the same threshold the console banner uses. Six alarms exist in total. |
+| The retrain loop walks tenants serially | `dispatch_all` fans out one asynchronous invocation per tenant (`InvocationType="Event"`), so no tenant shares another's 15-minute ceiling. |
+| Terraform and `create_all_tables()` both create the tables | Terraform owns the eight tables in production. `create_all_tables()` is now reached only by the test suite and by `scripts/run_local.py`, which is also the supported local run that this list said did not exist. |
+| A stale `aiops-traffic-shaper-prod-terraform-lock` table | Deleted 2026-10-01. It held one legacy `-md5` digest row and nothing referenced it: the backend moved to S3-native locking (`use_lockfile = true`), and `PAY_PER_REQUEST` is the one billing mode ADR-002 names as having no Always-Free allowance. |

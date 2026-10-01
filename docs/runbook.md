@@ -215,9 +215,9 @@ requires it on every POST (ADR-005).
 | Procedure | Where | State |
 |---|---|---|
 | Deploy | `docs/deployment.md`, `.github/workflows/deploy.yml` | **exercised** — applied by hand 2026-09-21. The *workflow* has still never run |
-| Rollback | `docs/deployment.md` § Rollback | written, never exercised. No Lambda alias, so it is a re-apply from an earlier tag, not a pointer flip |
+| Rollback | `docs/deployment.md` § Rollback | written, never exercised. Alias `live` now tracks a published version, so it IS a pointer flip - but a flip nobody has performed |
 | Backup | `scripts/backup-tables.sh` | **exercised** — export and restore both performed against the live tables; raw output in `.sdlc/gate-evidence/phase-7-restore-drill.txt` |
-| Alerting | `terraform/alarms.tf` | 3 alarms → SNS, subscription created. Confirm the emailed link or it delivers nothing |
+| Alerting | `terraform/alarms.tf`, `terraform/probe.tf` | 6 alarms → SNS. **Check the subscription is `Confirmed`, not `PendingConfirmation`** - AWS deletes a pending one after 72 hours and the alarms then fire into an empty topic, silently. This has already happened once |
 | Readiness | `GET /ready` | **exercised** — caught a missing `dynamodb:DescribeTable` grant on the first deployment |
 
 ### The public address is CloudFront, not the function URL
@@ -276,10 +276,36 @@ this repository.
 
 ## Still genuinely missing
 
-- **Un-suspend.** Suspension is one-way. A gap, not a policy.
-- **Per-tenant throttling.** The free-tier limiter is global.
-- **An alarm on the free-tier ceiling itself.** The three CloudWatch alarms
-  watch Lambda errors and retrain health; the usage ceiling is still visible
-  only to someone looking at the Control Platform.
-- **An owner for table creation.** Terraform and `create_all_tables()` both
-  create the 7 tables. Whichever runs first wins; this has never been observed.
+- **A confirmed destination for the alarms.** Six alarms are armed and all of
+  them deliver to one SNS topic. A subscription AWS has deleted, or one left
+  pending, looks identical from the Terraform side: the resource is in state
+  either way. Check it after every apply, and after any 72 hours in which
+  nobody clicked the link:
+
+      aws sns list-subscriptions-by-topic \
+        --topic-arn arn:aws:sns:<region>:<account>:<project>-alerts \
+        --query 'Subscriptions[].[Protocol,Endpoint,SubscriptionArn]' --output text
+
+  A `SubscriptionArn` reading `PendingConfirmation`, or no row at all, means
+  every alarm in this runbook is decorative.
+
+- **A required reviewer on the `production` GitHub environment.** The deploy
+  workflow asks for the environment; GitHub is what enforces an approval, and
+  with no reviewer configured there is no gate. Until then, deploys run from a
+  developer machine with Terraform, which has no gate either.
+
+- **Real traffic.** No tenant outside the demo has registered and
+  `TelemetryEvents` is empty, so nothing on this page about scoring, retraining
+  or mitigation has been exercised against a real site.
+
+### Shipped since this section last said otherwise
+
+- **Un-suspend** exists: `POST /admin/v1/tenants/{id}/reactivate` and the
+  console button beside it.
+- **Per-tenant throttling** exists: `enforce_tenant_quota` refuses one tenant's
+  ingest at 25% of the daily ceiling without touching anyone else's.
+- **The free-tier alarm** exists: `-free-tier-80pct`, on the probe's
+  `DailyUsageRatio`, at the same 0.8 the console banner uses.
+- **Table creation has an owner**: Terraform owns the eight tables in
+  production; `create_all_tables()` is reached only by the test suite and by
+  `scripts/run_local.py`.
