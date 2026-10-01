@@ -18,12 +18,16 @@ on the very write budget the gauge exists to protect, so it goes.
 import pytest
 from fastapi.testclient import TestClient
 
+from services.backend.api.cognito_auth import get_jwks
 from services.backend.core.dynamo import get_dynamo_resource
-from services.backend.core.tables import UsageCountersTable, create_all_tables
+from services.backend.core.tables import (
+    TenantsTable, UsageCountersTable, create_all_tables,
+)
 from services.backend.core.usage import (
     get_usage_report, lambda_memory_gb, record_invocation,
 )
 from services.backend.main import app
+from services.backend.tests.conftest import sign_test_token
 
 
 @pytest.fixture
@@ -72,46 +76,56 @@ def test_the_recorded_total_accumulates_across_requests(seeded):
     assert get_usage_report(seeded, None).estimated_gb_seconds == 1.0
 
 
-# `/health` is deliberately unmetered, along with the static files and the
-# login pages. Anything else that is not "/" and does not answer 401, 403 or
-# 429 is metered, which is what makes a plain miss a usable probe here.
-METERED = "/no-such-path"
+# The probe has to be an AUTHENTICATED request that matched a route, because
+# that is the only thing metering is defined over now. `/no-such-path` used to
+# serve here, on the basis that any miss which was not "/" got metered - and
+# that was the defect: a 404 for a path no route claims never reached the
+# application, so an anonymous caller could spend the day's write budget on
+# junk URLs. Unmatched requests are unmetered, and this probe has to earn its
+# write the way a real one does.
+METERED = "/dashboard/ui"
 
 
-def test_a_real_request_records_a_figure_that_is_not_zero(seeded):
+@pytest.fixture
+def metered_client(seeded, cognito_test_keys):
+    """A signed-in tenant. Every GET through this client is metered work."""
+    TenantsTable(seeded).put(tenant_id="t-1", name="Acme", status="active",
+                             created_at="2026-08-21T00:00:00Z")
+    app.dependency_overrides[get_dynamo_resource] = lambda: seeded
+    app.dependency_overrides[get_jwks] = lambda: cognito_test_keys["jwks"]
+    client = TestClient(app, base_url="https://testserver")
+    client.post("/ui/login", data={"id_token": sign_test_token(
+        cognito_test_keys["private_pem"],
+        {"custom:tenant_id": "t-1", "email": "ops@example.com"})})
+    return client
+
+
+def test_a_real_request_records_a_figure_that_is_not_zero(seeded, metered_client):
     """The end that was broken. Every piece above can be right and the
     middleware can still call record_invocation with its default, which is
     exactly what it did."""
-    app.dependency_overrides[get_dynamo_resource] = lambda: seeded
-    client = TestClient(app, base_url="https://testserver")
-
-    client.get(METERED)
+    metered_client.get(METERED)
 
     assert get_usage_report(seeded, None).estimated_gb_seconds > 0
 
 
-def test_the_figure_accumulates_rather_than_being_set(seeded):
+def test_the_figure_accumulates_rather_than_being_set(seeded, metered_client):
     """Two requests bill more than one. An assignment where an ADD belongs
     would show the last request's cost as the day's total."""
-    app.dependency_overrides[get_dynamo_resource] = lambda: seeded
-    client = TestClient(app, base_url="https://testserver")
-
-    client.get(METERED)
+    metered_client.get(METERED)
     one = get_usage_report(seeded, None).estimated_gb_seconds
-    client.get(METERED)
+    metered_client.get(METERED)
     two = get_usage_report(seeded, None).estimated_gb_seconds
 
     assert two > one
 
 
-def test_the_figure_is_a_measurement_and_not_a_placeholder(seeded):
+def test_the_figure_is_a_measurement_and_not_a_placeholder(seeded, metered_client):
     """A real elapsed time on a local request is small and is not zero. A
     figure of exactly 1.0, or one larger than any plausible request, would
     mean something is being stood in for rather than timed."""
-    app.dependency_overrides[get_dynamo_resource] = lambda: seeded
-    client = TestClient(app, base_url="https://testserver")
 
-    client.get(METERED)
+    metered_client.get(METERED)
 
     billed = get_usage_report(seeded, None).estimated_gb_seconds
 
@@ -146,3 +160,29 @@ def test_nothing_is_left_writing_a_field_nobody_reads(seeded):
     item = UsageCountersTable(seeded).get(date=_today()) or {}
 
     assert "dynamodb_consumed_rcu" not in item
+
+
+def test_a_path_no_route_claims_is_not_metered(seeded):
+    """The whole point of the prefix list, generalised.
+
+    `/ui/static/../main.py` is normalised to `/ui/main.py` before the
+    middleware sees it, so it escaped every entry in
+    `_UNMETERED_PATH_PREFIXES` and billed a DynamoDB write for a 404. The
+    Lambda Function URL is public and has no edge rate limiting, so that is a
+    lever an anonymous caller can pull as fast as they can open sockets, on
+    the exact write budget this product is built around.
+
+    It also made the suite depend on ambient AWS credentials: with no
+    dependency override, the middleware reached for the real resource, which
+    passed on a developer machine holding credentials and failed in CI with
+    NoCredentialsError. A test that needs the developer's AWS account to pass
+    is not testing what it claims to.
+    """
+    app.dependency_overrides[get_dynamo_resource] = lambda: seeded
+    client = TestClient(app, base_url="https://testserver")
+
+    before = get_usage_report(seeded, None).total_requests
+    assert client.get("/ui/static/../main.py").status_code == 404
+    assert client.get("/no-such-path").status_code == 404
+
+    assert get_usage_report(seeded, None).total_requests == before

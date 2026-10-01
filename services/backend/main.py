@@ -141,6 +141,18 @@ _UNMETERED_PATH_PREFIXES = ("/health", "/ready", "/ui/login", "/ui/logout", "/ui
 def _should_meter(request, response) -> bool:
     if request.url.path.startswith(_UNMETERED_PATH_PREFIXES):
         return False
+    # A request that matched NO route never reached the application, so there
+    # is no work here to meter - and it is the cheapest thing in the world for
+    # an anonymous caller to generate by the thousand. The prefix list above
+    # cannot cover it: `/ui/static/../main.py` is normalised to `/ui/main.py`
+    # before this middleware ever sees it, which escapes every prefix and then
+    # billed a DynamoDB write for a 404. The front door `/` had already been
+    # special-cased for exactly this reason, one URL at a time.
+    #
+    # `endpoint` is set in the scope by Starlette's router when a route
+    # matches, so its absence is the router itself saying nothing handled this.
+    if "endpoint" not in request.scope:
+        return False
     # "/" cannot be expressed as a prefix - every path starts with it - and it
     # is the most exposed URL the deployment has. Before it redirected it
     # answered 404, and that 404 was metered: a DynamoDB write per drive-by
